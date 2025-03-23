@@ -196,22 +196,41 @@ class SelectTool extends BaseTool {
   }
 
   // オブジェクト移動 - 変換行列を考慮した改良版
-  moveObject(obj, dx, dy) {
-    if (!obj) return;
-    // 現在の transform 属性を DOMMatrix に変換（失敗したら単位行列）
-    let currentTransformStr = obj.getAttribute("transform") || "";
-    let currentMatrix;
-    try {
-      currentMatrix = new DOMMatrix(currentTransformStr);
-    } catch (e) {
-      currentMatrix = new DOMMatrix();
-    }
-    // translate の行列を作成
-    const translationMatrix = new DOMMatrix().translate(dx, dy);
-    // 新しい行列は、translate 行列と既存行列の合成
-    const newMatrix = translationMatrix.multiply(currentMatrix);
-    obj.setAttribute("transform", newMatrix.toString());
+  // moveObject(obj, dx, dy) {
+  //   if (!obj) return;
+  //   // 現在の transform 属性を DOMMatrix に変換（失敗したら単位行列）
+  //   let currentTransformStr = obj.getAttribute("transform") || "";
+  //   let currentMatrix;
+  //   try {
+  //     currentMatrix = new DOMMatrix(currentTransformStr);
+  //   } catch (e) {
+  //     currentMatrix = new DOMMatrix();
+  //   }
+  //   // translate の行列を作成
+  //   const translationMatrix = new DOMMatrix().translate(dx, dy);
+  //   // 新しい行列は、translate 行列と既存行列の合成
+  //   const newMatrix = translationMatrix.multiply(currentMatrix);
+  //   obj.setAttribute("transform", newMatrix.toString());
+  // }
+
+// オブジェクト移動 - 変換行列を考慮した改良版
+moveObject(obj, dx, dy) {
+  if (!obj) return;
+  // 現在の transform 属性を DOMMatrix に変換（失敗したら単位行列）
+  let currentTransformStr = obj.getAttribute("transform") || "";
+  let currentMatrix;
+  try {
+    currentMatrix = new DOMMatrix(currentTransformStr);
+  } catch (e) {
+    currentMatrix = new DOMMatrix();
   }
+  // translate の行列を作成
+  const translationMatrix = new DOMMatrix().translate(dx, dy);
+  // 修正：translate 行列を右側に乗算して既存行列に追記する形に変更
+  const newMatrix = currentMatrix.multiply(translationMatrix);
+  obj.setAttribute("transform", newMatrix.toString());
+}
+
 
   // リサイズ処理
   resizeObject() {
@@ -412,148 +431,281 @@ class SelectTool extends BaseTool {
   }
 
   // オブジェクトのバウンディングボックスを取得（transform属性を考慮した改良版）
-  getBoundingBox(obj) {
-    if (!obj) return null;
+  // getBoundingBox(obj) {
+  //   if (!obj) return null;
 
-    // SVGのgetBBoxを使って実際の描画領域を取得する（transform適用後）
-    try {
-      const svgBBox = obj.getBBox();
+  //   // SVGのgetBBoxを使って実際の描画領域を取得する（transform適用後）
+  //   try {
+  //     const svgBBox = obj.getBBox();
 
-      // transformがある場合は、その影響を考慮する
-      const transform = obj.getAttribute("transform");
-      if (transform) {
-        // SVGの座標変換行列を取得
-        const ctm = obj.getCTM();
-        if (ctm) {
-          // 変換行列から四隅の座標を計算
-          const points = [
-            { x: svgBBox.x, y: svgBBox.y },
-            { x: svgBBox.x + svgBBox.width, y: svgBBox.y },
-            { x: svgBBox.x + svgBBox.width, y: svgBBox.y + svgBBox.height },
-            { x: svgBBox.x, y: svgBBox.y + svgBBox.height },
-          ];
+  //     // transformがある場合は、その影響を考慮する
+  //     const transform = obj.getAttribute("transform");
+  //     if (transform) {
+  //       // SVGの座標変換行列を取得
+  //       const ctm = obj.getCTM();
+  //       if (ctm) {
+  //         // 変換行列から四隅の座標を計算
+  //         const points = [
+  //           { x: svgBBox.x, y: svgBBox.y },
+  //           { x: svgBBox.x + svgBBox.width, y: svgBBox.y },
+  //           { x: svgBBox.x + svgBBox.width, y: svgBBox.y + svgBBox.height },
+  //           { x: svgBBox.x, y: svgBBox.y + svgBBox.height },
+  //         ];
 
-          // 変換後の座標を計算
-          const transformedPoints = points.map((p) => {
-            const svgPoint = this.canvas.createSVGPoint();
-            svgPoint.x = p.x;
-            svgPoint.y = p.y;
-            const transformedPoint = svgPoint.matrixTransform(ctm);
-            return { x: transformedPoint.x, y: transformedPoint.y };
-          });
+  //         // 変換後の座標を計算
+  //         const transformedPoints = points.map((p) => {
+  //           const svgPoint = this.canvas.createSVGPoint();
+  //           svgPoint.x = p.x;
+  //           svgPoint.y = p.y;
+  //           const transformedPoint = svgPoint.matrixTransform(ctm);
+  //           return { x: transformedPoint.x, y: transformedPoint.y };
+  //         });
 
-          // 変換後の座標から新しいバウンディングボックスを計算
-          let minX = Infinity,
-            minY = Infinity;
-          let maxX = -Infinity,
-            maxY = -Infinity;
+  //         // 変換後の座標から新しいバウンディングボックスを計算
+  //         let minX = Infinity,
+  //           minY = Infinity;
+  //         let maxX = -Infinity,
+  //           maxY = -Infinity;
 
-          transformedPoints.forEach((p) => {
-            minX = Math.min(minX, p.x);
-            minY = Math.min(minY, p.y);
-            maxX = Math.max(maxX, p.x);
-            maxY = Math.max(maxY, p.y);
-          });
+  //         transformedPoints.forEach((p) => {
+  //           minX = Math.min(minX, p.x);
+  //           minY = Math.min(minY, p.y);
+  //           maxX = Math.max(maxX, p.x);
+  //           maxY = Math.max(maxY, p.y);
+  //         });
 
-          return {
-            x: minX,
-            y: minY,
-            width: maxX - minX,
-            height: maxY - minY,
-          };
-        }
+  //         return {
+  //           x: minX,
+  //           y: minY,
+  //           width: maxX - minX,
+  //           height: maxY - minY,
+  //         };
+  //       }
+  //     }
+
+  //     // transform属性がないか、CTMが取得できない場合は元のバウンディングボックスを使用
+  //     return {
+  //       x: svgBBox.x,
+  //       y: svgBBox.y,
+  //       width: svgBBox.width,
+  //       height: svgBBox.height,
+  //     };
+  //   } catch (e) {
+  //     console.error("バウンディングボックスの取得に失敗しました", e);
+
+  //     // 従来の方法でフォールバック
+  //     if (obj.tagName === "rect") {
+  //       return {
+  //         x: parseFloat(obj.getAttribute("x")),
+  //         y: parseFloat(obj.getAttribute("y")),
+  //         width: parseFloat(obj.getAttribute("width")),
+  //         height: parseFloat(obj.getAttribute("height")),
+  //       };
+  //     } else if (obj.tagName === "circle") {
+  //       const cx = parseFloat(obj.getAttribute("cx"));
+  //       const cy = parseFloat(obj.getAttribute("cy"));
+  //       const r = parseFloat(obj.getAttribute("r"));
+  //       return {
+  //         x: cx - r,
+  //         y: cy - r,
+  //         width: r * 2,
+  //         height: r * 2,
+  //       };
+  //     } else if (obj.tagName === "polygon") {
+  //       // 多角形のバウンディングボックスを計算
+  //       const points = obj.getAttribute("points").trim().split(" ");
+  //       let minX = Infinity,
+  //         minY = Infinity,
+  //         maxX = -Infinity,
+  //         maxY = -Infinity;
+
+  //       points.forEach((point) => {
+  //         const [x, y] = point.split(",").map(parseFloat);
+  //         minX = Math.min(minX, x);
+  //         minY = Math.min(minY, y);
+  //         maxX = Math.max(maxX, x);
+  //         maxY = Math.max(maxY, y);
+  //       });
+
+  //       return {
+  //         x: minX,
+  //         y: minY,
+  //         width: maxX - minX,
+  //         height: maxY - minY,
+  //       };
+  //     } else if (obj.tagName === "text") {
+  //       // テキストのバウンディングボックス
+  //       const x = parseFloat(obj.getAttribute("x"));
+  //       const y = parseFloat(obj.getAttribute("y"));
+  //       // 推定サイズ（実際のサイズは取得困難）
+  //       return {
+  //         x: x,
+  //         y: y - 16, // フォントサイズを考慮
+  //         width: 100, // 推定幅
+  //         height: 20, // 推定高さ
+  //       };
+  //     } else if (obj.tagName === "g") {
+  //       // グループのバウンディングボックス（すべての子要素を含む）
+  //       let minX = Infinity,
+  //         minY = Infinity,
+  //         maxX = -Infinity,
+  //         maxY = -Infinity;
+
+  //       Array.from(obj.children).forEach((child) => {
+  //         const childBox = this.getBoundingBox(child);
+  //         if (childBox) {
+  //           minX = Math.min(minX, childBox.x);
+  //           minY = Math.min(minY, childBox.y);
+  //           maxX = Math.max(maxX, childBox.x + childBox.width);
+  //           maxY = Math.max(maxY, childBox.y + childBox.height);
+  //         }
+  //       });
+
+  //       if (minX === Infinity) return null;
+
+  //       return {
+  //         x: minX,
+  //         y: minY,
+  //         width: maxX - minX,
+  //         height: maxY - minY,
+  //       };
+  //     }
+  //   }
+  //   return null;
+  // }
+
+// オブジェクトのバウンディングボックスを取得（transform属性をDOMMatrix/DOMPointで考慮）
+getBoundingBox(obj) {
+  if (!obj) return null;
+
+  try {
+    const svgBBox = obj.getBBox();
+    // 変換行列の取得: getCTM() が利用できる場合はそれを優先
+    let matrix = new DOMMatrix();
+    if (typeof obj.getCTM === "function") {
+      const ctm = obj.getCTM();
+      if (ctm) {
+        matrix = ctm;
+      } else if (obj.getAttribute("transform")) {
+        matrix = new DOMMatrix(obj.getAttribute("transform"));
       }
+    } else if (obj.getAttribute("transform")) {
+      matrix = new DOMMatrix(obj.getAttribute("transform"));
+    }
 
-      // transform属性がないか、CTMが取得できない場合は元のバウンディングボックスを使用
+    // 変換がなければ元のバウンディングボックスを返す
+    if (matrix.isIdentity) {
       return {
         x: svgBBox.x,
         y: svgBBox.y,
         width: svgBBox.width,
         height: svgBBox.height,
       };
-    } catch (e) {
-      console.error("バウンディングボックスの取得に失敗しました", e);
-
-      // 従来の方法でフォールバック
-      if (obj.tagName === "rect") {
-        return {
-          x: parseFloat(obj.getAttribute("x")),
-          y: parseFloat(obj.getAttribute("y")),
-          width: parseFloat(obj.getAttribute("width")),
-          height: parseFloat(obj.getAttribute("height")),
-        };
-      } else if (obj.tagName === "circle") {
-        const cx = parseFloat(obj.getAttribute("cx"));
-        const cy = parseFloat(obj.getAttribute("cy"));
-        const r = parseFloat(obj.getAttribute("r"));
-        return {
-          x: cx - r,
-          y: cy - r,
-          width: r * 2,
-          height: r * 2,
-        };
-      } else if (obj.tagName === "polygon") {
-        // 多角形のバウンディングボックスを計算
-        const points = obj.getAttribute("points").trim().split(" ");
-        let minX = Infinity,
-          minY = Infinity,
-          maxX = -Infinity,
-          maxY = -Infinity;
-
-        points.forEach((point) => {
-          const [x, y] = point.split(",").map(parseFloat);
-          minX = Math.min(minX, x);
-          minY = Math.min(minY, y);
-          maxX = Math.max(maxX, x);
-          maxY = Math.max(maxY, y);
-        });
-
-        return {
-          x: minX,
-          y: minY,
-          width: maxX - minX,
-          height: maxY - minY,
-        };
-      } else if (obj.tagName === "text") {
-        // テキストのバウンディングボックス
-        const x = parseFloat(obj.getAttribute("x"));
-        const y = parseFloat(obj.getAttribute("y"));
-        // 推定サイズ（実際のサイズは取得困難）
-        return {
-          x: x,
-          y: y - 16, // フォントサイズを考慮
-          width: 100, // 推定幅
-          height: 20, // 推定高さ
-        };
-      } else if (obj.tagName === "g") {
-        // グループのバウンディングボックス（すべての子要素を含む）
-        let minX = Infinity,
-          minY = Infinity,
-          maxX = -Infinity,
-          maxY = -Infinity;
-
-        Array.from(obj.children).forEach((child) => {
-          const childBox = this.getBoundingBox(child);
-          if (childBox) {
-            minX = Math.min(minX, childBox.x);
-            minY = Math.min(minY, childBox.y);
-            maxX = Math.max(maxX, childBox.x + childBox.width);
-            maxY = Math.max(maxY, childBox.y + childBox.height);
-          }
-        });
-
-        if (minX === Infinity) return null;
-
-        return {
-          x: minX,
-          y: minY,
-          width: maxX - minX,
-          height: maxY - minY,
-        };
-      }
     }
-    return null;
+
+    // SVGのバウンディングボックスの四隅を DOMPoint で生成
+    const points = [
+      new DOMPoint(svgBBox.x, svgBBox.y),
+      new DOMPoint(svgBBox.x + svgBBox.width, svgBBox.y),
+      new DOMPoint(svgBBox.x + svgBBox.width, svgBBox.y + svgBBox.height),
+      new DOMPoint(svgBBox.x, svgBBox.y + svgBBox.height),
+    ];
+
+    // 各ポイントを変換後の座標に変換
+    const transformedPoints = points.map((point) => point.matrixTransform(matrix));
+
+    // 変換後の座標から新しいバウンディングボックスを算出
+    let minX = Infinity,
+      minY = Infinity,
+      maxX = -Infinity,
+      maxY = -Infinity;
+    transformedPoints.forEach((p) => {
+      minX = Math.min(minX, p.x);
+      minY = Math.min(minY, p.y);
+      maxX = Math.max(maxX, p.x);
+      maxY = Math.max(maxY, p.y);
+    });
+
+    return {
+      x: minX,
+      y: minY,
+      width: maxX - minX,
+      height: maxY - minY,
+    };
+  } catch (e) {
+    console.error("バウンディングボックスの取得に失敗しました", e);
+    // ここからは従来の方法でフォールバック
+    if (obj.tagName === "rect") {
+      return {
+        x: parseFloat(obj.getAttribute("x")),
+        y: parseFloat(obj.getAttribute("y")),
+        width: parseFloat(obj.getAttribute("width")),
+        height: parseFloat(obj.getAttribute("height")),
+      };
+    } else if (obj.tagName === "circle") {
+      const cx = parseFloat(obj.getAttribute("cx"));
+      const cy = parseFloat(obj.getAttribute("cy"));
+      const r = parseFloat(obj.getAttribute("r"));
+      return {
+        x: cx - r,
+        y: cy - r,
+        width: r * 2,
+        height: r * 2,
+      };
+    } else if (obj.tagName === "polygon") {
+      const points = obj.getAttribute("points").trim().split(" ");
+      let minX = Infinity,
+        minY = Infinity,
+        maxX = -Infinity,
+        maxY = -Infinity;
+      points.forEach((point) => {
+        const [x, y] = point.split(",").map(parseFloat);
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
+      });
+      return {
+        x: minX,
+        y: minY,
+        width: maxX - minX,
+        height: maxY - minY,
+      };
+    } else if (obj.tagName === "text") {
+      const x = parseFloat(obj.getAttribute("x"));
+      const y = parseFloat(obj.getAttribute("y"));
+      return {
+        x: x,
+        y: y - 16,
+        width: 100,
+        height: 20,
+      };
+    } else if (obj.tagName === "g") {
+      let minX = Infinity,
+        minY = Infinity,
+        maxX = -Infinity,
+        maxY = -Infinity;
+      Array.from(obj.children).forEach((child) => {
+        const childBox = this.getBoundingBox(child);
+        if (childBox) {
+          minX = Math.min(minX, childBox.x);
+          minY = Math.min(minY, childBox.y);
+          maxX = Math.max(maxX, childBox.x + childBox.width);
+          maxY = Math.max(maxY, childBox.y + childBox.height);
+        }
+      });
+      if (minX === Infinity) return null;
+      return {
+        x: minX,
+        y: minY,
+        width: maxX - minX,
+        height: maxY - minY,
+      };
+    }
   }
+  return null;
+}
+
 }
 
 // グローバルに公開
