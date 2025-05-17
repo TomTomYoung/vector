@@ -196,154 +196,249 @@ class SelectTool extends BaseTool {
   }
 
   // オブジェクト移動 - 変換行列を考慮した改良版
-  // moveObject(obj, dx, dy) {
-  //   if (!obj) return;
-  //   // 現在の transform 属性を DOMMatrix に変換（失敗したら単位行列）
-  //   let currentTransformStr = obj.getAttribute("transform") || "";
-  //   let currentMatrix;
-  //   try {
-  //     currentMatrix = new DOMMatrix(currentTransformStr);
-  //   } catch (e) {
-  //     currentMatrix = new DOMMatrix();
-  //   }
-  //   // translate の行列を作成
-  //   const translationMatrix = new DOMMatrix().translate(dx, dy);
-  //   // 新しい行列は、translate 行列と既存行列の合成
-  //   const newMatrix = translationMatrix.multiply(currentMatrix);
-  //   obj.setAttribute("transform", newMatrix.toString());
-  // }
+  moveObject(obj, dx, dy) {
+    if (!obj) return;
 
-// オブジェクト移動 - 変換行列を考慮した改良版
-moveObject(obj, dx, dy) {
-  if (!obj) return;
-  // 現在の transform 属性を DOMMatrix に変換（失敗したら単位行列）
-  let currentTransformStr = obj.getAttribute("transform") || "";
-  let currentMatrix;
-  try {
-    currentMatrix = new DOMMatrix(currentTransformStr);
-  } catch (e) {
-    currentMatrix = new DOMMatrix();
+    // 現在の変換行列を取得
+    let currentTransformStr = obj.getAttribute("transform") || "";
+    let currentMatrix;
+    try {
+      currentMatrix = new DOMMatrix(currentTransformStr);
+    } catch (e) {
+      currentMatrix = new DOMMatrix();
+    }
+
+    // 現在の変換の逆を計算
+    const inverseMatrix = currentMatrix.inverse();
+
+    // 移動量を逆変換して、現在のスケール/回転を考慮した値を得る
+    const pt = this.canvas.createSVGPoint();
+    pt.x = dx;
+    pt.y = dy;
+
+    // 逆行列から回転・スケール部分だけを抽出（e, fをクリア）
+    const rotScaleOnly = new DOMMatrix([
+      inverseMatrix.a,
+      inverseMatrix.b,
+      inverseMatrix.c,
+      inverseMatrix.d,
+      0,
+      0, // 移動成分をクリア
+    ]);
+
+    // 移動量を変換
+    const transformedDelta = pt.matrixTransform(rotScaleOnly);
+
+    // 変換後の移動量で新しい移動行列を作成
+    const translationMatrix = new DOMMatrix().translate(
+      transformedDelta.x,
+      transformedDelta.y
+    );
+
+    // 現在の変換に新しい移動を追加
+    const newMatrix = currentMatrix.multiply(translationMatrix);
+    obj.setAttribute("transform", newMatrix.toString());
   }
-  // translate の行列を作成
-  const translationMatrix = new DOMMatrix().translate(dx, dy);
-  // 修正：translate 行列を右側に乗算して既存行列に追記する形に変更
-  const newMatrix = currentMatrix.multiply(translationMatrix);
-  obj.setAttribute("transform", newMatrix.toString());
-}
 
-
-  // リサイズ処理
   resizeObject() {
     if (!this.selectedObject || !this.resizeHandle) return;
 
-    // 初期バウンディングボックスは操作開始時に保存している前提（this.initialBBox）
+    // 初期バウンディングボックスを使用
     const bbox = this.initialBBox;
+
+    // リサイズパラメータの計算（既存コード）
     let fixedPoint = { x: 0, y: 0 };
+    // ハンドルの種類に応じた固定点設定（既存コード）
+    // ...
 
-    // ハンドルの種類に応じた固定点（反対側の角）を設定
-    if (this.resizeHandle.classList.contains("nw")) {
-      fixedPoint = { x: bbox.x + bbox.width, y: bbox.y + bbox.height };
-    } else if (this.resizeHandle.classList.contains("se")) {
-      fixedPoint = { x: bbox.x, y: bbox.y };
-    } else if (this.resizeHandle.classList.contains("ne")) {
-      fixedPoint = { x: bbox.x, y: bbox.y + bbox.height };
-    } else if (this.resizeHandle.classList.contains("sw")) {
-      fixedPoint = { x: bbox.x + bbox.width, y: bbox.y };
+    // スケール計算（既存コード）
+    // ...
+
+    // 初期の変換パラメータを抽出（初回のみ）
+    if (!this.resizeParams) {
+      this.resizeParams = this.extractTransformParams(this.initialTransform);
     }
 
-    // マウスの現在位置と固定点から新サイズを決定
-    let scaleX = 1,
-      scaleY = 1;
-    if (this.resizeHandle.classList.contains("nw")) {
-      const newWidth = fixedPoint.x - this.currentPoint.x;
-      const newHeight = fixedPoint.y - this.currentPoint.y;
-      scaleX = newWidth / bbox.width;
-      scaleY = newHeight / bbox.height;
-    } else if (this.resizeHandle.classList.contains("se")) {
-      const newWidth = this.currentPoint.x - fixedPoint.x;
-      const newHeight = this.currentPoint.y - fixedPoint.y;
-      scaleX = newWidth / bbox.width;
-      scaleY = newHeight / bbox.height;
-    } else if (this.resizeHandle.classList.contains("ne")) {
-      const newWidth = this.currentPoint.x - fixedPoint.x;
-      const newHeight = fixedPoint.y - this.currentPoint.y;
-      scaleX = newWidth / bbox.width;
-      scaleY = newHeight / bbox.height;
-    } else if (this.resizeHandle.classList.contains("sw")) {
-      const newWidth = fixedPoint.x - this.currentPoint.x;
-      const newHeight = this.currentPoint.y - fixedPoint.y;
-      scaleX = newWidth / bbox.width;
-      scaleY = newHeight / bbox.height;
-    }
+    // 新しいスケール値を計算（初期スケールを掛け合わせる）
+    const newScaleX = this.resizeParams.scale.x * scaleX;
+    const newScaleY = this.resizeParams.scale.y * scaleY;
 
-    // 最小スケール値を適用（必要に応じて調整）
-    if (scaleX < 0.1) scaleX = 0.1;
-    if (scaleY < 0.1) scaleY = 0.1;
+    // 新しい変換パラメータを作成
+    const newParams = {
+      translate: this.resizeParams.translate,
+      scale: { x: newScaleX, y: newScaleY },
+      rotate: this.resizeParams.rotate,
+    };
 
-    // 固定点を基準にスケール行列を作成
-    const toFixedPoint = new DOMMatrix().translate(
-      -fixedPoint.x,
-      -fixedPoint.y
+    // 固定点を基準にした変換文字列を生成
+    const newTransform = this.createTransformStringWithFixedPoint(
+      newParams,
+      fixedPoint
     );
-    const scalingMatrix = new DOMMatrix().scale(scaleX, scaleY);
-    const backFromFixedPoint = new DOMMatrix().translate(
-      fixedPoint.x,
-      fixedPoint.y
-    );
-    const compositeScaling = backFromFixedPoint
-      .multiply(scalingMatrix)
-      .multiply(toFixedPoint);
 
-    // 初期の transform 属性（操作開始前の状態）を DOMMatrix に変換
-    let initialMatrix;
-    try {
-      initialMatrix = new DOMMatrix(this.initialTransform || "");
-    } catch (e) {
-      initialMatrix = new DOMMatrix();
-    }
-
-    // 合成した行列を適用
-    const newMatrix = initialMatrix.multiply(compositeScaling);
-    this.selectedObject.setAttribute("transform", newMatrix.toString());
-
-    // 必要に応じて、リサイズ中は control points の再描画は控える
+    this.selectedObject.setAttribute("transform", newTransform);
   }
 
+  // 固定点を基準にした変換文字列を生成
+  createTransformStringWithFixedPoint(params, fixedPoint) {
+    let transform = "";
+
+    // まず移動
+    if (params.translate.x !== 0 || params.translate.y !== 0) {
+      transform += `translate(${params.translate.x},${params.translate.y}) `;
+    }
+
+    // 回転があれば適用
+    if (params.rotate !== 0) {
+      // 中心点を基準に回転
+      const center = {
+        x: this.initialBBox.x + this.initialBBox.width / 2,
+        y: this.initialBBox.y + this.initialBBox.height / 2,
+      };
+      transform += `translate(${center.x},${center.y}) `;
+      transform += `rotate(${params.rotate}) `;
+      transform += `translate(${-center.x},${-center.y}) `;
+    }
+
+    // 固定点を基準にスケール
+    transform += `translate(${fixedPoint.x},${fixedPoint.y}) `;
+    transform += `scale(${params.scale.x},${params.scale.y}) `;
+    transform += `translate(${-fixedPoint.x},${-fixedPoint.y}) `;
+
+    return transform;
+  }
   // 回転処理
   rotateObject() {
     if (!this.selectedObject) return;
 
-    const origin = this.fixedTransformOrigin; // 固定したグローバル中心
-    // 現在のマウス位置から角度を計算
-    const dx = this.currentPoint.x - origin.x;
-    const dy = this.currentPoint.y - origin.y;
-    const currentAngle = Math.atan2(dy, dx) * (180 / Math.PI);
-
-    // 回転開始時との差分を加算して新角度を求める
-    const deltaAngle = currentAngle - this.startAngle;
-    const newAngle = this.initialRotation + deltaAngle;
-
-    // 回転行列の作成：固定中心で回転するため、原点移動 → 回転 → 元に戻す
-    const toOrigin = new DOMMatrix().translate(-origin.x, -origin.y);
-    const rotationMatrix = new DOMMatrix().rotate(newAngle);
-    const backToOrigin = new DOMMatrix().translate(origin.x, origin.y);
-    const compositeRotation = backToOrigin
-      .multiply(rotationMatrix)
-      .multiply(toOrigin);
-
-    // 初期状態の transform を DOMMatrix に変換
-    let initialMatrix;
-    try {
-      initialMatrix = new DOMMatrix(this.initialTransform || "");
-    } catch (e) {
-      initialMatrix = new DOMMatrix();
+    // 1. 変換前パラメータの確認（初回のみ抽出して保存）
+    if (!this.transformParams) {
+      this.transformParams = this.extractTransformParams(this.initialTransform);
     }
 
-    // 合成した行列を適用
-    const newMatrix = initialMatrix.multiply(compositeRotation);
-    this.selectedObject.setAttribute("transform", newMatrix.toString());
+    // 2. 中心点計算（方法2: 無変換時の4角に変換前t,s,rを適用）
+    if (!this.rotationCenter) {
+      const bbox = this.selectedObject.getBBox(); // 無変換時のバウンディングボックス
+      const corners = [
+        { x: bbox.x, y: bbox.y },
+        { x: bbox.x + bbox.width, y: bbox.y },
+        { x: bbox.x + bbox.width, y: bbox.y + bbox.height },
+        { x: bbox.x, y: bbox.y + bbox.height },
+      ];
 
-    // ドラッグ中は頻繁な control points の再描画は控える
+      // 無変換時の各角に現在の変換を適用
+      const transformedCorners = corners.map((corner) => {
+        // 無変換の角に t,s,r を順に適用
+        return this.applyTransform(corner, this.transformParams);
+      });
+
+      // 変換後の角から中心を計算
+      this.rotationCenter = {
+        x: transformedCorners.reduce((sum, pt) => sum + pt.x, 0) / 4,
+        y: transformedCorners.reduce((sum, pt) => sum + pt.y, 0) / 4,
+      };
+    }
+
+    // 3. 回転差分の計算
+    const dx = this.currentPoint.x - this.rotationCenter.x;
+    const dy = this.currentPoint.y - this.rotationCenter.y;
+    const currentAngle = Math.atan2(dy, dx) * (180 / Math.PI);
+    const deltaAngle = currentAngle - this.startAngle;
+
+    // 4. 新変換適用
+    const newParams = {
+      translate: this.transformParams.translate,
+      scale: this.transformParams.scale,
+      rotate: this.transformParams.rotate + deltaAngle,
+    };
+
+    // 無変換から新しいt,s,rを適用した変換文字列を生成
+    const newTransform = this.createTransformString(
+      newParams,
+      this.rotationCenter
+    );
+    this.selectedObject.setAttribute("transform", newTransform);
+  }
+
+  // 変換パラメータ抽出ヘルパーメソッド
+  extractTransformParams(transformStr) {
+    const params = {
+      translate: { x: 0, y: 0 },
+      scale: { x: 1, y: 1 },
+      rotate: 0,
+    };
+
+    // 各パラメータを正規表現で抽出（簡易実装）
+    const translateMatch = transformStr.match(
+      /translate\(\s*([-\d.]+)(?:\s*,\s*)?([-\d.]+)?\s*\)/
+    );
+    if (translateMatch) {
+      params.translate.x = parseFloat(translateMatch[1]) || 0;
+      params.translate.y = parseFloat(translateMatch[2]) || 0;
+    }
+
+    const scaleMatch = transformStr.match(
+      /scale\(\s*([-\d.]+)(?:\s*,\s*)?([-\d.]+)?\s*\)/
+    );
+    if (scaleMatch) {
+      params.scale.x = parseFloat(scaleMatch[1]) || 1;
+      params.scale.y = parseFloat(scaleMatch[2] || scaleMatch[1]) || 1;
+    }
+
+    const rotateMatch = transformStr.match(/rotate\(\s*([-\d.]+)/);
+    if (rotateMatch) {
+      params.rotate = parseFloat(rotateMatch[1]) || 0;
+    }
+
+    return params;
+  }
+
+  // 指定されたt,s,rパラメータで変換文字列を生成
+  createTransformString(params, center) {
+    let transform = "";
+
+    // まず移動
+    if (params.translate.x !== 0 || params.translate.y !== 0) {
+      transform += `translate(${params.translate.x},${params.translate.y}) `;
+    }
+
+    // 中心点を基準に回転
+    transform += `translate(${center.x},${center.y}) `;
+    transform += `rotate(${params.rotate}) `;
+    transform += `translate(${-center.x},${-center.y}) `;
+
+    // スケール
+    if (params.scale.x !== 1 || params.scale.y !== 1) {
+      transform += `scale(${params.scale.x},${params.scale.y}) `;
+    }
+
+    return transform;
+  }
+
+  // 点に変換を適用するヘルパーメソッド
+  applyTransform(point, params) {
+    // SVGPointとDOMMatrixを使った正確な実装
+    const svgPoint = this.canvas.createSVGPoint();
+    svgPoint.x = point.x;
+    svgPoint.y = point.y;
+
+    let matrix = new DOMMatrix();
+
+    // 変換を順に適用
+    if (params.translate.x !== 0 || params.translate.y !== 0) {
+      matrix = matrix.translate(params.translate.x, params.translate.y);
+    }
+
+    if (params.rotate !== 0) {
+      matrix = matrix.rotate(params.rotate);
+    }
+
+    if (params.scale.x !== 1 || params.scale.y !== 1) {
+      matrix = matrix.scale(params.scale.x, params.scale.y);
+    }
+
+    const transformed = svgPoint.matrixTransform(matrix);
+    return { x: transformed.x, y: transformed.y };
   }
 
   // コントロールポイント（ハンドル）の追加
@@ -574,138 +669,139 @@ moveObject(obj, dx, dy) {
   //   return null;
   // }
 
-// オブジェクトのバウンディングボックスを取得（transform属性をDOMMatrix/DOMPointで考慮）
-getBoundingBox(obj) {
-  if (!obj) return null;
+  // オブジェクトのバウンディングボックスを取得（transform属性をDOMMatrix/DOMPointで考慮）
+  getBoundingBox(obj) {
+    if (!obj) return null;
 
-  try {
-    const svgBBox = obj.getBBox();
-    // 変換行列の取得: getCTM() が利用できる場合はそれを優先
-    let matrix = new DOMMatrix();
-    if (typeof obj.getCTM === "function") {
-      const ctm = obj.getCTM();
-      if (ctm) {
-        matrix = ctm;
+    try {
+      const svgBBox = obj.getBBox();
+      // 変換行列の取得: getCTM() が利用できる場合はそれを優先
+      let matrix = new DOMMatrix();
+      if (typeof obj.getCTM === "function") {
+        const ctm = obj.getCTM();
+        if (ctm) {
+          matrix = ctm;
+        } else if (obj.getAttribute("transform")) {
+          matrix = new DOMMatrix(obj.getAttribute("transform"));
+        }
       } else if (obj.getAttribute("transform")) {
         matrix = new DOMMatrix(obj.getAttribute("transform"));
       }
-    } else if (obj.getAttribute("transform")) {
-      matrix = new DOMMatrix(obj.getAttribute("transform"));
-    }
 
-    // 変換がなければ元のバウンディングボックスを返す
-    if (matrix.isIdentity) {
-      return {
-        x: svgBBox.x,
-        y: svgBBox.y,
-        width: svgBBox.width,
-        height: svgBBox.height,
-      };
-    }
+      // 変換がなければ元のバウンディングボックスを返す
+      if (matrix.isIdentity) {
+        return {
+          x: svgBBox.x,
+          y: svgBBox.y,
+          width: svgBBox.width,
+          height: svgBBox.height,
+        };
+      }
 
-    // SVGのバウンディングボックスの四隅を DOMPoint で生成
-    const points = [
-      new DOMPoint(svgBBox.x, svgBBox.y),
-      new DOMPoint(svgBBox.x + svgBBox.width, svgBBox.y),
-      new DOMPoint(svgBBox.x + svgBBox.width, svgBBox.y + svgBBox.height),
-      new DOMPoint(svgBBox.x, svgBBox.y + svgBBox.height),
-    ];
+      // SVGのバウンディングボックスの四隅を DOMPoint で生成
+      const points = [
+        new DOMPoint(svgBBox.x, svgBBox.y),
+        new DOMPoint(svgBBox.x + svgBBox.width, svgBBox.y),
+        new DOMPoint(svgBBox.x + svgBBox.width, svgBBox.y + svgBBox.height),
+        new DOMPoint(svgBBox.x, svgBBox.y + svgBBox.height),
+      ];
 
-    // 各ポイントを変換後の座標に変換
-    const transformedPoints = points.map((point) => point.matrixTransform(matrix));
+      // 各ポイントを変換後の座標に変換
+      const transformedPoints = points.map((point) =>
+        point.matrixTransform(matrix)
+      );
 
-    // 変換後の座標から新しいバウンディングボックスを算出
-    let minX = Infinity,
-      minY = Infinity,
-      maxX = -Infinity,
-      maxY = -Infinity;
-    transformedPoints.forEach((p) => {
-      minX = Math.min(minX, p.x);
-      minY = Math.min(minY, p.y);
-      maxX = Math.max(maxX, p.x);
-      maxY = Math.max(maxY, p.y);
-    });
-
-    return {
-      x: minX,
-      y: minY,
-      width: maxX - minX,
-      height: maxY - minY,
-    };
-  } catch (e) {
-    console.error("バウンディングボックスの取得に失敗しました", e);
-    // ここからは従来の方法でフォールバック
-    if (obj.tagName === "rect") {
-      return {
-        x: parseFloat(obj.getAttribute("x")),
-        y: parseFloat(obj.getAttribute("y")),
-        width: parseFloat(obj.getAttribute("width")),
-        height: parseFloat(obj.getAttribute("height")),
-      };
-    } else if (obj.tagName === "circle") {
-      const cx = parseFloat(obj.getAttribute("cx"));
-      const cy = parseFloat(obj.getAttribute("cy"));
-      const r = parseFloat(obj.getAttribute("r"));
-      return {
-        x: cx - r,
-        y: cy - r,
-        width: r * 2,
-        height: r * 2,
-      };
-    } else if (obj.tagName === "polygon") {
-      const points = obj.getAttribute("points").trim().split(" ");
+      // 変換後の座標から新しいバウンディングボックスを算出
       let minX = Infinity,
         minY = Infinity,
         maxX = -Infinity,
         maxY = -Infinity;
-      points.forEach((point) => {
-        const [x, y] = point.split(",").map(parseFloat);
-        minX = Math.min(minX, x);
-        minY = Math.min(minY, y);
-        maxX = Math.max(maxX, x);
-        maxY = Math.max(maxY, y);
+      transformedPoints.forEach((p) => {
+        minX = Math.min(minX, p.x);
+        minY = Math.min(minY, p.y);
+        maxX = Math.max(maxX, p.x);
+        maxY = Math.max(maxY, p.y);
       });
+
       return {
         x: minX,
         y: minY,
         width: maxX - minX,
         height: maxY - minY,
       };
-    } else if (obj.tagName === "text") {
-      const x = parseFloat(obj.getAttribute("x"));
-      const y = parseFloat(obj.getAttribute("y"));
-      return {
-        x: x,
-        y: y - 16,
-        width: 100,
-        height: 20,
-      };
-    } else if (obj.tagName === "g") {
-      let minX = Infinity,
-        minY = Infinity,
-        maxX = -Infinity,
-        maxY = -Infinity;
-      Array.from(obj.children).forEach((child) => {
-        const childBox = this.getBoundingBox(child);
-        if (childBox) {
-          minX = Math.min(minX, childBox.x);
-          minY = Math.min(minY, childBox.y);
-          maxX = Math.max(maxX, childBox.x + childBox.width);
-          maxY = Math.max(maxY, childBox.y + childBox.height);
-        }
-      });
-      if (minX === Infinity) return null;
-      return {
-        x: minX,
-        y: minY,
-        width: maxX - minX,
-        height: maxY - minY,
-      };
+    } catch (e) {
+      console.error("バウンディングボックスの取得に失敗しました", e);
+      // ここからは従来の方法でフォールバック
+      if (obj.tagName === "rect") {
+        return {
+          x: parseFloat(obj.getAttribute("x")),
+          y: parseFloat(obj.getAttribute("y")),
+          width: parseFloat(obj.getAttribute("width")),
+          height: parseFloat(obj.getAttribute("height")),
+        };
+      } else if (obj.tagName === "circle") {
+        const cx = parseFloat(obj.getAttribute("cx"));
+        const cy = parseFloat(obj.getAttribute("cy"));
+        const r = parseFloat(obj.getAttribute("r"));
+        return {
+          x: cx - r,
+          y: cy - r,
+          width: r * 2,
+          height: r * 2,
+        };
+      } else if (obj.tagName === "polygon") {
+        const points = obj.getAttribute("points").trim().split(" ");
+        let minX = Infinity,
+          minY = Infinity,
+          maxX = -Infinity,
+          maxY = -Infinity;
+        points.forEach((point) => {
+          const [x, y] = point.split(",").map(parseFloat);
+          minX = Math.min(minX, x);
+          minY = Math.min(minY, y);
+          maxX = Math.max(maxX, x);
+          maxY = Math.max(maxY, y);
+        });
+        return {
+          x: minX,
+          y: minY,
+          width: maxX - minX,
+          height: maxY - minY,
+        };
+      } else if (obj.tagName === "text") {
+        const x = parseFloat(obj.getAttribute("x"));
+        const y = parseFloat(obj.getAttribute("y"));
+        return {
+          x: x,
+          y: y - 16,
+          width: 100,
+          height: 20,
+        };
+      } else if (obj.tagName === "g") {
+        let minX = Infinity,
+          minY = Infinity,
+          maxX = -Infinity,
+          maxY = -Infinity;
+        Array.from(obj.children).forEach((child) => {
+          const childBox = this.getBoundingBox(child);
+          if (childBox) {
+            minX = Math.min(minX, childBox.x);
+            minY = Math.min(minY, childBox.y);
+            maxX = Math.max(maxX, childBox.x + childBox.width);
+            maxY = Math.max(maxY, childBox.y + childBox.height);
+          }
+        });
+        if (minX === Infinity) return null;
+        return {
+          x: minX,
+          y: minY,
+          width: maxX - minX,
+          height: maxY - minY,
+        };
+      }
     }
+    return null;
   }
-  return null;
-}
-
 }
 
 // グローバルに公開

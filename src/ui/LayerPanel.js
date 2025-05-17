@@ -15,24 +15,40 @@ class LayerPanel {
   }
 
   createLayerPanel() {
-    const layerPanel = document.createElement("div");
-    layerPanel.style.position = "absolute";
-    layerPanel.style.right = "10px";
-    layerPanel.style.top = "60px";
-    layerPanel.style.width = "150px";
-    layerPanel.style.background = "white";
-    layerPanel.style.border = "1px solid #ccc";
-    layerPanel.style.padding = "10px";
-    layerPanel.style.zIndex = "100";
-    layerPanel.innerHTML = `
-        <h3>レイヤー</h3>
-        <div id="layer-list"></div>
-        <button id="add-layer">レイヤー追加</button>
-      `;
-    document.body.appendChild(layerPanel);
+    const toolbar = document.querySelector(".toolbar");
 
-    // レイヤー追加ボタンのイベント処理
-    document.getElementById("add-layer").addEventListener("click", () => {
+    // レイヤー管理用のコンテナを作成
+    const layerContainer = document.createElement("div");
+    layerContainer.id = "layer-container";
+    layerContainer.style.display = "flex";
+    layerContainer.style.flexDirection = "column";
+    layerContainer.style.marginRight = "15px";
+    layerContainer.style.minWidth = "150px";
+    layerContainer.style.border = "1px solid #ccc";
+    layerContainer.style.padding = "5px";
+    layerContainer.style.backgroundColor = "#f8f8f8";
+
+    // レイヤーのタイトル
+    const layerTitle = document.createElement("div");
+    layerTitle.textContent = "レイヤー";
+    layerTitle.style.fontWeight = "bold";
+    layerTitle.style.marginBottom = "5px";
+    layerContainer.appendChild(layerTitle);
+
+    // レイヤーリスト
+    const layerList = document.createElement("div");
+    layerList.id = "layer-list";
+    layerList.style.maxHeight = "120px";
+    layerList.style.overflowY = "auto";
+    layerList.style.marginBottom = "5px";
+    layerContainer.appendChild(layerList);
+
+    // レイヤー追加ボタン
+    const addLayerBtn = document.createElement("button");
+    addLayerBtn.id = "add-layer";
+    addLayerBtn.textContent = "レイヤー追加";
+    addLayerBtn.style.width = "100%";
+    addLayerBtn.addEventListener("click", () => {
       const newLayerId =
         window.layers.length > 0
           ? Math.max(...window.layers.map((layer) => layer.id)) + 1
@@ -47,6 +63,10 @@ class LayerPanel {
       window.currentLayerId = newLayerId;
       this.updateLayerList();
     });
+    layerContainer.appendChild(addLayerBtn);
+
+    // ツールバーの先頭に追加
+    toolbar.insertBefore(layerContainer, toolbar.firstChild);
   }
 
   // レイヤー一覧を更新

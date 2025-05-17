@@ -26,16 +26,20 @@ class App {
   init() {
     const canvas = document.getElementById("canvas");
 
+    // キャンバスのサイズを設定（ビューポートに合わせる）
+    this.adjustCanvasSize();
+    window.addEventListener("resize", this.adjustCanvasSize);
+
     // ツールマネージャーの初期化
     this.toolManager = new ToolManager(canvas);
     window.toolManager = this.toolManager;
 
-    // 各UIコンポーネントの初期化
-    this.stylePanel = new StylePanel();
-    this.gridManager = new GridManager();
+    // UIコンポーネントの初期化 - レイヤーパネルを最初に初期化
     this.layerPanel = new LayerPanel();
+    this.stylePanel = new StylePanel();
     this.historyManager = new HistoryManager();
     this.alignmentPanel = new AlignmentPanel();
+    this.gridManager = new GridManager();
     this.fileManager = new FileManager();
 
     // ツールの登録
@@ -43,6 +47,19 @@ class App {
 
     // 初期ツールの選択
     this.toolManager.activateTool("select");
+
+    // 初期状態を保存
+    if (window.saveState) {
+      window.saveState();
+    }
+  }
+
+  // キャンバスサイズの調整
+  adjustCanvasSize() {
+    const canvas = document.getElementById("canvas");
+    // ここでは固定サイズを維持していますが、必要に応じて調整可能
+    // 例: canvas.setAttribute("width", window.innerWidth * 0.8);
+    // 例: canvas.setAttribute("height", window.innerHeight * 0.7);
   }
 
   registerTools() {
@@ -62,11 +79,11 @@ class App {
     const polygonTool = new PolygonTool(canvas, this.toolManager);
     this.toolManager.registerTool("polygon", polygonTool);
 
-    const textTool = new TextTool(canvas, this.toolManager);
-    this.toolManager.registerTool("text", textTool);
-
     const pathTool = new PathTool(canvas, this.toolManager);
     this.toolManager.registerTool("path", pathTool);
+
+    const textTool = new TextTool(canvas, this.toolManager);
+    this.toolManager.registerTool("text", textTool);
   }
 }
 

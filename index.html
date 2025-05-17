@@ -10,6 +10,9 @@
         margin: 0;
         padding: 0;
         font-family: sans-serif;
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
       }
 
       .header {
@@ -18,12 +21,18 @@
         padding: 10px;
       }
 
+      .header h1 {
+        margin: 0;
+        font-size: 1.5rem;
+      }
+
       .toolbar {
         background: #eee;
         padding: 10px;
         display: flex;
         flex-wrap: wrap;
-        align-items: center;
+        align-items: flex-start;
+        border-bottom: 1px solid #ccc;
       }
 
       .toolbar button {
@@ -34,15 +43,43 @@
       }
 
       .canvas-container {
+        flex: 1;
         background: #e0e0e0;
-        height: calc(100vh - 100px);
         overflow: auto;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 20px;
       }
 
       #canvas {
         background: white;
-        margin: 20px;
         box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+      }
+
+      /* レイヤーパネル用のスタイル */
+      #layer-container {
+        margin-right: 15px;
+      }
+
+      #layer-list {
+        max-height: 120px;
+        overflow-y: auto;
+        border: 1px solid #ddd;
+        background: #fff;
+      }
+
+      .layer-item {
+        padding: 5px;
+        margin-bottom: 2px;
+        background-color: #f5f5f5;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+      }
+
+      .layer-item.active {
+        background-color: #e6f2ff;
       }
     </style>
   </head>
@@ -74,9 +111,9 @@
     <script src="src/tools/TextTool.js"></script>
 
     <!-- UI コンポーネント -->
+    <script src="src/ui/LayerPanel.js"></script>
     <script src="src/ui/StylePanel.js"></script>
     <script src="src/ui/GridManager.js"></script>
-    <script src="src/ui/LayerPanel.js"></script>
     <script src="src/ui/HistoryManager.js"></script>
     <script src="src/ui/AlignmentPanel.js"></script>
     <script src="src/ui/FileManager.js"></script>
