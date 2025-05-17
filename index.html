@@ -61,14 +61,28 @@
     </div>
 
     <!-- JavaScriptファイルの読み込み（順序が重要です） -->
-    <script src="Tool\ToolManager.js"></script>
-    <script src="Tool\BaseTool.js"></script>
-    <script src="Tool\SelectTool.js"></script>
-    <script src="Tool\RectangleTool.js"></script>
-    <script src="Tool\CircleTool.js"></script>
-    <script src="Tool\PolygonTool.js"></script>
-    <script src="Tool\TextTool.js"></script>
-    <script src="Tool\PathTool.js"></script>
-    <script src="main.js"></script>
+    <!-- コアシステム -->
+    <script src="src/core/BaseTool.js"></script>
+    <script src="src/core/ToolManager.js"></script>
+
+    <!-- ツール -->
+    <script src="src/tools/SelectTool.js"></script>
+    <script src="src/tools/RectangleTool.js"></script>
+    <script src="src/tools/CircleTool.js"></script>
+    <script src="src/tools/PolygonTool.js"></script>
+    <script src="src/tools/PathTool.js"></script>
+    <script src="src/tools/TextTool.js"></script>
+
+    <!-- UI コンポーネント -->
+    <script src="src/ui/StylePanel.js"></script>
+    <script src="src/ui/GridManager.js"></script>
+    <script src="src/ui/LayerPanel.js"></script>
+    <script src="src/ui/HistoryManager.js"></script>
+    <script src="src/ui/AlignmentPanel.js"></script>
+    <script src="src/ui/FileManager.js"></script>
+
+    <!-- アプリケーション -->
+    <script src="src/core/App.js"></script>
+    <script src="src/main.js"></script>
   </body>
 </html>

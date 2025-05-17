@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ベクターエディタ</title>
+    <style>
+      /* 基本スタイル */
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: sans-serif;
+      }
+
+      .header {
+        background: #333;
+        color: white;
+        padding: 10px;
+      }
+
+      .toolbar {
+        background: #eee;
+        padding: 10px;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+
+      .toolbar button {
+        margin-right: 5px;
+        margin-bottom: 5px;
+        padding: 5px 10px;
+        cursor: pointer;
+      }
+
+      .canvas-container {
+        background: #e0e0e0;
+        height: calc(100vh - 100px);
+        overflow: auto;
+      }
+
+      #canvas {
+        background: white;
+        margin: 20px;
+        box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="header">
+      <h1>ベクターエディタ</h1>
+    </div>
+
+    <div class="toolbar">
+      <!-- ツールボタンはJavaScriptで動的に追加されます -->
+    </div>
+
+    <div class="canvas-container">
+      <svg id="canvas" width="800" height="600"></svg>
+    </div>
+
+    <!-- JavaScriptファイルの読み込み（順序が重要です） -->
+    <script src="Tool\ToolManager.js"></script>
+    <script src="Tool\BaseTool.js"></script>
+    <script src="Tool\SelectTool.js"></script>
+    <script src="Tool\RectangleTool.js"></script>
+    <script src="Tool\CircleTool.js"></script>
+    <script src="Tool\PolygonTool.js"></script>
+    <script src="Tool\TextTool.js"></script>
+    <script src="Tool\PathTool.js"></script>
+    <script src="main.js"></script>
+  </body>
+</html>
