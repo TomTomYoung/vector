@@ -29,12 +29,132 @@ class SelectTool extends BaseTool {
   }
 
   deselectObject() {
-    if (!this.selectedObject) return;
-    this.selectedObject.removeAttribute("stroke-dasharray");
+    if (!this.selectedObject && window.selectedObjects.length === 0) return;
+    // 全ての選択されたオブジェクトから点線を削除
+    window.selectedObjects.forEach((obj) =>
+      obj.removeAttribute("stroke-dasharray")
+    );
     this.removeControlPoints();
     this.selectedObject = null;
     window.selectedObject = null;
     window.selectedObjects = [];
+  }
+
+  // 選択されたオブジェクトを削除
+  deleteSelectedObjects() {
+    if (window.selectedObjects.length === 0) return;
+
+    // 状態を保存
+    this.saveState();
+
+    // 選択された全てのオブジェクトを削除
+    window.selectedObjects.forEach((obj) => {
+      if (obj.parentNode) {
+        obj.parentNode.removeChild(obj);
+      }
+    });
+
+    // コントロールポイントを削除
+    this.removeControlPoints();
+
+    // 選択状態をクリア
+    this.selectedObject = null;
+    window.selectedObject = null;
+    window.selectedObjects = [];
+  }
+
+  // 選択されたオブジェクトをコピー
+  copySelectedObjects() {
+    if (window.selectedObjects.length === 0) return;
+
+    // クリップボードをクリア
+    window.clipboard = [];
+
+    // 選択されたオブジェクトをクローン
+    window.selectedObjects.forEach((obj) => {
+      window.clipboard.push(obj.cloneNode(true));
+    });
+  }
+
+  // クリップボードのオブジェクトをペースト
+  pasteObjects() {
+    if (window.clipboard.length === 0) return;
+
+    // 状態を保存
+    this.saveState();
+
+    // 既存の選択を解除
+    this.deselectObject();
+
+    const pastedObjects = [];
+
+    // クリップボードからオブジェクトをペースト
+    window.clipboard.forEach((obj) => {
+      const clone = obj.cloneNode(true);
+
+      // 少しずらして配置（10px右下）
+      const currentTransform = clone.getAttribute("transform") || "";
+      const offset = new DOMMatrix().translate(10, 10);
+
+      if (currentTransform) {
+        const currentMatrix = new DOMMatrix(currentTransform);
+        const newMatrix = offset.multiply(currentMatrix);
+        clone.setAttribute("transform", newMatrix.toString());
+      } else {
+        clone.setAttribute("transform", offset.toString());
+      }
+
+      // キャンバスに追加
+      this.canvas.appendChild(clone);
+      pastedObjects.push(clone);
+    });
+
+    // ペーストしたオブジェクトを選択
+    pastedObjects.forEach((obj, index) => {
+      if (index === 0) {
+        this.selectObject(obj, false);
+      } else {
+        this.selectObject(obj, true);
+      }
+    });
+
+    // クリップボードを更新（連続ペースト用）
+    window.clipboard = pastedObjects.map((obj) => obj.cloneNode(true));
+  }
+
+  // 選択されたオブジェクトをカット
+  cutSelectedObjects() {
+    if (window.selectedObjects.length === 0) return;
+
+    // コピーしてから削除
+    this.copySelectedObjects();
+    this.deleteSelectedObjects();
+  }
+
+  // 全てのオブジェクトを選択
+  selectAll() {
+    // キャンバス内の全ての図形要素を取得
+    const allObjects = Array.from(this.canvas.children).filter(
+      (el) =>
+        !el.classList.contains("control-handle") &&
+        !el.classList.contains("rotate-handle") &&
+        !el.classList.contains("rotate-line") &&
+        el.tagName !== "defs"
+    );
+
+    if (allObjects.length === 0) return;
+
+    // 既存の選択を解除
+    this.deselectObject();
+
+    // 全てのオブジェクトを選択
+    allObjects.forEach((obj, index) => {
+      if (index === 0) {
+        this.selectObject(obj, false);
+      } else {
+        this.selectObject(obj, true);
+      }
+    });
   }
 
   // マウスダウン時の処理
@@ -46,6 +166,9 @@ class SelectTool extends BaseTool {
     this.isRotating = false; // isRotizing → isRotating
     this.resizeHandle = null;
     this.currentPoint = this.getSVGPoint(event);
+
+    // Shift/Ctrlキーの状態を取得
+    const isMultiSelect = event.shiftKey || event.ctrlKey;
 
     // 状態を保存
     this.saveState();
@@ -118,12 +241,23 @@ class SelectTool extends BaseTool {
 
     // 図形本体クリックならドラッグ開始
     if (event.target !== this.canvas) {
-      this.selectObject(event.target);
+      this.selectObject(event.target, isMultiSelect);
       this.isDragging = true;
-      this.initialMatrix = this.selectedObject.getCTM() || new DOMMatrix();
+
+      // 複数選択の場合は各オブジェクトの初期状態を保存
+      if (window.selectedObjects.length > 1) {
+        this.multiInitialMatrices = window.selectedObjects.map(obj =>
+          obj.getCTM() || new DOMMatrix()
+        );
+      } else {
+        this.initialMatrix = this.selectedObject.getCTM() || new DOMMatrix();
+      }
       this.startPoint = { ...this.currentPoint };
     } else {
-      this.deselectObject();
+      // キャンバスクリック時は複数選択でなければ選択解除
+      if (!isMultiSelect) {
+        this.deselectObject();
+      }
     }
   }
 
@@ -154,35 +288,75 @@ class SelectTool extends BaseTool {
     if (this.selectedObject) this.addControlPoints();
   }
 
-  selectObject(el) {
-    if (this.selectedObject) {
-      this.selectedObject.removeAttribute("stroke-dasharray");
-      this.removeControlPoints();
-    }
-    this.selectedObject = el;
-    el.setAttribute("stroke-dasharray", "5 5");
-    window.selectedObject = el;
-    window.selectedObjects = [el];
-
-    // スタイルを反映
-    if (document.getElementById("fill-color")) {
-      document.getElementById("fill-color").value =
-        el.getAttribute("fill") || "#ffffff";
-    }
-    if (document.getElementById("stroke-color")) {
-      document.getElementById("stroke-color").value =
-        el.getAttribute("stroke") || "#000000";
-    }
-    if (document.getElementById("stroke-width")) {
-      document.getElementById("stroke-width").value =
-        el.getAttribute("stroke-width") || "2";
-    }
-    if (document.getElementById("opacity-input")) {
-      document.getElementById("opacity-input").value =
-        el.getAttribute("opacity") || "1";
+  selectObject(el, addToSelection = false) {
+    // コントロールポイントやキャンバス自体は選択対象外
+    if (
+      !el ||
+      el === this.canvas ||
+      el.classList.contains("control-handle") ||
+      el.classList.contains("rotate-handle") ||
+      el.classList.contains("rotate-line")
+    ) {
+      return;
     }
 
-    this.addControlPoints();
+    if (addToSelection) {
+      // 追加選択モード
+      const index = window.selectedObjects.indexOf(el);
+      if (index >= 0) {
+        // 既に選択されている場合は選択解除
+        el.removeAttribute("stroke-dasharray");
+        window.selectedObjects.splice(index, 1);
+        if (window.selectedObjects.length === 0) {
+          this.selectedObject = null;
+          window.selectedObject = null;
+          this.removeControlPoints();
+        } else {
+          this.selectedObject = window.selectedObjects[0];
+          window.selectedObject = this.selectedObject;
+          this.addControlPoints();
+        }
+      } else {
+        // 新しく追加
+        el.setAttribute("stroke-dasharray", "5 5");
+        window.selectedObjects.push(el);
+        this.selectedObject = el;
+        window.selectedObject = el;
+        this.addControlPoints();
+      }
+    } else {
+      // 単一選択モード（既存の選択をクリア）
+      if (this.selectedObject) {
+        window.selectedObjects.forEach((obj) =>
+          obj.removeAttribute("stroke-dasharray")
+        );
+        this.removeControlPoints();
+      }
+      this.selectedObject = el;
+      el.setAttribute("stroke-dasharray", "5 5");
+      window.selectedObject = el;
+      window.selectedObjects = [el];
+
+      // スタイルを反映
+      if (document.getElementById("fill-color")) {
+        document.getElementById("fill-color").value =
+          el.getAttribute("fill") || "#ffffff";
+      }
+      if (document.getElementById("stroke-color")) {
+        document.getElementById("stroke-color").value =
+          el.getAttribute("stroke") || "#000000";
+      }
+      if (document.getElementById("stroke-width")) {
+        document.getElementById("stroke-width").value =
+          el.getAttribute("stroke-width") || "2";
+      }
+      if (document.getElementById("opacity-input")) {
+        document.getElementById("opacity-input").value =
+          el.getAttribute("opacity") || "1";
+      }
+
+      this.addControlPoints();
+    }
   }
 
   // 移動処理
@@ -191,10 +365,23 @@ class SelectTool extends BaseTool {
     const dx = this.currentPoint.x - this.startPoint.x;
     const dy = this.currentPoint.y - this.startPoint.y;
     if (!isFinite(dx) || !isFinite(dy)) return;
-    const delta = new DOMMatrix().translate(dx, dy);
-    const m = delta.multiply(this.initialMatrix);
-    if (![m.a, m.b, m.c, m.d, m.e, m.f].every(isFinite)) return;
-    this.selectedObject.setAttribute("transform", m.toString());
+
+    // 複数選択の場合は全てのオブジェクトを移動
+    if (window.selectedObjects.length > 1) {
+      window.selectedObjects.forEach((obj, index) => {
+        const initialMatrix =
+          this.multiInitialMatrices[index] || new DOMMatrix();
+        const delta = new DOMMatrix().translate(dx, dy);
+        const m = delta.multiply(initialMatrix);
+        if (![m.a, m.b, m.c, m.d, m.e, m.f].every(isFinite)) return;
+        obj.setAttribute("transform", m.toString());
+      });
+    } else {
+      const delta = new DOMMatrix().translate(dx, dy);
+      const m = delta.multiply(this.initialMatrix);
+      if (![m.a, m.b, m.c, m.d, m.e, m.f].every(isFinite)) return;
+      this.selectedObject.setAttribute("transform", m.toString());
+    }
   }
 
   // 回転処理

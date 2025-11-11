@@ -7,6 +7,7 @@ class App {
       svgNS: "http://www.w3.org/2000/svg",
       selectedObject: null,
       selectedObjects: [],
+      clipboard: [], // コピーしたオブジェクトを保存
       showGrid: false,
       snapToGrid: false,
       gridSize: 20,
@@ -30,6 +31,9 @@ class App {
     this.adjustCanvasSize();
     window.addEventListener("resize", this.adjustCanvasSize);
 
+    // キーボードイベントの設定
+    this.setupKeyboardEvents();
+
     // ツールマネージャーの初期化
     this.toolManager = new ToolManager(canvas);
     window.toolManager = this.toolManager;
@@ -41,6 +45,7 @@ class App {
     this.alignmentPanel = new AlignmentPanel();
     this.gridManager = new GridManager();
     this.fileManager = new FileManager();
+    this.zoomPanManager = new ZoomPanManager();
 
     // ツールの登録
     this.registerTools();
@@ -84,6 +89,79 @@ class App {
 
     const textTool = new TextTool(canvas, this.toolManager);
     this.toolManager.registerTool("text", textTool);
+  }
+
+  // キーボードイベントの設定
+  setupKeyboardEvents() {
+    document.addEventListener("keydown", (event) => {
+      // テキスト入力中は無視
+      if (
+        event.target.tagName === "INPUT" ||
+        event.target.tagName === "TEXTAREA" ||
+        event.target.isContentEditable
+      ) {
+        return;
+      }
+
+      // Delete or Backspace キーで削除
+      if (event.key === "Delete" || event.key === "Backspace") {
+        event.preventDefault();
+        if (window.selectTool) {
+          window.selectTool.deleteSelectedObjects();
+        }
+      }
+
+      // Ctrl+Z / Cmd+Z で元に戻す
+      if ((event.ctrlKey || event.metaKey) && event.key === "z") {
+        event.preventDefault();
+        if (window.undo) {
+          window.undo();
+        }
+      }
+
+      // Ctrl+Y / Cmd+Shift+Z でやり直し
+      if (
+        ((event.ctrlKey || event.metaKey) && event.key === "y") ||
+        ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key === "z")
+      ) {
+        event.preventDefault();
+        if (window.redo) {
+          window.redo();
+        }
+      }
+
+      // Ctrl+C / Cmd+C でコピー
+      if ((event.ctrlKey || event.metaKey) && event.key === "c") {
+        event.preventDefault();
+        if (window.selectTool) {
+          window.selectTool.copySelectedObjects();
+        }
+      }
+
+      // Ctrl+V / Cmd+V でペースト
+      if ((event.ctrlKey || event.metaKey) && event.key === "v") {
+        event.preventDefault();
+        if (window.selectTool) {
+          window.selectTool.pasteObjects();
+        }
+      }
+
+      // Ctrl+X / Cmd+X でカット
+      if ((event.ctrlKey || event.metaKey) && event.key === "x") {
+        event.preventDefault();
+        if (window.selectTool) {
+          window.selectTool.cutSelectedObjects();
+        }
+      }
+
+      // Ctrl+A / Cmd+A で全選択
+      if ((event.ctrlKey || event.metaKey) && event.key === "a") {
+        event.preventDefault();
+        if (window.selectTool) {
+          window.selectTool.selectAll();
+        }
+      }
+    });
   }
 }
 
