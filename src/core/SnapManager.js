@@ -10,6 +10,8 @@ class SnapManager {
       intersection: false,
       grid: false,
       nearest: false,
+      perpendicular: false,
+      tangent: false,
     };
     this.snapTolerance = 10; // ピクセル単位
     this.snapIndicator = null;
@@ -58,6 +60,18 @@ class SnapManager {
     // グリッドスナップ
     const gridCheckbox = this.createCheckbox("グリッド", "grid", false);
     snapContainer.appendChild(gridCheckbox);
+
+    // 垂直スナップ
+    const perpendicularCheckbox = this.createCheckbox(
+      "垂直",
+      "perpendicular",
+      false
+    );
+    snapContainer.appendChild(perpendicularCheckbox);
+
+    // 接線スナップ
+    const tangentCheckbox = this.createCheckbox("接線", "tangent", false);
+    snapContainer.appendChild(tangentCheckbox);
 
     toolbar.appendChild(snapContainer);
   }
@@ -138,6 +152,16 @@ class SnapManager {
         snappedPoint = gridSnap.point;
         snapType = "grid";
         minDistance = gridSnap.distance;
+      }
+    }
+
+    // 接線スナップ
+    if (this.snapEnabled.tangent) {
+      const tangentSnap = this.snapToTangent(point, minDistance, excludeElement);
+      if (tangentSnap) {
+        snappedPoint = tangentSnap.point;
+        snapType = "tangent";
+        minDistance = tangentSnap.distance;
       }
     }
 
@@ -503,6 +527,8 @@ class SnapManager {
       midpoint: "#0080ff",
       grid: "#ff8000",
       intersection: "#ff00ff",
+      tangent: "#00ffff",
+      perpendicular: "#ffff00",
     };
     circle.setAttribute("stroke", colors[type] || "#00ff00");
   }
@@ -518,6 +544,81 @@ class SnapManager {
     const dx = p2.x - p1.x;
     const dy = p2.y - p1.y;
     return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  // 接線スナップ（円への接線）
+  snapToTangent(point, tolerance, excludeElement) {
+    const elements = Array.from(this.canvas.children).filter(
+      (el) =>
+        el !== excludeElement &&
+        !el.classList.contains("control-handle") &&
+        !el.classList.contains("rotate-handle") &&
+        !el.classList.contains("rotate-line") &&
+        !el.classList.contains("snap-indicator")
+    );
+
+    let closestPoint = null;
+    let minDist = tolerance;
+
+    // 円要素に対する接線点を探す
+    for (const el of elements) {
+      if (el.tagName === "circle") {
+        const cx = parseFloat(el.getAttribute("cx"));
+        const cy = parseFloat(el.getAttribute("cy"));
+        const r = parseFloat(el.getAttribute("r"));
+        const center = { x: cx, y: cy };
+
+        // マウス位置から円の中心への方向
+        const dx = point.x - cx;
+        const dy = point.y - cy;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist > r) {
+          // 外部の点から円への接線点を計算
+          // 接線点は円周上で、接線が点と中心を結ぶ線に垂直
+          const angle = Math.atan2(dy, dx);
+          const tangentAngle = Math.asin(r / dist);
+
+          // 2つの接線点がある
+          const angle1 = angle + tangentAngle;
+          const angle2 = angle - tangentAngle;
+
+          const tp1 = {
+            x: cx + r * Math.cos(angle1),
+            y: cy + r * Math.sin(angle1),
+          };
+          const tp2 = {
+            x: cx + r * Math.cos(angle2),
+            y: cy + r * Math.sin(angle2),
+          };
+
+          const dist1 = this.distance(point, tp1);
+          const dist2 = this.distance(point, tp2);
+
+          if (dist1 < minDist) {
+            minDist = dist1;
+            closestPoint = tp1;
+          }
+          if (dist2 < minDist) {
+            minDist = dist2;
+            closestPoint = tp2;
+          }
+        } else {
+          // 円の内部にいる場合は最近点（円周上）
+          const nearestOnCircle = {
+            x: cx + (r * dx) / dist,
+            y: cy + (r * dy) / dist,
+          };
+          const distToNearest = this.distance(point, nearestOnCircle);
+          if (distToNearest < minDist) {
+            minDist = distToNearest;
+            closestPoint = nearestOnCircle;
+          }
+        }
+      }
+    }
+
+    return closestPoint ? { point: closestPoint, distance: minDist } : null;
   }
 }
 
