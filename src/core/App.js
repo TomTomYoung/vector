@@ -131,6 +131,12 @@ class App {
 
     const chamferTool = new ChamferTool(canvas, this.toolManager);
     this.toolManager.registerTool("chamfer", chamferTool);
+
+    const splitTool = new SplitTool(canvas, this.toolManager);
+    this.toolManager.registerTool("split", splitTool);
+
+    const joinTool = new JoinTool(canvas, this.toolManager);
+    this.toolManager.registerTool("join", joinTool);
   }
 
   // キーボードイベントの設定
