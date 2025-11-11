@@ -12,6 +12,15 @@ class LineTool extends BaseTool {
     return "直線";
   }
 
+  getInstructions() {
+    return [
+      "左クリック: 始点を設定",
+      "左クリック（2回目）: 終点を設定して直線を作成",
+      "F8: 直交モード（Ortho）切り替え",
+      "Esc: キャンセル",
+    ];
+  }
+
   activate() {
     super.activate();
     this.canvas.style.cursor = "crosshair";

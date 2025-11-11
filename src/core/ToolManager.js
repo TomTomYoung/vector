@@ -62,6 +62,12 @@ class ToolManager {
 
     // ボタンUI更新
     this.updateToolButtons();
+
+    // ツール変更イベントを発火
+    const event = new CustomEvent("toolChanged", {
+      detail: { tool: this.activeTool, name: name },
+    });
+    document.dispatchEvent(event);
   }
 
   // ツールボタンの見た目を更新

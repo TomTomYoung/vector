@@ -9,6 +9,14 @@ class RectangleTool extends BaseTool {
     return "長方形";
   }
 
+  getInstructions() {
+    return [
+      "左クリック+ドラッグ: 長方形を描画",
+      "マウスボタンを離す: 長方形を確定",
+      "Esc: キャンセル",
+    ];
+  }
+
   activate() {
     super.activate();
     this.canvas.style.cursor = "crosshair";

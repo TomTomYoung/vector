@@ -12,75 +12,57 @@ class ChamferTool extends BaseTool {
     return "面取り";
   }
 
+  getInstructions() {
+    const count = this.selectedLines.length;
+    if (count === 0) {
+      return [
+        "左クリック: 1本目の線を選択",
+        "Esc: 選択解除",
+      ];
+    } else if (count === 1) {
+      return [
+        "左クリック: 2本目の線を選択（自動的に面取り作成）",
+        "Esc: 選択解除",
+      ];
+    }
+    return [];
+  }
+
+  getToolProperties() {
+    return [
+      {
+        type: "number",
+        label: "距離1",
+        value: this.distance1,
+        min: 0.5,
+        max: 1000,
+        step: 0.5,
+        onChange: (value) => {
+          this.distance1 = value;
+        },
+      },
+      {
+        type: "number",
+        label: "距離2",
+        value: this.distance2,
+        min: 0.5,
+        max: 1000,
+        step: 0.5,
+        onChange: (value) => {
+          this.distance2 = value;
+        },
+      },
+    ];
+  }
+
   activate() {
     super.activate();
     this.canvas.style.cursor = "crosshair";
-    this.createChamferControls();
   }
 
   deactivate() {
     super.deactivate();
-    this.removeChamferControls();
     this.clearSelection();
-  }
-
-  createChamferControls() {
-    if (document.getElementById("chamfer-controls")) return;
-
-    const toolbar = document.querySelector(".toolbar");
-    const controls = document.createElement("div");
-    controls.id = "chamfer-controls";
-    controls.style.display = "inline-block";
-    controls.style.marginLeft = "10px";
-
-    const dist1Label = document.createElement("label");
-    dist1Label.textContent = "距離1: ";
-    dist1Label.style.marginRight = "5px";
-    controls.appendChild(dist1Label);
-
-    const dist1Input = document.createElement("input");
-    dist1Input.type = "number";
-    dist1Input.value = this.distance1;
-    dist1Input.min = "0.5";
-    dist1Input.step = "0.5";
-    dist1Input.style.width = "60px";
-    dist1Input.addEventListener("change", (e) => {
-      this.distance1 = parseFloat(e.target.value);
-    });
-    controls.appendChild(dist1Input);
-
-    const dist2Label = document.createElement("label");
-    dist2Label.textContent = "  距離2: ";
-    dist2Label.style.marginRight = "5px";
-    dist2Label.style.marginLeft = "10px";
-    controls.appendChild(dist2Label);
-
-    const dist2Input = document.createElement("input");
-    dist2Input.type = "number";
-    dist2Input.value = this.distance2;
-    dist2Input.min = "0.5";
-    dist2Input.step = "0.5";
-    dist2Input.style.width = "60px";
-    dist2Input.addEventListener("change", (e) => {
-      this.distance2 = parseFloat(e.target.value);
-    });
-    controls.appendChild(dist2Input);
-
-    const info = document.createElement("span");
-    info.textContent = "  2つの線を選択";
-    info.style.fontSize = "12px";
-    info.style.color = "#666";
-    info.style.marginLeft = "10px";
-    controls.appendChild(info);
-
-    toolbar.appendChild(controls);
-  }
-
-  removeChamferControls() {
-    const controls = document.getElementById("chamfer-controls");
-    if (controls) {
-      controls.remove();
-    }
   }
 
   handleMouseDown(event) {
@@ -105,10 +87,19 @@ class ChamferTool extends BaseTool {
       line.setAttribute("stroke", "#ff8000");
       line.setAttribute("stroke-width", "2");
 
+      // パネルを更新
+      this.updatePanel();
+
       // 2つ選択されたら面取りを作成
       if (this.selectedLines.length === 2) {
         this.createChamfer();
       }
+    }
+  }
+
+  updatePanel() {
+    if (window.toolPropertiesPanel) {
+      window.toolPropertiesPanel.updatePanel();
     }
   }
 
@@ -131,6 +122,7 @@ class ChamferTool extends BaseTool {
       }
     });
     this.selectedLines = [];
+    this.updatePanel();
   }
 
   createChamfer() {
