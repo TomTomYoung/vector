@@ -11,6 +11,7 @@ class App {
       showGrid: false,
       snapToGrid: false,
       gridSize: 20,
+      orthoMode: false, // 直交モード
       layers: [{ id: 1, name: "レイヤー 1", visible: true }],
       currentLayerId: 1,
       undoStack: [],
@@ -46,6 +47,7 @@ class App {
     this.gridManager = new GridManager();
     this.fileManager = new FileManager();
     this.zoomPanManager = new ZoomPanManager();
+    this.snapManager = new SnapManager();
 
     // ツールの登録
     this.registerTools();
@@ -75,17 +77,26 @@ class App {
     this.toolManager.registerTool("select", selectTool);
     window.selectTool = selectTool;
 
+    const lineTool = new LineTool(canvas, this.toolManager);
+    this.toolManager.registerTool("line", lineTool);
+
     const rectangleTool = new RectangleTool(canvas, this.toolManager);
     this.toolManager.registerTool("rectangle", rectangleTool);
 
     const circleTool = new CircleTool(canvas, this.toolManager);
     this.toolManager.registerTool("circle", circleTool);
 
+    const arcTool = new ArcTool(canvas, this.toolManager);
+    this.toolManager.registerTool("arc", arcTool);
+
     const polygonTool = new PolygonTool(canvas, this.toolManager);
     this.toolManager.registerTool("polygon", polygonTool);
 
     const pathTool = new PathTool(canvas, this.toolManager);
     this.toolManager.registerTool("path", pathTool);
+
+    const splineTool = new SplineTool(canvas, this.toolManager);
+    this.toolManager.registerTool("spline", splineTool);
 
     const textTool = new TextTool(canvas, this.toolManager);
     this.toolManager.registerTool("text", textTool);
@@ -159,6 +170,14 @@ class App {
         event.preventDefault();
         if (window.selectTool) {
           window.selectTool.selectAll();
+        }
+      }
+
+      // F8キーで直交モードを切り替え
+      if (event.key === "F8") {
+        event.preventDefault();
+        if (window.toggleOrtho) {
+          window.toggleOrtho();
         }
       }
     });
