@@ -58,6 +58,19 @@ class AlignmentPanel {
     ungroupBtn.textContent = "グループ解除";
     ungroupBtn.addEventListener("click", this.ungroupObjects);
     toolbar.appendChild(ungroupBtn);
+
+    // 反転ボタン
+    const flipHBtn = document.createElement("button");
+    flipHBtn.textContent = "水平反転";
+    flipHBtn.title = "選択したオブジェクトを水平反転";
+    flipHBtn.addEventListener("click", () => this.flipObjects("horizontal"));
+    toolbar.appendChild(flipHBtn);
+
+    const flipVBtn = document.createElement("button");
+    flipVBtn.textContent = "垂直反転";
+    flipVBtn.title = "選択したオブジェクトを垂直反転";
+    flipVBtn.addEventListener("click", () => this.flipObjects("vertical"));
+    toolbar.appendChild(flipVBtn);
   }
 
   // 整列機能の実装
@@ -360,9 +373,62 @@ class AlignmentPanel {
       window.selectTool.addControlPoints();
     }
   }
+
+  // オブジェクトを反転
+  flipObjects(direction) {
+    if (window.selectedObjects.length === 0) return;
+
+    // 状態を保存
+    if (window.saveState) {
+      window.saveState();
+    }
+
+    window.selectedObjects.forEach((obj) => {
+      // 現在の変換を取得
+      const currentMatrix = obj.getCTM() || new DOMMatrix();
+      const bbox = obj.getBBox();
+
+      // バウンディングボックスの中心を計算
+      const centerX = bbox.x + bbox.width / 2;
+      const centerY = bbox.y + bbox.height / 2;
+
+      // 中心点をグローバル座標に変換
+      const canvas = document.getElementById("canvas");
+      const pt = canvas.createSVGPoint();
+      pt.x = centerX;
+      pt.y = centerY;
+      const globalCenter = pt.matrixTransform(currentMatrix);
+
+      // 反転用の変換マトリックスを作成
+      let flipMatrix;
+      if (direction === "horizontal") {
+        // 水平反転: 中心を基準にX軸で反転
+        flipMatrix = new DOMMatrix()
+          .translate(globalCenter.x, globalCenter.y)
+          .scale(-1, 1)
+          .translate(-globalCenter.x, -globalCenter.y);
+      } else {
+        // 垂直反転: 中心を基準にY軸で反転
+        flipMatrix = new DOMMatrix()
+          .translate(globalCenter.x, globalCenter.y)
+          .scale(1, -1)
+          .translate(-globalCenter.x, -globalCenter.y);
+      }
+
+      // 既存の変換に反転を適用
+      const newMatrix = flipMatrix.multiply(currentMatrix);
+      obj.setAttribute("transform", newMatrix.toString());
+    });
+
+    // コントロールポイントを更新
+    if (window.selectTool) {
+      window.selectTool.addControlPoints();
+    }
+  }
 }
 
 window.AlignmentPanel = AlignmentPanel;
 window.alignObjects = AlignmentPanel.prototype.alignObjects;
 window.groupObjects = AlignmentPanel.prototype.groupObjects;
 window.ungroupObjects = AlignmentPanel.prototype.ungroupObjects;
+window.flipObjects = AlignmentPanel.prototype.flipObjects;

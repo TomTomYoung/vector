@@ -12,7 +12,17 @@ class App {
       snapToGrid: false,
       gridSize: 20,
       orthoMode: false, // 直交モード
-      layers: [{ id: 1, name: "レイヤー 1", visible: true }],
+      layers: [
+        {
+          id: 1,
+          name: "レイヤー 1",
+          visible: true,
+          locked: false,
+          color: "#000000",
+          lineStyle: "solid",
+          lineWidth: "2",
+        },
+      ],
       currentLayerId: 1,
       undoStack: [],
       redoStack: [],
@@ -97,6 +107,9 @@ class App {
 
     const splineTool = new SplineTool(canvas, this.toolManager);
     this.toolManager.registerTool("spline", splineTool);
+
+    const polylineTool = new PolylineTool(canvas, this.toolManager);
+    this.toolManager.registerTool("polyline", polylineTool);
 
     const textTool = new TextTool(canvas, this.toolManager);
     this.toolManager.registerTool("text", textTool);

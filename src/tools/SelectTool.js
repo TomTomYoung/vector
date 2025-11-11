@@ -300,6 +300,16 @@ class SelectTool extends BaseTool {
       return;
     }
 
+    // レイヤーがロックされているかチェック
+    const layerId = parseInt(el.getAttribute("data-layer"));
+    if (layerId) {
+      const layer = window.layers.find((l) => l.id === layerId);
+      if (layer && layer.locked) {
+        console.log(`レイヤー "${layer.name}" はロックされています`);
+        return;
+      }
+    }
+
     if (addToSelection) {
       // 追加選択モード
       const index = window.selectedObjects.indexOf(el);
