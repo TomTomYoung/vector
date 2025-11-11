@@ -122,6 +122,15 @@ class App {
 
     const trimTool = new TrimTool(canvas, this.toolManager);
     this.toolManager.registerTool("trim", trimTool);
+
+    const extendTool = new ExtendTool(canvas, this.toolManager);
+    this.toolManager.registerTool("extend", extendTool);
+
+    const filletTool = new FilletTool(canvas, this.toolManager);
+    this.toolManager.registerTool("fillet", filletTool);
+
+    const chamferTool = new ChamferTool(canvas, this.toolManager);
+    this.toolManager.registerTool("chamfer", chamferTool);
   }
 
   // キーボードイベントの設定
