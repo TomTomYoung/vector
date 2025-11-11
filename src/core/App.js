@@ -113,6 +113,15 @@ class App {
 
     const textTool = new TextTool(canvas, this.toolManager);
     this.toolManager.registerTool("text", textTool);
+
+    const dimensionTool = new DimensionTool(canvas, this.toolManager);
+    this.toolManager.registerTool("dimension", dimensionTool);
+
+    const offsetTool = new OffsetTool(canvas, this.toolManager);
+    this.toolManager.registerTool("offset", offsetTool);
+
+    const trimTool = new TrimTool(canvas, this.toolManager);
+    this.toolManager.registerTool("trim", trimTool);
   }
 
   // キーボードイベントの設定

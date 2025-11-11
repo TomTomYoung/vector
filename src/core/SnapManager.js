@@ -117,6 +117,20 @@ class SnapManager {
       }
     }
 
+    // 交点スナップ
+    if (this.snapEnabled.intersection) {
+      const intersectionSnap = this.snapToIntersection(
+        point,
+        minDistance,
+        excludeElement
+      );
+      if (intersectionSnap) {
+        snappedPoint = intersectionSnap.point;
+        snapType = "intersection";
+        minDistance = intersectionSnap.distance;
+      }
+    }
+
     // グリッドスナップ
     if (this.snapEnabled.grid && window.snapToGrid) {
       const gridSnap = this.snapToGrid(point, minDistance);
@@ -208,6 +222,163 @@ class SnapManager {
     if (dist < tolerance) {
       return { point: snappedPoint, distance: dist };
     }
+    return null;
+  }
+
+  // 交点スナップ
+  snapToIntersection(point, tolerance, excludeElement) {
+    const elements = Array.from(this.canvas.children).filter(
+      (el) =>
+        el !== excludeElement &&
+        !el.classList.contains("control-handle") &&
+        !el.classList.contains("rotate-handle") &&
+        !el.classList.contains("rotate-line") &&
+        !el.classList.contains("snap-indicator")
+    );
+
+    let closestPoint = null;
+    let minDist = tolerance;
+
+    // 全ての要素のペアで交点を計算
+    for (let i = 0; i < elements.length; i++) {
+      for (let j = i + 1; j < elements.length; j++) {
+        const intersections = this.getIntersections(elements[i], elements[j]);
+        for (const ip of intersections) {
+          const dist = this.distance(point, ip);
+          if (dist < minDist) {
+            minDist = dist;
+            closestPoint = ip;
+          }
+        }
+      }
+    }
+
+    return closestPoint
+      ? { point: closestPoint, distance: minDist }
+      : null;
+  }
+
+  // 2つの要素の交点を計算
+  getIntersections(el1, el2) {
+    const intersections = [];
+
+    // 直線同士の交点
+    if (el1.tagName === "line" && el2.tagName === "line") {
+      const p1 = {
+        x: parseFloat(el1.getAttribute("x1")),
+        y: parseFloat(el1.getAttribute("y1")),
+      };
+      const p2 = {
+        x: parseFloat(el1.getAttribute("x2")),
+        y: parseFloat(el1.getAttribute("y2")),
+      };
+      const p3 = {
+        x: parseFloat(el2.getAttribute("x1")),
+        y: parseFloat(el2.getAttribute("y1")),
+      };
+      const p4 = {
+        x: parseFloat(el2.getAttribute("x2")),
+        y: parseFloat(el2.getAttribute("y2")),
+      };
+
+      const intersection = this.lineLineIntersection(p1, p2, p3, p4);
+      if (intersection) intersections.push(intersection);
+    }
+
+    // ポリライン同士の交点
+    if (el1.tagName === "polyline" && el2.tagName === "polyline") {
+      const points1 = el1
+        .getAttribute("points")
+        .trim()
+        .split(/\s+/)
+        .map((p) => {
+          const [x, y] = p.split(",");
+          return { x: parseFloat(x), y: parseFloat(y) };
+        });
+      const points2 = el2
+        .getAttribute("points")
+        .trim()
+        .split(/\s+/)
+        .map((p) => {
+          const [x, y] = p.split(",");
+          return { x: parseFloat(x), y: parseFloat(y) };
+        });
+
+      for (let i = 0; i < points1.length - 1; i++) {
+        for (let j = 0; j < points2.length - 1; j++) {
+          const intersection = this.lineLineIntersection(
+            points1[i],
+            points1[i + 1],
+            points2[j],
+            points2[j + 1]
+          );
+          if (intersection) intersections.push(intersection);
+        }
+      }
+    }
+
+    // 直線とポリラインの交点
+    if (el1.tagName === "line" && el2.tagName === "polyline") {
+      const p1 = {
+        x: parseFloat(el1.getAttribute("x1")),
+        y: parseFloat(el1.getAttribute("y1")),
+      };
+      const p2 = {
+        x: parseFloat(el1.getAttribute("x2")),
+        y: parseFloat(el1.getAttribute("y2")),
+      };
+      const points2 = el2
+        .getAttribute("points")
+        .trim()
+        .split(/\s+/)
+        .map((p) => {
+          const [x, y] = p.split(",");
+          return { x: parseFloat(x), y: parseFloat(y) };
+        });
+
+      for (let i = 0; i < points2.length - 1; i++) {
+        const intersection = this.lineLineIntersection(
+          p1,
+          p2,
+          points2[i],
+          points2[i + 1]
+        );
+        if (intersection) intersections.push(intersection);
+      }
+    }
+
+    if (el1.tagName === "polyline" && el2.tagName === "line") {
+      return this.getIntersections(el2, el1);
+    }
+
+    return intersections;
+  }
+
+  // 2直線の交点を計算
+  lineLineIntersection(p1, p2, p3, p4) {
+    const x1 = p1.x,
+      y1 = p1.y;
+    const x2 = p2.x,
+      y2 = p2.y;
+    const x3 = p3.x,
+      y3 = p3.y;
+    const x4 = p4.x,
+      y4 = p4.y;
+
+    const denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+    if (Math.abs(denom) < 0.0001) return null; // 平行
+
+    const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom;
+    const u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / denom;
+
+    // 線分の範囲内にある交点のみ
+    if (t >= 0 && t <= 1 && u >= 0 && u <= 1) {
+      return {
+        x: x1 + t * (x2 - x1),
+        y: y1 + t * (y2 - y1),
+      };
+    }
+
     return null;
   }
 
