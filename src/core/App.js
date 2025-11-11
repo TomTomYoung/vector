@@ -7,10 +7,22 @@ class App {
       svgNS: "http://www.w3.org/2000/svg",
       selectedObject: null,
       selectedObjects: [],
+      clipboard: [], // コピーしたオブジェクトを保存
       showGrid: false,
       snapToGrid: false,
       gridSize: 20,
-      layers: [{ id: 1, name: "レイヤー 1", visible: true }],
+      orthoMode: false, // 直交モード
+      layers: [
+        {
+          id: 1,
+          name: "レイヤー 1",
+          visible: true,
+          locked: false,
+          color: "#000000",
+          lineStyle: "solid",
+          lineWidth: "2",
+        },
+      ],
       currentLayerId: 1,
       undoStack: [],
       redoStack: [],
@@ -30,6 +42,9 @@ class App {
     this.adjustCanvasSize();
     window.addEventListener("resize", this.adjustCanvasSize);
 
+    // キーボードイベントの設定
+    this.setupKeyboardEvents();
+
     // ツールマネージャーの初期化
     this.toolManager = new ToolManager(canvas);
     window.toolManager = this.toolManager;
@@ -41,6 +56,8 @@ class App {
     this.alignmentPanel = new AlignmentPanel();
     this.gridManager = new GridManager();
     this.fileManager = new FileManager();
+    this.zoomPanManager = new ZoomPanManager();
+    this.snapManager = new SnapManager();
 
     // ツールの登録
     this.registerTools();
@@ -70,11 +87,17 @@ class App {
     this.toolManager.registerTool("select", selectTool);
     window.selectTool = selectTool;
 
+    const lineTool = new LineTool(canvas, this.toolManager);
+    this.toolManager.registerTool("line", lineTool);
+
     const rectangleTool = new RectangleTool(canvas, this.toolManager);
     this.toolManager.registerTool("rectangle", rectangleTool);
 
     const circleTool = new CircleTool(canvas, this.toolManager);
     this.toolManager.registerTool("circle", circleTool);
+
+    const arcTool = new ArcTool(canvas, this.toolManager);
+    this.toolManager.registerTool("arc", arcTool);
 
     const polygonTool = new PolygonTool(canvas, this.toolManager);
     this.toolManager.registerTool("polygon", polygonTool);
@@ -82,8 +105,119 @@ class App {
     const pathTool = new PathTool(canvas, this.toolManager);
     this.toolManager.registerTool("path", pathTool);
 
+    const splineTool = new SplineTool(canvas, this.toolManager);
+    this.toolManager.registerTool("spline", splineTool);
+
+    const polylineTool = new PolylineTool(canvas, this.toolManager);
+    this.toolManager.registerTool("polyline", polylineTool);
+
     const textTool = new TextTool(canvas, this.toolManager);
     this.toolManager.registerTool("text", textTool);
+
+    const dimensionTool = new DimensionTool(canvas, this.toolManager);
+    this.toolManager.registerTool("dimension", dimensionTool);
+
+    const offsetTool = new OffsetTool(canvas, this.toolManager);
+    this.toolManager.registerTool("offset", offsetTool);
+
+    const trimTool = new TrimTool(canvas, this.toolManager);
+    this.toolManager.registerTool("trim", trimTool);
+
+    const extendTool = new ExtendTool(canvas, this.toolManager);
+    this.toolManager.registerTool("extend", extendTool);
+
+    const filletTool = new FilletTool(canvas, this.toolManager);
+    this.toolManager.registerTool("fillet", filletTool);
+
+    const chamferTool = new ChamferTool(canvas, this.toolManager);
+    this.toolManager.registerTool("chamfer", chamferTool);
+
+    const splitTool = new SplitTool(canvas, this.toolManager);
+    this.toolManager.registerTool("split", splitTool);
+
+    const joinTool = new JoinTool(canvas, this.toolManager);
+    this.toolManager.registerTool("join", joinTool);
+  }
+
+  // キーボードイベントの設定
+  setupKeyboardEvents() {
+    document.addEventListener("keydown", (event) => {
+      // テキスト入力中は無視
+      if (
+        event.target.tagName === "INPUT" ||
+        event.target.tagName === "TEXTAREA" ||
+        event.target.isContentEditable
+      ) {
+        return;
+      }
+
+      // Delete or Backspace キーで削除
+      if (event.key === "Delete" || event.key === "Backspace") {
+        event.preventDefault();
+        if (window.selectTool) {
+          window.selectTool.deleteSelectedObjects();
+        }
+      }
+
+      // Ctrl+Z / Cmd+Z で元に戻す
+      if ((event.ctrlKey || event.metaKey) && event.key === "z") {
+        event.preventDefault();
+        if (window.undo) {
+          window.undo();
+        }
+      }
+
+      // Ctrl+Y / Cmd+Shift+Z でやり直し
+      if (
+        ((event.ctrlKey || event.metaKey) && event.key === "y") ||
+        ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key === "z")
+      ) {
+        event.preventDefault();
+        if (window.redo) {
+          window.redo();
+        }
+      }
+
+      // Ctrl+C / Cmd+C でコピー
+      if ((event.ctrlKey || event.metaKey) && event.key === "c") {
+        event.preventDefault();
+        if (window.selectTool) {
+          window.selectTool.copySelectedObjects();
+        }
+      }
+
+      // Ctrl+V / Cmd+V でペースト
+      if ((event.ctrlKey || event.metaKey) && event.key === "v") {
+        event.preventDefault();
+        if (window.selectTool) {
+          window.selectTool.pasteObjects();
+        }
+      }
+
+      // Ctrl+X / Cmd+X でカット
+      if ((event.ctrlKey || event.metaKey) && event.key === "x") {
+        event.preventDefault();
+        if (window.selectTool) {
+          window.selectTool.cutSelectedObjects();
+        }
+      }
+
+      // Ctrl+A / Cmd+A で全選択
+      if ((event.ctrlKey || event.metaKey) && event.key === "a") {
+        event.preventDefault();
+        if (window.selectTool) {
+          window.selectTool.selectAll();
+        }
+      }
+
+      // F8キーで直交モードを切り替え
+      if (event.key === "F8") {
+        event.preventDefault();
+        if (window.toggleOrtho) {
+          window.toggleOrtho();
+        }
+      }
+    });
   }
 }
 

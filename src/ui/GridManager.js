@@ -22,9 +22,16 @@ class GridManager {
 
     const snapBtn = document.createElement("button");
     snapBtn.id = "snap-btn";
-    snapBtn.textContent = "スナップ";
+    snapBtn.textContent = "グリッドスナップ";
     snapBtn.addEventListener("click", this.toggleSnap);
     toolbar.appendChild(snapBtn);
+
+    const orthoBtn = document.createElement("button");
+    orthoBtn.id = "ortho-btn";
+    orthoBtn.textContent = "直交モード";
+    orthoBtn.title = "水平・垂直線に拘束 (F8)";
+    orthoBtn.addEventListener("click", this.toggleOrtho);
+    toolbar.appendChild(orthoBtn);
   }
 
   // グリッド表示の切り替え
@@ -46,6 +53,13 @@ class GridManager {
     window.snapToGrid = !window.snapToGrid;
     document.getElementById("snap-btn").style.backgroundColor =
       window.snapToGrid ? "#ddd" : "";
+  }
+
+  // 直交モードの切り替え
+  toggleOrtho() {
+    window.orthoMode = !window.orthoMode;
+    document.getElementById("ortho-btn").style.backgroundColor =
+      window.orthoMode ? "#ddd" : "";
   }
 
   // グリッドの作成
@@ -99,3 +113,4 @@ class GridManager {
 window.GridManager = GridManager;
 window.toggleGrid = GridManager.prototype.toggleGrid;
 window.toggleSnap = GridManager.prototype.toggleSnap;
+window.toggleOrtho = GridManager.prototype.toggleOrtho;

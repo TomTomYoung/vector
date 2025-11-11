@@ -47,6 +47,33 @@ class BaseTool {
     }
   }
 
+  // マウス位置をSVG座標で取得（スナップ対応）
+  getMousePosition(event, enableSnap = true) {
+    const point = this.toolManager.getMousePosition(event);
+
+    // スナップマネージャーが有効な場合はスナップ処理
+    if (enableSnap && window.snapManager) {
+      return window.snapManager.snapPoint(point, this.drawingObject);
+    }
+
+    // グリッドスナップ
+    if (window.snapToGrid) {
+      return this.toolManager.snapToGrid(point);
+    }
+
+    return point;
+  }
+
+  // 現在のスタイルを取得
+  get currentStyle() {
+    return {
+      fill: document.getElementById("fill-color")?.value || "#ffffff",
+      stroke: document.getElementById("stroke-color")?.value || "#000000",
+      strokeWidth: document.getElementById("stroke-width")?.value || "2",
+      opacity: document.getElementById("opacity-input")?.value || "1",
+    };
+  }
+
   // 共通のマウスイベントハンドラー（サブクラスでオーバーライド）
   handleMouseDown(event) {
     if (!this.isActive) return;
