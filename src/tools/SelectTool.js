@@ -18,6 +18,19 @@ class SelectTool extends BaseTool {
     return "選択";
   }
 
+  getInstructions() {
+    return [
+      "左クリック: オブジェクトを選択",
+      "Shift/Ctrl+左クリック: 複数選択",
+      "ドラッグ: 選択オブジェクトを移動",
+      "ハンドルをドラッグ: サイズ変更",
+      "回転ハンドルをドラッグ: 回転",
+      "Delete: 選択削除",
+      "Ctrl+C/V/X: コピー/貼り付け/切り取り",
+      "Ctrl+A: すべて選択",
+    ];
+  }
+
   activate() {
     super.activate();
     this.canvas.style.cursor = "default";

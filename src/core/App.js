@@ -62,6 +62,10 @@ class App {
     // ツールの登録
     this.registerTools();
 
+    // ツールプロパティパネルの初期化
+    this.toolPropertiesPanel = new ToolPropertiesPanel(this.toolManager);
+    window.toolPropertiesPanel = this.toolPropertiesPanel;
+
     // 初期ツールの選択
     this.toolManager.activateTool("select");
 

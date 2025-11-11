@@ -17,6 +17,23 @@ class BaseTool {
     return "基本ツール";
   }
 
+  // 操作説明（オーバーライド用）
+  // 配列で複数の操作を返す。動的に変更される場合は都度計算
+  getInstructions() {
+    return [];
+  }
+
+  // ツール固有のプロパティ定義（オーバーライド用）
+  // 各プロパティは { type, label, value, onChange, ... } の形式
+  getToolProperties() {
+    return [];
+  }
+
+  // 共通プロパティが変更された時のコールバック（オーバーライド用）
+  onCommonPropertiesChanged(properties) {
+    // サブクラスで必要に応じて実装
+  }
+
   // ツール有効化
   activate() {
     this.isActive = true;
@@ -64,8 +81,20 @@ class BaseTool {
     return point;
   }
 
-  // 現在のスタイルを取得
+  // 現在のスタイルを取得（ToolPropertiesPanel から）
   get currentStyle() {
+    if (window.toolPropertiesPanel) {
+      const props = window.toolPropertiesPanel.getCommonProperties();
+      return {
+        fill: props.fillEnabled ? props.fillColor : "none",
+        stroke: props.strokeColor,
+        strokeWidth: props.strokeWidth,
+        strokeStyle: props.strokeStyle,
+        opacity: "1",
+      };
+    }
+
+    // フォールバック（旧UIコンポーネント）
     return {
       fill: document.getElementById("fill-color")?.value || "#ffffff",
       stroke: document.getElementById("stroke-color")?.value || "#000000",
@@ -119,16 +148,25 @@ class BaseTool {
   applyDefaultAttributes(element) {
     if (!element) return;
 
-    const fillColor = document.getElementById("fill-color")?.value || "#ffffff";
-    const strokeColor =
-      document.getElementById("stroke-color")?.value || "#000000";
-    const strokeWidth = document.getElementById("stroke-width")?.value || "2";
-    const opacity = document.getElementById("opacity-input")?.value || "1";
+    const style = this.currentStyle;
 
-    element.setAttribute("fill", fillColor);
-    element.setAttribute("stroke", strokeColor);
-    element.setAttribute("stroke-width", strokeWidth);
-    element.setAttribute("opacity", opacity);
+    element.setAttribute("fill", style.fill);
+    element.setAttribute("stroke", style.stroke);
+    element.setAttribute("stroke-width", style.strokeWidth);
+    element.setAttribute("opacity", style.opacity || "1");
+
+    // 線スタイル（破線など）
+    if (style.strokeStyle) {
+      const dashArrays = {
+        solid: "none",
+        dashed: "10,5",
+        dotted: "2,3",
+      };
+      element.setAttribute(
+        "stroke-dasharray",
+        dashArrays[style.strokeStyle] || "none"
+      );
+    }
 
     // レイヤー情報を設定
     if (window.currentLayerId) {

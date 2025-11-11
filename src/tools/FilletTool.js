@@ -11,58 +11,46 @@ class FilletTool extends BaseTool {
     return "フィレット";
   }
 
+  getInstructions() {
+    const count = this.selectedLines.length;
+    if (count === 0) {
+      return [
+        "左クリック: 1本目の線を選択",
+        "Esc: 選択解除",
+      ];
+    } else if (count === 1) {
+      return [
+        "左クリック: 2本目の線を選択（自動的にフィレット作成）",
+        "Esc: 選択解除",
+      ];
+    }
+    return [];
+  }
+
+  getToolProperties() {
+    return [
+      {
+        type: "number",
+        label: "半径",
+        value: this.radius,
+        min: 0.5,
+        max: 1000,
+        step: 0.5,
+        onChange: (value) => {
+          this.radius = value;
+        },
+      },
+    ];
+  }
+
   activate() {
     super.activate();
     this.canvas.style.cursor = "crosshair";
-    this.createFilletControls();
   }
 
   deactivate() {
     super.deactivate();
-    this.removeFilletControls();
     this.clearSelection();
-  }
-
-  createFilletControls() {
-    if (document.getElementById("fillet-controls")) return;
-
-    const toolbar = document.querySelector(".toolbar");
-    const controls = document.createElement("div");
-    controls.id = "fillet-controls";
-    controls.style.display = "inline-block";
-    controls.style.marginLeft = "10px";
-
-    const radiusLabel = document.createElement("label");
-    radiusLabel.textContent = "半径: ";
-    radiusLabel.style.marginRight = "5px";
-    controls.appendChild(radiusLabel);
-
-    const radiusInput = document.createElement("input");
-    radiusInput.type = "number";
-    radiusInput.value = this.radius;
-    radiusInput.min = "0.5";
-    radiusInput.step = "0.5";
-    radiusInput.style.width = "60px";
-    radiusInput.addEventListener("change", (e) => {
-      this.radius = parseFloat(e.target.value);
-    });
-    controls.appendChild(radiusInput);
-
-    const info = document.createElement("span");
-    info.textContent = "  2つの線を選択";
-    info.style.fontSize = "12px";
-    info.style.color = "#666";
-    info.style.marginLeft = "10px";
-    controls.appendChild(info);
-
-    toolbar.appendChild(controls);
-  }
-
-  removeFilletControls() {
-    const controls = document.getElementById("fillet-controls");
-    if (controls) {
-      controls.remove();
-    }
   }
 
   handleMouseDown(event) {
@@ -87,10 +75,19 @@ class FilletTool extends BaseTool {
       line.setAttribute("stroke", "#0080ff");
       line.setAttribute("stroke-width", "2");
 
+      // パネルを更新
+      this.updatePanel();
+
       // 2つ選択されたらフィレットを作成
       if (this.selectedLines.length === 2) {
         this.createFillet();
       }
+    }
+  }
+
+  updatePanel() {
+    if (window.toolPropertiesPanel) {
+      window.toolPropertiesPanel.updatePanel();
     }
   }
 
@@ -113,6 +110,7 @@ class FilletTool extends BaseTool {
       }
     });
     this.selectedLines = [];
+    this.updatePanel();
   }
 
   createFillet() {

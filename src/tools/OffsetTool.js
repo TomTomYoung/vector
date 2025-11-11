@@ -11,58 +11,56 @@ class OffsetTool extends BaseTool {
     return "オフセット";
   }
 
+  getInstructions() {
+    if (!this.selectedElement) {
+      return [
+        "左クリック: オフセットする線・図形を選択",
+        "Esc: 選択解除",
+      ];
+    } else {
+      return [
+        "左クリック: オフセット方向を指定",
+        "オフセット距離はツールプロパティで設定",
+        "Esc: 選択解除",
+      ];
+    }
+  }
+
+  getToolProperties() {
+    return [
+      {
+        type: "number",
+        label: "オフセット距離",
+        value: this.offsetDistance,
+        min: 0.5,
+        max: 1000,
+        step: 0.5,
+        onChange: (value) => {
+          this.offsetDistance = value;
+        },
+      },
+    ];
+  }
+
   activate() {
     super.activate();
     this.canvas.style.cursor = "crosshair";
-    this.createOffsetControls();
   }
 
   deactivate() {
     super.deactivate();
-    this.removeOffsetControls();
     this.selectedElement = null;
-  }
-
-  createOffsetControls() {
-    if (document.getElementById("offset-controls")) return;
-
-    const toolbar = document.querySelector(".toolbar");
-    const controls = document.createElement("div");
-    controls.id = "offset-controls";
-    controls.style.display = "inline-block";
-    controls.style.marginLeft = "10px";
-
-    const label = document.createElement("span");
-    label.textContent = "距離: ";
-    controls.appendChild(label);
-
-    const input = document.createElement("input");
-    input.type = "number";
-    input.id = "offset-distance";
-    input.value = this.offsetDistance;
-    input.min = "1";
-    input.step = "1";
-    input.style.width = "60px";
-    input.addEventListener("change", (e) => {
-      this.offsetDistance = parseFloat(e.target.value);
-    });
-    controls.appendChild(input);
-
-    toolbar.appendChild(controls);
-  }
-
-  removeOffsetControls() {
-    const controls = document.getElementById("offset-controls");
-    if (controls) {
-      controls.remove();
-    }
   }
 
   handleMouseDown(event) {
     super.handleMouseDown(event);
 
     if (event.target === this.canvas) {
-      this.selectedElement = null;
+      if (this.selectedElement) {
+        this.unhighlightElement(this.selectedElement);
+        this.selectedElement = null;
+        this.updatePanel();
+      }
       return;
     }
 
@@ -70,12 +68,20 @@ class OffsetTool extends BaseTool {
     if (!this.selectedElement) {
       this.selectedElement = event.target;
       this.highlightElement(this.selectedElement);
+      this.updatePanel();
     } else {
       // 2回目のクリック: オフセット方向を決定
       const point = this.getMousePosition(event);
       this.createOffset(point);
       this.unhighlightElement(this.selectedElement);
       this.selectedElement = null;
+      this.updatePanel();
+    }
+  }
+
+  updatePanel() {
+    if (window.toolPropertiesPanel) {
+      window.toolPropertiesPanel.updatePanel();
     }
   }
 
