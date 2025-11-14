@@ -663,10 +663,42 @@ class SelectTool extends BaseTool {
 
   // SVGPoint を取得
   getSVGPoint(event) {
+    const zoomManager = window.zoomPanManager;
+
+    if (zoomManager) {
+      const rect = this.canvas.getBoundingClientRect();
+      const transform =
+        typeof zoomManager.getTransform === "function"
+          ? zoomManager.getTransform()
+          : {
+              zoom: zoomManager.zoom || 1,
+            };
+
+      const zoom = transform && Number.isFinite(transform.zoom)
+        ? transform.zoom || 1
+        : 1;
+
+      return {
+        x: (event.clientX - rect.left) / zoom,
+        y: (event.clientY - rect.top) / zoom,
+      };
+    }
+
     const pt = this.canvas.createSVGPoint();
     pt.x = event.clientX;
     pt.y = event.clientY;
-    return pt.matrixTransform(this.canvas.getScreenCTM().inverse());
+    const ctm = this.canvas.getScreenCTM();
+
+    if (ctm && typeof ctm.inverse === "function") {
+      const transformed = pt.matrixTransform(ctm.inverse());
+      return { x: transformed.x, y: transformed.y };
+    }
+
+    const rect = this.canvas.getBoundingClientRect();
+    return {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    };
   }
 
   // ローカル座標→グローバル座標
