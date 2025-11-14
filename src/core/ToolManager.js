@@ -7,6 +7,8 @@ class ToolManager {
     this.tools = {};
     this.activeTool = null;
     this.activeToolName = "";
+    this.temporaryToolContext = null;
+    this._suspendTemporaryClear = false;
     this.toolbar = document.querySelector(".toolbar");
 
     // イベントリスナー
@@ -51,6 +53,10 @@ class ToolManager {
       return;
     }
 
+    if (this.temporaryToolContext && !this._suspendTemporaryClear) {
+      this.temporaryToolContext = null;
+    }
+
     // 以前のツールを無効化
     if (this.activeTool) {
       this.activeTool.deactivate();
@@ -68,6 +74,64 @@ class ToolManager {
       detail: { tool: this.activeTool, name: name },
     });
     document.dispatchEvent(event);
+  }
+
+  activateTemporaryTool(name, options = {}) {
+    if (!this.tools[name]) {
+      console.error(`Tool "${name}" not found`);
+      return;
+    }
+
+    const previousName = this.activeToolName;
+
+    if (!previousName || previousName === name) {
+      return;
+    }
+
+    this.temporaryToolContext = {
+      previousName,
+      options,
+    };
+
+    this._suspendTemporaryClear = true;
+    this.activateTool(name);
+    this._suspendTemporaryClear = false;
+  }
+
+  restorePreviousTool(trigger = null) {
+    if (!this.temporaryToolContext) {
+      return;
+    }
+
+    const { previousName, options } = this.temporaryToolContext;
+
+    if (!previousName) {
+      this.temporaryToolContext = null;
+      return;
+    }
+
+    if (
+      options &&
+      Array.isArray(options.restoreTriggers) &&
+      trigger &&
+      !options.restoreTriggers.includes(trigger)
+    ) {
+      return;
+    }
+
+    this.temporaryToolContext = null;
+
+    if (
+      !previousName ||
+      previousName === this.activeToolName ||
+      !this.tools[previousName]
+    ) {
+      return;
+    }
+
+    this._suspendTemporaryClear = true;
+    this.activateTool(previousName);
+    this._suspendTemporaryClear = false;
   }
 
   // ツールボタンの見た目を更新

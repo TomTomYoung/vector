@@ -3,6 +3,7 @@
 class RectangleTool extends BaseTool {
   constructor(canvas, toolManager) {
     super(canvas, toolManager);
+    this.autoSelectAfterDraw = true;
   }
 
   getTitle() {
@@ -10,10 +11,26 @@ class RectangleTool extends BaseTool {
   }
 
   getInstructions() {
+    return {
+      items: [
+        "左クリック+ドラッグ: 始点から終点までドラッグして長方形を描画",
+        "マウスボタンを離す: 長方形を確定",
+        "Esc: キャンセル",
+      ],
+    };
+  }
+
+  getToolProperties() {
     return [
-      "左クリック+ドラッグ: 長方形を描画",
-      "マウスボタンを離す: 長方形を確定",
-      "Esc: キャンセル",
+      {
+        type: "checkbox",
+        label: "作成後に選択状態にする",
+        checkLabel: "有効",
+        value: this.autoSelectAfterDraw,
+        onChange: (checked) => {
+          this.autoSelectAfterDraw = checked;
+        },
+      },
     ];
   }
 
@@ -35,10 +52,14 @@ class RectangleTool extends BaseTool {
 
     // 長方形を作成
     this.drawingObject = document.createElementNS(this.svgNS, "rect");
-    this.drawingObject.setAttribute("x", this.startPoint.x);
-    this.drawingObject.setAttribute("y", this.startPoint.y);
+    this.drawingObject.setAttribute("x", 0);
+    this.drawingObject.setAttribute("y", 0);
     this.drawingObject.setAttribute("width", 0);
     this.drawingObject.setAttribute("height", 0);
+    this.drawingObject.setAttribute(
+      "transform",
+      `translate(${this.startPoint.x}, ${this.startPoint.y})`
+    );
 
     // スタイルを適用
     this.applyDefaultAttributes(this.drawingObject);
@@ -64,10 +85,9 @@ class RectangleTool extends BaseTool {
     if (width < 0) x = this.currentPoint.x;
     if (height < 0) y = this.currentPoint.y;
 
-    this.drawingObject.setAttribute("x", x);
-    this.drawingObject.setAttribute("y", y);
     this.drawingObject.setAttribute("width", w);
     this.drawingObject.setAttribute("height", h);
+    this.drawingObject.setAttribute("transform", `translate(${x}, ${y})`);
   }
 
   handleMouseUp(event) {
@@ -76,15 +96,28 @@ class RectangleTool extends BaseTool {
     // サイズが極端に小さい長方形は作成しない
     const w = parseFloat(this.drawingObject.getAttribute("width"));
     const h = parseFloat(this.drawingObject.getAttribute("height"));
+    const finishedRect = this.drawingObject;
 
     if (w < 2 && h < 2) {
       this.canvas.removeChild(this.drawingObject);
-    } else if (window.selectTool) {
-      // 作成したオブジェクトを選択状態にする
-      window.selectTool.selectObject(this.drawingObject);
     }
 
     this.isDrawing = false;
     this.drawingObject = null;
+
+    if (finishedRect && !(w < 2 && h < 2)) {
+      if (this.autoSelectAfterDraw && window.selectTool) {
+        if (
+          window.toolManager &&
+          typeof window.toolManager.activateTemporaryTool === "function"
+        ) {
+          window.toolManager.activateTemporaryTool("select", {
+            restoreTriggers: ["deselect", "cancel"],
+          });
+        }
+
+        window.selectTool.selectObject(finishedRect);
+      }
+    }
   }
 }
