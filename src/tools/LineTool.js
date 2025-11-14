@@ -7,6 +7,7 @@ class LineTool extends BaseTool {
     this.currentLine = null;
     this.isDrawing = false;
     this.operationMode = "drag"; // "drag" または "twoClick"
+    this.autoSelectAfterDraw = false;
   }
 
   getTitle() {
@@ -14,20 +15,51 @@ class LineTool extends BaseTool {
   }
 
   getInstructions() {
-    if (this.operationMode === "twoClick") {
-      return [
-        "左クリック: 始点を設定",
-        "左クリック（2回目）: 終点を設定して直線を作成",
-        "F8: 直交モード（Ortho）切り替え",
-        "Esc: キャンセル",
-      ];
-    }
+    const items =
+      this.operationMode === "twoClick"
+        ? [
+            "左クリック: 始点を設定",
+            "マウス移動: 終点プレビューを更新",
+            "左クリック（2回目）: 終点を確定して直線を作成",
+            "F8: 直交モード（Ortho）切り替え",
+            "Esc: キャンセル",
+          ]
+        : [
+            "左クリック+ドラッグ: 始点から終点までドラッグして直線を作成",
+            "F8: 直交モード（Ortho）切り替え",
+            "Esc: キャンセル",
+          ];
 
-    return [
-      "左クリック+ドラッグ: 始点から終点までドラッグして直線を作成",
-      "F8: 直交モード（Ortho）切り替え",
-      "Esc: キャンセル",
-    ];
+    return {
+      items,
+      controls: [
+        {
+          type: "select",
+          label: "操作方法",
+          value: this.operationMode,
+          options: [
+            { value: "drag", label: "ドラッグ" },
+            { value: "twoClick", label: "クリック2回" },
+          ],
+          onChange: (value) => {
+            this.operationMode = value;
+            this.resetDrawingState();
+            if (window.toolPropertiesPanel) {
+              window.toolPropertiesPanel.updatePanel();
+            }
+          },
+        },
+        {
+          type: "checkbox",
+          label: "作成後に選択状態にする",
+          checkLabel: "有効",
+          value: this.autoSelectAfterDraw,
+          onChange: (checked) => {
+            this.autoSelectAfterDraw = checked;
+          },
+        },
+      ],
+    };
   }
 
   getToolProperties() {
@@ -119,8 +151,14 @@ class LineTool extends BaseTool {
   finishLine() {
     if (!this.currentLine) return;
 
+    const finishedLine = this.currentLine;
+
     // 状態を保存
     this.saveState();
+
+    if (this.autoSelectAfterDraw && finishedLine && window.selectTool) {
+      window.selectTool.selectObject(finishedLine);
+    }
 
     // 線を確定（既にキャンバスに追加されている）
     this.currentLine = null;
