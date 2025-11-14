@@ -181,10 +181,8 @@ class LineTool extends BaseTool {
     this.currentLine.setAttribute("y1", this.startPoint.y);
     this.currentLine.setAttribute("x2", this.startPoint.x);
     this.currentLine.setAttribute("y2", this.startPoint.y);
-    this.currentLine.setAttribute("stroke", this.currentStyle.stroke);
-    this.currentLine.setAttribute("stroke-width", this.currentStyle.strokeWidth);
     this.currentLine.setAttribute("fill", "none");
-    this.currentLine.setAttribute("opacity", this.currentStyle.opacity);
+    this.applyLineAppearance(this.currentLine);
     this.currentLine.setAttribute("data-layer", window.currentLayerId);
 
     this.canvas.appendChild(this.currentLine);
@@ -211,6 +209,14 @@ class LineTool extends BaseTool {
     this.currentLine.setAttribute("y2", endY);
   }
 
+  onCommonPropertiesChanged(properties) {
+    if (!this.currentLine) {
+      return;
+    }
+
+    this.applyLineAppearance(this.currentLine, properties);
+  }
+
   resetDrawingState() {
     if (this.currentLine && this.currentLine.parentNode) {
       this.canvas.removeChild(this.currentLine);
@@ -218,6 +224,35 @@ class LineTool extends BaseTool {
     this.currentLine = null;
     this.startPoint = null;
     this.isDrawing = false;
+  }
+
+  applyLineAppearance(line, properties = null) {
+    if (!line) return;
+
+    const style = properties
+      ? {
+          stroke: properties.strokeColor,
+          strokeWidth: properties.strokeWidth,
+          strokeStyle: properties.strokeStyle,
+          opacity: "1",
+        }
+      : this.currentStyle;
+
+    line.setAttribute("stroke", style.stroke);
+    line.setAttribute("stroke-width", style.strokeWidth);
+    line.setAttribute("opacity", style.opacity || "1");
+    line.setAttribute("fill", "none");
+
+    const dashArrays = {
+      dashed: "10,5",
+      dotted: "2,3",
+    };
+    const dashValue = style.strokeStyle && dashArrays[style.strokeStyle];
+    if (dashValue) {
+      line.setAttribute("stroke-dasharray", dashValue);
+    } else {
+      line.removeAttribute("stroke-dasharray");
+    }
   }
 }
 
