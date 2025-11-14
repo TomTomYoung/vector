@@ -24,15 +24,29 @@ class StylePanel {
       deleteButton.id = "delete-btn";
       deleteButton.textContent = "削除";
       deleteButton.addEventListener("click", this.deleteSelectedObject);
-      toolbar.appendChild(deleteButton);
+
+      const styleControlsContainer =
+        document.getElementById("style-controls-container");
+      if (styleControlsContainer) {
+        styleControlsContainer.appendChild(deleteButton);
+      } else if (toolbar) {
+        toolbar.appendChild(deleteButton);
+      }
     }
   }
 
   createStyleControls(toolbar) {
+    const styleControlsContainer = document.getElementById(
+      "style-controls-container"
+    );
+
+    const styleControlsWrapper = styleControlsContainer || toolbar;
+    if (!styleControlsWrapper) {
+      return;
+    }
+
     const styleControls = document.createElement("div");
-    styleControls.style.marginLeft = "15px";
-    styleControls.style.display = "flex";
-    styleControls.style.alignItems = "center";
+    styleControls.className = "style-inline-controls";
 
     // 塗りつぶし色
     const fillColorLabel = document.createElement("label");
@@ -108,10 +122,10 @@ class StylePanel {
 
     // ツールバーに追加
     const deleteBtn = document.getElementById("delete-btn");
-    if (deleteBtn) {
-      toolbar.insertBefore(styleControls, deleteBtn);
+    if (deleteBtn && styleControlsWrapper === styleControlsContainer) {
+      styleControlsWrapper.insertBefore(styleControls, deleteBtn);
     } else {
-      toolbar.appendChild(styleControls);
+      styleControlsWrapper.appendChild(styleControls);
     }
   }
 
