@@ -3,6 +3,7 @@
 class RectangleTool extends BaseTool {
   constructor(canvas, toolManager) {
     super(canvas, toolManager);
+    this.autoSelectAfterDraw = true;
   }
 
   getTitle() {
@@ -10,11 +11,24 @@ class RectangleTool extends BaseTool {
   }
 
   getInstructions() {
-    return [
-      "左クリック+ドラッグ: 長方形を描画",
-      "マウスボタンを離す: 長方形を確定",
-      "Esc: キャンセル",
-    ];
+    return {
+      items: [
+        "左クリック+ドラッグ: 始点から終点までドラッグして長方形を描画",
+        "マウスボタンを離す: 長方形を確定",
+        "Esc: キャンセル",
+      ],
+      controls: [
+        {
+          type: "checkbox",
+          label: "作成後に選択状態にする",
+          checkLabel: "有効",
+          value: this.autoSelectAfterDraw,
+          onChange: (checked) => {
+            this.autoSelectAfterDraw = checked;
+          },
+        },
+      ],
+    };
   }
 
   activate() {
@@ -79,7 +93,7 @@ class RectangleTool extends BaseTool {
 
     if (w < 2 && h < 2) {
       this.canvas.removeChild(this.drawingObject);
-    } else if (window.selectTool) {
+    } else if (this.autoSelectAfterDraw && window.selectTool) {
       // 作成したオブジェクトを選択状態にする
       window.selectTool.selectObject(this.drawingObject);
     }
