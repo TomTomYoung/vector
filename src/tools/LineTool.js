@@ -148,6 +148,19 @@ class LineTool extends BaseTool {
     this.currentLine = null;
     this.startPoint = null;
     this.isDrawing = false;
+
+    if (this.autoSelectAfterDraw && finishedLine && window.selectTool) {
+      if (
+        window.toolManager &&
+        typeof window.toolManager.activateTemporaryTool === "function"
+      ) {
+        window.toolManager.activateTemporaryTool("select", {
+          restoreTriggers: ["deselect", "cancel"],
+        });
+      }
+
+      window.selectTool.selectObject(finishedLine);
+    }
   }
 
   handleKeyDown(event) {

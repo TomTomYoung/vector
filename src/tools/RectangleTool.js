@@ -96,15 +96,28 @@ class RectangleTool extends BaseTool {
     // サイズが極端に小さい長方形は作成しない
     const w = parseFloat(this.drawingObject.getAttribute("width"));
     const h = parseFloat(this.drawingObject.getAttribute("height"));
+    const finishedRect = this.drawingObject;
 
     if (w < 2 && h < 2) {
       this.canvas.removeChild(this.drawingObject);
-    } else if (this.autoSelectAfterDraw && window.selectTool) {
-      // 作成したオブジェクトを選択状態にする
-      window.selectTool.selectObject(this.drawingObject);
     }
 
     this.isDrawing = false;
     this.drawingObject = null;
+
+    if (finishedRect && !(w < 2 && h < 2)) {
+      if (this.autoSelectAfterDraw && window.selectTool) {
+        if (
+          window.toolManager &&
+          typeof window.toolManager.activateTemporaryTool === "function"
+        ) {
+          window.toolManager.activateTemporaryTool("select", {
+            restoreTriggers: ["deselect", "cancel"],
+          });
+        }
+
+        window.selectTool.selectObject(finishedRect);
+      }
+    }
   }
 }

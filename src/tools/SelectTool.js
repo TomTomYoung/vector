@@ -86,16 +86,28 @@ class SelectTool extends BaseTool {
     super.deactivate();
   }
 
-  deselectObject() {
-    if (!this.selectedObject && window.selectedObjects.length === 0) return;
+  deselectObject(trigger = "deselect") {
+    const selections = Array.isArray(window.selectedObjects)
+      ? window.selectedObjects
+      : [];
+    const hasSelection = !!this.selectedObject || selections.length > 0;
+
+    if (!hasSelection) return;
     // 全ての選択されたオブジェクトから点線を削除
-    window.selectedObjects.forEach((obj) =>
+    selections.forEach((obj) =>
       obj.removeAttribute("stroke-dasharray")
     );
     this.removeControlPoints();
     this.selectedObject = null;
     window.selectedObject = null;
     window.selectedObjects = [];
+
+    if (
+      this.toolManager &&
+      typeof this.toolManager.restorePreviousTool === "function"
+    ) {
+      this.toolManager.restorePreviousTool(trigger);
+    }
   }
 
   // 選択されたオブジェクトを削除
@@ -119,6 +131,13 @@ class SelectTool extends BaseTool {
     this.selectedObject = null;
     window.selectedObject = null;
     window.selectedObjects = [];
+
+    if (
+      this.toolManager &&
+      typeof this.toolManager.restorePreviousTool === "function"
+    ) {
+      this.toolManager.restorePreviousTool("deselect");
+    }
   }
 
   // 選択されたオブジェクトをコピー
@@ -142,7 +161,7 @@ class SelectTool extends BaseTool {
     this.saveState();
 
     // 既存の選択を解除
-    this.deselectObject();
+    this.deselectObject("internal");
 
     const pastedObjects = [];
 
@@ -203,7 +222,7 @@ class SelectTool extends BaseTool {
     if (allObjects.length === 0) return;
 
     // 既存の選択を解除
-    this.deselectObject();
+    this.deselectObject("internal");
 
     // 全てのオブジェクトを選択
     allObjects.forEach((obj, index) => {
@@ -345,6 +364,17 @@ class SelectTool extends BaseTool {
     this.isDragging = this.isResizing = this.isRotating = false; // isRotizing → isRotating
     this.resizeHandle = null;
     if (this.selectedObject) this.addControlPoints();
+  }
+
+  handleKeyDown(event) {
+    if (event.key === "Escape") {
+      if (this.isDragging || this.isResizing || this.isRotating) {
+        this.isDragging = this.isResizing = this.isRotating = false;
+        this.resizeHandle = null;
+      }
+
+      this.deselectObject("cancel");
+    }
   }
 
   selectObject(el, addToSelection = false) {
