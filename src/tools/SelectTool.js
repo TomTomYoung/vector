@@ -33,6 +33,32 @@ class SelectTool extends BaseTool {
     return Number.isFinite(parsed) ? parsed : fallback;
   }
 
+  normalizeGeometryForTransform(element) {
+    if (!element || !element.tagName) return;
+
+    const tag = element.tagName.toLowerCase();
+    if (tag !== "rect") return;
+
+    let x = Number(element.getAttribute("x"));
+    let y = Number(element.getAttribute("y"));
+
+    if (!Number.isFinite(x)) x = 0;
+    if (!Number.isFinite(y)) y = 0;
+
+    if (x === 0 && y === 0) return;
+
+    const translation = new DOMMatrix().translate(x, y);
+    const transformAttr = element.getAttribute("transform");
+    const baseMatrix = transformAttr
+      ? new DOMMatrix(transformAttr)
+      : new DOMMatrix();
+    const combined = baseMatrix.multiply(translation);
+
+    element.setAttribute("x", 0);
+    element.setAttribute("y", 0);
+    element.setAttribute("transform", combined.toString());
+  }
+
   getTitle() {
     return "選択";
   }
@@ -212,6 +238,7 @@ class SelectTool extends BaseTool {
     ) {
       this.isResizing = true;
       this.resizeHandle = event.target;
+      this.normalizeGeometryForTransform(this.selectedObject);
       this.initialMatrix = this.selectedObject.getCTM() || new DOMMatrix();
       this.initialBBox = this.selectedObject.getBBox();
 

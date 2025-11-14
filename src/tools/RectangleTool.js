@@ -52,10 +52,14 @@ class RectangleTool extends BaseTool {
 
     // 長方形を作成
     this.drawingObject = document.createElementNS(this.svgNS, "rect");
-    this.drawingObject.setAttribute("x", this.startPoint.x);
-    this.drawingObject.setAttribute("y", this.startPoint.y);
+    this.drawingObject.setAttribute("x", 0);
+    this.drawingObject.setAttribute("y", 0);
     this.drawingObject.setAttribute("width", 0);
     this.drawingObject.setAttribute("height", 0);
+    this.drawingObject.setAttribute(
+      "transform",
+      `translate(${this.startPoint.x}, ${this.startPoint.y})`
+    );
 
     // スタイルを適用
     this.applyDefaultAttributes(this.drawingObject);
@@ -81,10 +85,9 @@ class RectangleTool extends BaseTool {
     if (width < 0) x = this.currentPoint.x;
     if (height < 0) y = this.currentPoint.y;
 
-    this.drawingObject.setAttribute("x", x);
-    this.drawingObject.setAttribute("y", y);
     this.drawingObject.setAttribute("width", w);
     this.drawingObject.setAttribute("height", h);
+    this.drawingObject.setAttribute("transform", `translate(${x}, ${y})`);
   }
 
   handleMouseUp(event) {
