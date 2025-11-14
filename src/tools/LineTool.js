@@ -62,6 +62,27 @@ class LineTool extends BaseTool {
     };
   }
 
+  getToolProperties() {
+    return [
+      {
+        type: "select",
+        label: "操作方法",
+        value: this.operationMode,
+        options: [
+          { value: "drag", label: "ドラッグ" },
+          { value: "twoClick", label: "クリック2回" },
+        ],
+        onChange: (value) => {
+          this.operationMode = value;
+          this.resetDrawingState();
+          if (window.toolPropertiesPanel) {
+            window.toolPropertiesPanel.updatePanel();
+          }
+        },
+      },
+    ];
+  }
+
   activate() {
     super.activate();
     this.canvas.style.cursor = "crosshair";
