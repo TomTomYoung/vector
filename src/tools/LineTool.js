@@ -49,15 +49,6 @@ class LineTool extends BaseTool {
             }
           },
         },
-        {
-          type: "checkbox",
-          label: "作成後に選択状態にする",
-          checkLabel: "有効",
-          value: this.autoSelectAfterDraw,
-          onChange: (checked) => {
-            this.autoSelectAfterDraw = checked;
-          },
-        },
       ],
     };
   }
@@ -65,19 +56,12 @@ class LineTool extends BaseTool {
   getToolProperties() {
     return [
       {
-        type: "select",
-        label: "操作方法",
-        value: this.operationMode,
-        options: [
-          { value: "drag", label: "ドラッグ" },
-          { value: "twoClick", label: "クリック2回" },
-        ],
-        onChange: (value) => {
-          this.operationMode = value;
-          this.resetDrawingState();
-          if (window.toolPropertiesPanel) {
-            window.toolPropertiesPanel.updatePanel();
-          }
+        type: "checkbox",
+        label: "作成後に選択状態にする",
+        checkLabel: "有効",
+        value: this.autoSelectAfterDraw,
+        onChange: (checked) => {
+          this.autoSelectAfterDraw = checked;
         },
       },
     ];

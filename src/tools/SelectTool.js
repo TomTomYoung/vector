@@ -14,6 +14,25 @@ class SelectTool extends BaseTool {
     this.startAngle = 0; // 追加：初期角度
   }
 
+  sanitizeColorValue(value, fallback = "#000000") {
+    if (typeof value !== "string") {
+      return fallback;
+    }
+
+    const trimmed = value.trim();
+    if (trimmed.length === 0 || trimmed.toLowerCase() === "none") {
+      return fallback;
+    }
+
+    const colorPattern = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
+    return colorPattern.test(trimmed) ? trimmed : fallback;
+  }
+
+  sanitizeNumericValue(value, fallback) {
+    const parsed = parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+
   getTitle() {
     return "選択";
   }
@@ -361,21 +380,56 @@ class SelectTool extends BaseTool {
       window.selectedObjects = [el];
 
       // スタイルを反映
-      if (document.getElementById("fill-color")) {
-        document.getElementById("fill-color").value =
-          el.getAttribute("fill") || "#ffffff";
+      const fillInput = document.getElementById("fill-color");
+      if (fillInput) {
+        const fallbackFill =
+          fillInput.value && typeof fillInput.value === "string"
+            ? fillInput.value
+            : "#ffffff";
+        fillInput.value = this.sanitizeColorValue(
+          el.getAttribute("fill"),
+          fallbackFill
+        );
       }
-      if (document.getElementById("stroke-color")) {
-        document.getElementById("stroke-color").value =
-          el.getAttribute("stroke") || "#000000";
+
+      const strokeInput = document.getElementById("stroke-color");
+      if (strokeInput) {
+        const fallbackStroke =
+          strokeInput.value && typeof strokeInput.value === "string"
+            ? strokeInput.value
+            : "#000000";
+        strokeInput.value = this.sanitizeColorValue(
+          el.getAttribute("stroke"),
+          fallbackStroke
+        );
       }
-      if (document.getElementById("stroke-width")) {
-        document.getElementById("stroke-width").value =
-          el.getAttribute("stroke-width") || "2";
+
+      const strokeWidthInput = document.getElementById("stroke-width");
+      if (strokeWidthInput) {
+        const fallbackWidth = this.sanitizeNumericValue(
+          strokeWidthInput.value,
+          2
+        );
+        const sanitizedWidth = this.sanitizeNumericValue(
+          el.getAttribute("stroke-width"),
+          fallbackWidth
+        );
+        strokeWidthInput.value = String(sanitizedWidth);
       }
-      if (document.getElementById("opacity-input")) {
-        document.getElementById("opacity-input").value =
-          el.getAttribute("opacity") || "1";
+
+      const opacityInput = document.getElementById("opacity-input");
+      if (opacityInput) {
+        const fallbackOpacity = this.sanitizeNumericValue(
+          opacityInput.value,
+          1
+        );
+        let sanitizedOpacity = this.sanitizeNumericValue(
+          el.getAttribute("opacity"),
+          fallbackOpacity
+        );
+        if (sanitizedOpacity < 0) sanitizedOpacity = 0;
+        if (sanitizedOpacity > 1) sanitizedOpacity = 1;
+        opacityInput.value = String(sanitizedOpacity);
       }
 
       this.addControlPoints();

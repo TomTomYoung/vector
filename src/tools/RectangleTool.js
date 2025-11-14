@@ -17,18 +17,21 @@ class RectangleTool extends BaseTool {
         "マウスボタンを離す: 長方形を確定",
         "Esc: キャンセル",
       ],
-      controls: [
-        {
-          type: "checkbox",
-          label: "作成後に選択状態にする",
-          checkLabel: "有効",
-          value: this.autoSelectAfterDraw,
-          onChange: (checked) => {
-            this.autoSelectAfterDraw = checked;
-          },
-        },
-      ],
     };
+  }
+
+  getToolProperties() {
+    return [
+      {
+        type: "checkbox",
+        label: "作成後に選択状態にする",
+        checkLabel: "有効",
+        value: this.autoSelectAfterDraw,
+        onChange: (checked) => {
+          this.autoSelectAfterDraw = checked;
+        },
+      },
+    ];
   }
 
   activate() {
