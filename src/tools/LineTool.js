@@ -95,10 +95,22 @@ class LineTool extends BaseTool {
   handleMouseUp(event) {
     if (!this.isActive) return;
 
-    if (this.operationMode === "drag" && this.isDrawing && this.currentLine) {
-      const endPoint = this.getMousePosition(event);
-      this.updateCurrentLineEnd(endPoint);
-      this.finishLine();
+    if (this.operationMode === "drag") {
+      if (this.isDrawing && this.currentLine) {
+        const endPoint = this.getMousePosition(event);
+        this.updateCurrentLineEnd(endPoint);
+        this.finishLine();
+      }
+
+      super.handleMouseUp(event);
+      return;
+    }
+
+    if (this.operationMode === "twoClick") {
+      // 1回目のクリック後はマウスボタンを離してもプレビューを維持する
+      if (this.isDrawing && this.currentLine) {
+        return;
+      }
     }
 
     super.handleMouseUp(event);
