@@ -15,39 +15,32 @@ class LayerPanel {
   }
 
   createLayerPanel() {
-    const toolbar = document.querySelector(".toolbar");
+    const wrapper = document.getElementById("layer-panel-wrapper");
+    if (!wrapper) {
+      return;
+    }
+
+    wrapper.innerHTML = "";
+
+    // レイヤーのタイトル
+    const layerTitle = document.createElement("h3");
+    layerTitle.textContent = "レイヤー";
+    layerTitle.className = "layer-panel-title";
+    wrapper.appendChild(layerTitle);
 
     // レイヤー管理用のコンテナを作成
     const layerContainer = document.createElement("div");
     layerContainer.id = "layer-container";
-    layerContainer.style.display = "flex";
-    layerContainer.style.flexDirection = "column";
-    layerContainer.style.marginRight = "15px";
-    layerContainer.style.minWidth = "150px";
-    layerContainer.style.border = "1px solid #ccc";
-    layerContainer.style.padding = "5px";
-    layerContainer.style.backgroundColor = "#f8f8f8";
-
-    // レイヤーのタイトル
-    const layerTitle = document.createElement("div");
-    layerTitle.textContent = "レイヤー";
-    layerTitle.style.fontWeight = "bold";
-    layerTitle.style.marginBottom = "5px";
-    layerContainer.appendChild(layerTitle);
 
     // レイヤーリスト
     const layerList = document.createElement("div");
     layerList.id = "layer-list";
-    layerList.style.maxHeight = "120px";
-    layerList.style.overflowY = "auto";
-    layerList.style.marginBottom = "5px";
     layerContainer.appendChild(layerList);
 
     // レイヤー追加ボタン
     const addLayerBtn = document.createElement("button");
     addLayerBtn.id = "add-layer";
     addLayerBtn.textContent = "レイヤー追加";
-    addLayerBtn.style.width = "100%";
     addLayerBtn.addEventListener("click", () => {
       const newLayerId =
         window.layers.length > 0
@@ -69,8 +62,7 @@ class LayerPanel {
     });
     layerContainer.appendChild(addLayerBtn);
 
-    // ツールバーの先頭に追加
-    toolbar.insertBefore(layerContainer, toolbar.firstChild);
+    wrapper.appendChild(layerContainer);
   }
 
   // レイヤー一覧を更新
@@ -80,19 +72,14 @@ class LayerPanel {
 
     window.layers.forEach((layer) => {
       const layerItem = document.createElement("div");
-      layerItem.style.padding = "5px";
-      layerItem.style.marginBottom = "5px";
-      layerItem.style.backgroundColor =
-        layer.id === window.currentLayerId ? "#e6f2ff" : "#f5f5f5";
-      layerItem.style.cursor = "pointer";
-      layerItem.style.display = "flex";
-      layerItem.style.alignItems = "center";
-      layerItem.style.flexWrap = "wrap";
+      layerItem.className = "layer-item";
+      if (layer.id === window.currentLayerId) {
+        layerItem.classList.add("active");
+      }
 
       // 1行目: 可視性、名前、ロック、設定
       const row1 = document.createElement("div");
-      row1.style.display = "flex";
-      row1.style.alignItems = "center";
+      row1.className = "layer-row";
       row1.style.width = "100%";
 
       const visibilityCheckbox = document.createElement("input");
@@ -107,16 +94,12 @@ class LayerPanel {
 
       const nameSpan = document.createElement("span");
       nameSpan.textContent = layer.name;
-      nameSpan.style.marginLeft = "5px";
       nameSpan.style.flex = "1";
       nameSpan.style.fontSize = "12px";
 
       // ロックボタン
       const lockBtn = document.createElement("button");
       lockBtn.textContent = layer.locked ? "🔒" : "🔓";
-      lockBtn.style.padding = "2px 5px";
-      lockBtn.style.fontSize = "12px";
-      lockBtn.style.marginLeft = "3px";
       lockBtn.title = layer.locked ? "ロック解除" : "ロック";
       lockBtn.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -127,9 +110,6 @@ class LayerPanel {
       // 設定ボタン
       const settingsBtn = document.createElement("button");
       settingsBtn.textContent = "⚙";
-      settingsBtn.style.padding = "2px 5px";
-      settingsBtn.style.fontSize = "12px";
-      settingsBtn.style.marginLeft = "3px";
       settingsBtn.title = "レイヤー設定";
       settingsBtn.addEventListener("click", (e) => {
         e.stopPropagation();
