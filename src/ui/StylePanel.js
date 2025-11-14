@@ -9,30 +9,51 @@ class StylePanel {
   init() {
     const toolbar = document.querySelector(".toolbar");
 
-    // 削除ボタンの作成
-    this.createDeleteButton(toolbar);
-
     // スタイル設定コントロールの作成
     this.createStyleControls(toolbar);
+
+    // 削除ボタンの作成
+    this.createDeleteButton(toolbar);
   }
 
   createDeleteButton(toolbar) {
-    const deleteBtn = document.getElementById("delete-btn");
-
-    if (!deleteBtn) {
-      const deleteButton = document.createElement("button");
-      deleteButton.id = "delete-btn";
-      deleteButton.textContent = "削除";
-      deleteButton.addEventListener("click", this.deleteSelectedObject);
-
-      const styleControlsContainer =
-        document.getElementById("style-controls-container");
-      if (styleControlsContainer) {
-        styleControlsContainer.appendChild(deleteButton);
-      } else if (toolbar) {
-        toolbar.appendChild(deleteButton);
-      }
+    if (document.getElementById("delete-btn")) {
+      return;
     }
+
+    const target =
+      document.getElementById("style-controls-container") || toolbar;
+    if (!target) {
+      return;
+    }
+
+    let actionGroup = document.getElementById("style-action-group");
+    if (!actionGroup) {
+      actionGroup = document.createElement("div");
+      actionGroup.id = "style-action-group";
+      actionGroup.className = "style-control-group";
+
+      const heading = document.createElement("h4");
+      heading.textContent = "編集";
+      actionGroup.appendChild(heading);
+
+      const stack = document.createElement("div");
+      stack.className = "button-stack";
+      stack.id = "style-action-stack";
+      actionGroup.appendChild(stack);
+
+      target.appendChild(actionGroup);
+    }
+
+    const stack =
+      document.getElementById("style-action-stack") || actionGroup || target;
+
+    const deleteButton = document.createElement("button");
+    deleteButton.id = "delete-btn";
+    deleteButton.textContent = "削除";
+    deleteButton.addEventListener("click", this.deleteSelectedObject);
+
+    stack.appendChild(deleteButton);
   }
 
   createStyleControls(toolbar) {
@@ -40,10 +61,24 @@ class StylePanel {
       "style-controls-container"
     );
 
-    const styleControlsWrapper = styleControlsContainer || toolbar;
-    if (!styleControlsWrapper) {
+    const target = styleControlsContainer || toolbar;
+    if (!target) {
       return;
     }
+
+    let group = document.getElementById("style-main-controls");
+    if (!group) {
+      group = document.createElement("div");
+      group.id = "style-main-controls";
+      group.className = "style-control-group";
+      target.appendChild(group);
+    } else {
+      group.innerHTML = "";
+    }
+
+    const heading = document.createElement("h4");
+    heading.textContent = "スタイル設定";
+    group.appendChild(heading);
 
     const styleControls = document.createElement("div");
     styleControls.className = "style-inline-controls";
@@ -121,12 +156,7 @@ class StylePanel {
     styleControls.appendChild(opacityInput);
 
     // ツールバーに追加
-    const deleteBtn = document.getElementById("delete-btn");
-    if (deleteBtn && styleControlsWrapper === styleControlsContainer) {
-      styleControlsWrapper.insertBefore(styleControls, deleteBtn);
-    } else {
-      styleControlsWrapper.appendChild(styleControls);
-    }
+    group.appendChild(styleControls);
   }
 
   // 選択したオブジェクトを削除

@@ -7,30 +7,63 @@ class FileManager {
   }
 
   init() {
-    const toolbar = document.querySelector(".toolbar");
+    const container =
+      document.getElementById("style-controls-container") ||
+      document.querySelector(".toolbar");
 
     // 保存と読み込みボタンを追加
-    this.createSaveLoadButtons(toolbar);
+    this.createSaveLoadButtons(container);
   }
 
   createSaveLoadButtons(toolbar) {
-    const saveBtn = document.createElement("button");
-    saveBtn.id = "save-btn";
-    saveBtn.textContent = "SVG保存";
-    saveBtn.addEventListener("click", this.saveSVG);
-    toolbar.appendChild(saveBtn);
+    if (!toolbar) {
+      return;
+    }
 
-    const loadBtn = document.createElement("button");
-    loadBtn.id = "load-btn";
-    loadBtn.textContent = "読み込み";
-    loadBtn.addEventListener("click", this.loadSVG);
-    toolbar.appendChild(loadBtn);
+    let group = document.getElementById("file-controls-group");
+    if (!group) {
+      group = document.createElement("div");
+      group.id = "file-controls-group";
+      group.className = "style-control-group";
 
-    const exportPNGBtn = document.createElement("button");
-    exportPNGBtn.id = "export-png-btn";
-    exportPNGBtn.textContent = "PNG出力";
-    exportPNGBtn.addEventListener("click", this.exportPNG);
-    toolbar.appendChild(exportPNGBtn);
+      const heading = document.createElement("h4");
+      heading.textContent = "ファイル";
+      group.appendChild(heading);
+
+      const stack = document.createElement("div");
+      stack.className = "button-stack";
+      stack.id = "file-controls-stack";
+      group.appendChild(stack);
+
+      toolbar.appendChild(group);
+    }
+
+    const stack =
+      document.getElementById("file-controls-stack") || group || toolbar;
+
+    if (!document.getElementById("save-btn")) {
+      const saveBtn = document.createElement("button");
+      saveBtn.id = "save-btn";
+      saveBtn.textContent = "SVG保存";
+      saveBtn.addEventListener("click", this.saveSVG);
+      stack.appendChild(saveBtn);
+    }
+
+    if (!document.getElementById("load-btn")) {
+      const loadBtn = document.createElement("button");
+      loadBtn.id = "load-btn";
+      loadBtn.textContent = "読み込み";
+      loadBtn.addEventListener("click", this.loadSVG);
+      stack.appendChild(loadBtn);
+    }
+
+    if (!document.getElementById("export-png-btn")) {
+      const exportPNGBtn = document.createElement("button");
+      exportPNGBtn.id = "export-png-btn";
+      exportPNGBtn.textContent = "PNG出力";
+      exportPNGBtn.addEventListener("click", this.exportPNG);
+      stack.appendChild(exportPNGBtn);
+    }
   }
 
   // SVGを保存

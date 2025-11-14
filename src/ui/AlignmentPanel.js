@@ -7,70 +7,114 @@ class AlignmentPanel {
   }
 
   init() {
-    const toolbar = document.querySelector(".toolbar");
+    this.container =
+      document.getElementById("style-controls-container") ||
+      document.querySelector(".toolbar");
+
+    if (!this.container) {
+      return;
+    }
 
     // 整列ボタンを追加
-    this.createAlignmentButtons(toolbar);
+    this.createAlignmentButtons();
 
     // グループ関連のボタンを追加
-    this.createGroupButtons(toolbar);
+    this.createGroupButtons();
   }
 
-  createAlignmentButtons(toolbar) {
-    const alignLeftBtn = document.createElement("button");
-    alignLeftBtn.textContent = "左揃え";
-    alignLeftBtn.addEventListener("click", () => this.alignObjects("left"));
-    toolbar.appendChild(alignLeftBtn);
+  ensureGroup() {
+    if (!this.container) {
+      return null;
+    }
 
-    const alignCenterBtn = document.createElement("button");
-    alignCenterBtn.textContent = "中央揃え";
-    alignCenterBtn.addEventListener("click", () => this.alignObjects("center"));
-    toolbar.appendChild(alignCenterBtn);
+    let group = document.getElementById("alignment-controls-group");
+    if (!group) {
+      group = document.createElement("div");
+      group.id = "alignment-controls-group";
+      group.className = "style-control-group";
 
-    const alignRightBtn = document.createElement("button");
-    alignRightBtn.textContent = "右揃え";
-    alignRightBtn.addEventListener("click", () => this.alignObjects("right"));
-    toolbar.appendChild(alignRightBtn);
+      const heading = document.createElement("h4");
+      heading.textContent = "整列・変形";
+      group.appendChild(heading);
 
-    const alignTopBtn = document.createElement("button");
-    alignTopBtn.textContent = "上揃え";
-    alignTopBtn.addEventListener("click", () => this.alignObjects("top"));
-    toolbar.appendChild(alignTopBtn);
+      const stack = document.createElement("div");
+      stack.className = "button-stack";
+      stack.id = "alignment-button-stack";
+      group.appendChild(stack);
 
-    const alignMiddleBtn = document.createElement("button");
-    alignMiddleBtn.textContent = "垂直中央揃え";
-    alignMiddleBtn.addEventListener("click", () => this.alignObjects("middle"));
-    toolbar.appendChild(alignMiddleBtn);
+      this.container.appendChild(group);
+    }
 
-    const alignBottomBtn = document.createElement("button");
-    alignBottomBtn.textContent = "下揃え";
-    alignBottomBtn.addEventListener("click", () => this.alignObjects("bottom"));
-    toolbar.appendChild(alignBottomBtn);
+    return document.getElementById("alignment-button-stack") || group;
   }
 
-  createGroupButtons(toolbar) {
-    const groupBtn = document.createElement("button");
-    groupBtn.textContent = "グループ化";
-    groupBtn.addEventListener("click", this.groupObjects);
-    toolbar.appendChild(groupBtn);
+  createAlignmentButtons() {
+    const stack = this.ensureGroup();
+    if (!stack) {
+      return;
+    }
 
-    const ungroupBtn = document.createElement("button");
-    ungroupBtn.textContent = "グループ解除";
-    ungroupBtn.addEventListener("click", this.ungroupObjects);
-    toolbar.appendChild(ungroupBtn);
+    const buttons = [
+      { id: "align-left-btn", label: "左揃え", action: () => this.alignObjects("left") },
+      { id: "align-center-btn", label: "中央揃え", action: () => this.alignObjects("center") },
+      { id: "align-right-btn", label: "右揃え", action: () => this.alignObjects("right") },
+      { id: "align-top-btn", label: "上揃え", action: () => this.alignObjects("top") },
+      {
+        id: "align-middle-btn",
+        label: "垂直中央揃え",
+        action: () => this.alignObjects("middle"),
+      },
+      { id: "align-bottom-btn", label: "下揃え", action: () => this.alignObjects("bottom") },
+    ];
 
-    // 反転ボタン
-    const flipHBtn = document.createElement("button");
-    flipHBtn.textContent = "水平反転";
-    flipHBtn.title = "選択したオブジェクトを水平反転";
-    flipHBtn.addEventListener("click", () => this.flipObjects("horizontal"));
-    toolbar.appendChild(flipHBtn);
+    buttons.forEach(({ id, label, action }) => {
+      if (document.getElementById(id)) {
+        return;
+      }
+      const button = document.createElement("button");
+      button.id = id;
+      button.textContent = label;
+      button.addEventListener("click", action);
+      stack.appendChild(button);
+    });
+  }
 
-    const flipVBtn = document.createElement("button");
-    flipVBtn.textContent = "垂直反転";
-    flipVBtn.title = "選択したオブジェクトを垂直反転";
-    flipVBtn.addEventListener("click", () => this.flipObjects("vertical"));
-    toolbar.appendChild(flipVBtn);
+  createGroupButtons() {
+    const stack = this.ensureGroup();
+    if (!stack) {
+      return;
+    }
+
+    const buttons = [
+      { id: "group-btn", label: "グループ化", action: this.groupObjects },
+      { id: "ungroup-btn", label: "グループ解除", action: this.ungroupObjects },
+      {
+        id: "flip-horizontal-btn",
+        label: "水平反転",
+        title: "選択したオブジェクトを水平反転",
+        action: () => this.flipObjects("horizontal"),
+      },
+      {
+        id: "flip-vertical-btn",
+        label: "垂直反転",
+        title: "選択したオブジェクトを垂直反転",
+        action: () => this.flipObjects("vertical"),
+      },
+    ];
+
+    buttons.forEach(({ id, label, title, action }) => {
+      if (document.getElementById(id)) {
+        return;
+      }
+      const button = document.createElement("button");
+      button.id = id;
+      button.textContent = label;
+      if (title) {
+        button.title = title;
+      }
+      button.addEventListener("click", action);
+      stack.appendChild(button);
+    });
   }
 
   // 整列機能の実装

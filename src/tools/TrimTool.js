@@ -27,19 +27,27 @@ class TrimTool extends BaseTool {
   createTrimControls() {
     if (document.getElementById("trim-controls")) return;
 
-    const toolbar = document.querySelector(".toolbar");
+    const container =
+      document.getElementById("style-controls-container") ||
+      document.querySelector(".toolbar");
+    if (!container) {
+      return;
+    }
+
     const controls = document.createElement("div");
     controls.id = "trim-controls";
-    controls.style.display = "inline-block";
-    controls.style.marginLeft = "10px";
+    controls.className = "style-control-group";
 
-    const info = document.createElement("span");
+    const heading = document.createElement("h4");
+    heading.textContent = "トリム操作";
+    controls.appendChild(heading);
+
+    const info = document.createElement("p");
+    info.className = "control-info";
     info.textContent = "切断辺を選択してEnter、その後トリムする部分をクリック";
-    info.style.fontSize = "12px";
-    info.style.color = "#666";
     controls.appendChild(info);
 
-    toolbar.appendChild(controls);
+    container.appendChild(controls);
   }
 
   removeTrimControls() {

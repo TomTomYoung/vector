@@ -25,66 +25,92 @@ class SnapManager {
   }
 
   createSnapControls() {
-    const toolbar = document.querySelector(".toolbar");
+    const target =
+      document.getElementById("style-controls-container") ||
+      document.querySelector(".toolbar");
+    if (!target) {
+      return;
+    }
 
-    // スナップ設定コンテナ
-    const snapContainer = document.createElement("div");
-    snapContainer.style.display = "inline-block";
-    snapContainer.style.marginLeft = "15px";
-    snapContainer.style.padding = "5px";
-    snapContainer.style.background = "#f9f9f9";
-    snapContainer.style.border = "1px solid #ddd";
-    snapContainer.style.borderRadius = "3px";
+    let snapContainer = document.getElementById("snap-settings-group");
+    if (!snapContainer) {
+      snapContainer = document.createElement("div");
+      snapContainer.id = "snap-settings-group";
+      snapContainer.className = "style-control-group";
 
-    const snapLabel = document.createElement("span");
-    snapLabel.textContent = "スナップ: ";
-    snapLabel.style.marginRight = "5px";
-    snapContainer.appendChild(snapLabel);
+      const heading = document.createElement("h4");
+      heading.textContent = "スナップ設定";
+      snapContainer.appendChild(heading);
+
+      const checkboxRow = document.createElement("div");
+      checkboxRow.className = "inline-checkboxes";
+      checkboxRow.id = "snap-checkbox-row";
+      snapContainer.appendChild(checkboxRow);
+
+      target.appendChild(snapContainer);
+    }
+
+    const checkboxRow =
+      document.getElementById("snap-checkbox-row") || snapContainer;
+
+    checkboxRow.innerHTML = "";
 
     // 端点スナップ
-    const endpointCheckbox = this.createCheckbox("端点", "endpoint", true);
-    snapContainer.appendChild(endpointCheckbox);
+    const endpointCheckbox = this.createCheckbox(
+      "端点",
+      "endpoint",
+      this.snapEnabled.endpoint
+    );
+    checkboxRow.appendChild(endpointCheckbox);
 
     // 中点スナップ
-    const midpointCheckbox = this.createCheckbox("中点", "midpoint", true);
-    snapContainer.appendChild(midpointCheckbox);
+    const midpointCheckbox = this.createCheckbox(
+      "中点",
+      "midpoint",
+      this.snapEnabled.midpoint
+    );
+    checkboxRow.appendChild(midpointCheckbox);
 
     // 交点スナップ
     const intersectionCheckbox = this.createCheckbox(
       "交点",
       "intersection",
-      false
+      this.snapEnabled.intersection
     );
-    snapContainer.appendChild(intersectionCheckbox);
+    checkboxRow.appendChild(intersectionCheckbox);
 
     // グリッドスナップ
-    const gridCheckbox = this.createCheckbox("グリッド", "grid", false);
-    snapContainer.appendChild(gridCheckbox);
+    const gridCheckbox = this.createCheckbox(
+      "グリッド",
+      "grid",
+      this.snapEnabled.grid
+    );
+    checkboxRow.appendChild(gridCheckbox);
 
     // 垂直スナップ
     const perpendicularCheckbox = this.createCheckbox(
       "垂直",
       "perpendicular",
-      false
+      this.snapEnabled.perpendicular
     );
-    snapContainer.appendChild(perpendicularCheckbox);
+    checkboxRow.appendChild(perpendicularCheckbox);
 
     // 接線スナップ
-    const tangentCheckbox = this.createCheckbox("接線", "tangent", false);
-    snapContainer.appendChild(tangentCheckbox);
-
-    toolbar.appendChild(snapContainer);
+    const tangentCheckbox = this.createCheckbox(
+      "接線",
+      "tangent",
+      this.snapEnabled.tangent
+    );
+    checkboxRow.appendChild(tangentCheckbox);
   }
 
   createCheckbox(label, type, checked) {
     const container = document.createElement("label");
-    container.style.marginRight = "10px";
     container.style.cursor = "pointer";
 
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
     checkbox.checked = checked;
-    checkbox.style.marginRight = "3px";
     checkbox.addEventListener("change", (e) => {
       this.snapEnabled[type] = e.target.checked;
     });
