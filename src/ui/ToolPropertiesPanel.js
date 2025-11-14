@@ -84,11 +84,21 @@ class ToolPropertiesPanel {
   createInstructionsSection() {
     const section = this.createSection("操作方法");
 
-    const instructions = this.currentTool.getInstructions
+    const instructionsData = this.currentTool.getInstructions
       ? this.currentTool.getInstructions()
       : [];
 
-    if (instructions.length === 0) {
+    let instructionItems = [];
+    let instructionControls = [];
+
+    if (Array.isArray(instructionsData)) {
+      instructionItems = instructionsData;
+    } else if (instructionsData && typeof instructionsData === "object") {
+      instructionItems = instructionsData.items || [];
+      instructionControls = instructionsData.controls || [];
+    }
+
+    if (instructionItems.length === 0) {
       const noInstructions = document.createElement("p");
       noInstructions.textContent = "操作説明はありません";
       noInstructions.style.cssText = "color: #999; font-size: 12px;";
@@ -101,8 +111,7 @@ class ToolPropertiesPanel {
         font-size: 13px;
         line-height: 1.6;
       `;
-
-      instructions.forEach((instruction) => {
+      instructionItems.forEach((instruction) => {
         const item = document.createElement("li");
         item.textContent = instruction;
         item.style.marginBottom = "8px";
@@ -112,7 +121,74 @@ class ToolPropertiesPanel {
       section.appendChild(list);
     }
 
+    if (instructionControls.length > 0) {
+      this.renderInstructionControls(section, instructionControls);
+    }
+
     this.panel.appendChild(section);
+  }
+
+  renderInstructionControls(container, controls) {
+    controls.forEach((control) => {
+      const group = this.createPropertyGroup(control.label);
+
+      switch (control.type) {
+        case "select": {
+          const select = this.createSelect(
+            control.options,
+            control.value,
+            (value) => {
+              if (control.onChange) {
+                control.onChange(value);
+              }
+            }
+          );
+          group.appendChild(select);
+          break;
+        }
+        case "checkbox": {
+          const checkbox = this.createCheckbox(
+            control.checkLabel || "",
+            Boolean(control.value),
+            (checked) => {
+              if (control.onChange) {
+                control.onChange(checked);
+              }
+            }
+          );
+          group.appendChild(checkbox);
+          break;
+        }
+        case "number": {
+          const numberInput = this.createNumberInput(
+            control.value,
+            control.min,
+            control.max,
+            control.step,
+            (value) => {
+              if (control.onChange) {
+                control.onChange(value);
+              }
+            }
+          );
+          group.appendChild(numberInput);
+          break;
+        }
+        case "color": {
+          const colorInput = this.createColorInput(control.value, (color) => {
+            if (control.onChange) {
+              control.onChange(color);
+            }
+          });
+          group.appendChild(colorInput);
+          break;
+        }
+        default:
+          break;
+      }
+
+      container.appendChild(group);
+    });
   }
 
   createCommonPropertiesSection() {
