@@ -183,6 +183,7 @@ class SnapManager {
         !el.classList.contains("control-handle") &&
         !el.classList.contains("rotate-handle") &&
         !el.classList.contains("rotate-line") &&
+        !el.classList.contains("translate-handle") &&
         !el.classList.contains("snap-indicator")
     );
 
@@ -213,6 +214,7 @@ class SnapManager {
         !el.classList.contains("control-handle") &&
         !el.classList.contains("rotate-handle") &&
         !el.classList.contains("rotate-line") &&
+        !el.classList.contains("translate-handle") &&
         !el.classList.contains("snap-indicator")
     );
 
@@ -257,6 +259,7 @@ class SnapManager {
         !el.classList.contains("control-handle") &&
         !el.classList.contains("rotate-handle") &&
         !el.classList.contains("rotate-line") &&
+        !el.classList.contains("translate-handle") &&
         !el.classList.contains("snap-indicator")
     );
 
@@ -554,6 +557,7 @@ class SnapManager {
         !el.classList.contains("control-handle") &&
         !el.classList.contains("rotate-handle") &&
         !el.classList.contains("rotate-line") &&
+        !el.classList.contains("translate-handle") &&
         !el.classList.contains("snap-indicator")
     );
 

@@ -38,6 +38,7 @@
         border-right: 1px solid #ccc;
         display: flex;
         flex-direction: column;
+        overflow: hidden;
       }
 
       .toolbar {
@@ -45,13 +46,57 @@
         display: flex;
         flex-direction: column;
         padding: 10px;
-        gap: 10px;
+        gap: 0;
+        box-sizing: border-box;
+      }
+
+      .panel-group {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        height: 100%;
+        position: relative;
+      }
+
+      .panel-section {
+        position: relative;
+        flex: 0 0 auto;
+        min-height: 140px;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .panel-section-content {
+        flex: 1;
+        overflow-y: auto;
+      }
+
+      .panel-resizer {
+        flex: 0 0 6px;
+        height: 6px;
+        background: #d4d4d4;
+        border: 1px solid #c3c3c3;
+        border-left: none;
+        border-right: none;
+        cursor: row-resize;
+        margin: 6px 0;
+      }
+
+      .panel-resizer:hover,
+      .panel-resizer.active {
+        background: #bcbcbc;
+      }
+
+      body.resizing-panels {
+        user-select: none;
+        cursor: row-resize;
       }
 
       #tool-buttons-section {
-        flex: 1;
         display: flex;
         flex-direction: column;
+        gap: 10px;
+        padding: 0;
         min-height: 0;
       }
 
@@ -79,6 +124,9 @@
         display: flex;
         flex-direction: column;
         gap: 10px;
+        height: 100%;
+        box-sizing: border-box;
+        overflow-y: auto;
       }
 
       #style-controls-container button,
@@ -123,11 +171,12 @@
         display: flex;
         flex-direction: column;
         padding: 10px;
-        gap: 10px;
+        box-sizing: border-box;
+        gap: 0;
       }
 
       #tool-properties-panel {
-        flex: 1;
+        height: 100%;
         overflow-y: auto;
         border: 1px solid #ccc;
         background: #fff;
@@ -136,7 +185,7 @@
       }
 
       #layer-panel-wrapper {
-        flex: 0 0 220px;
+        height: 100%;
         border: 1px solid #ccc;
         background: #fff;
         padding: 10px;
@@ -145,6 +194,13 @@
         display: flex;
         flex-direction: column;
         gap: 10px;
+      }
+
+      .marquee-selection {
+        fill: rgba(74, 144, 226, 0.15);
+        stroke: #4a90e2;
+        stroke-dasharray: 4 2;
+        pointer-events: none;
       }
 
       .layer-panel-title {
@@ -201,13 +257,26 @@
 
     <div class="content">
       <aside class="left-panel">
-        <div class="toolbar">
-          <div id="tool-buttons-section">
-            <div id="tool-buttons-scroll">
-              <!-- ツールボタンはJavaScriptで動的に追加されます -->
+        <div class="toolbar panel-group" data-panel-group="left">
+          <div
+            class="panel-section"
+            data-initial-ratio="0.6"
+            data-min-height="160"
+          >
+            <div class="panel-section-content" id="tool-buttons-section">
+              <div id="tool-buttons-scroll">
+                <!-- ツールボタンはJavaScriptで動的に追加されます -->
+              </div>
             </div>
           </div>
-          <div id="style-controls-container"></div>
+          <div class="panel-resizer" data-panel-group="left"></div>
+          <div
+            class="panel-section"
+            data-initial-ratio="0.4"
+            data-min-height="160"
+          >
+            <div class="panel-section-content" id="style-controls-container"></div>
+          </div>
         </div>
       </aside>
 
@@ -218,9 +287,26 @@
       </div>
 
       <aside class="right-panel">
-        <div id="tool-properties-panel"></div>
-        <div id="layer-panel-wrapper">
-          <!-- レイヤーGUIがここに配置されます -->
+        <div class="panel-group" data-panel-group="right">
+          <div
+            class="panel-section"
+            data-initial-ratio="0.6"
+            data-min-height="200"
+          >
+            <div class="panel-section-content">
+              <div id="tool-properties-panel"></div>
+            </div>
+          </div>
+          <div class="panel-resizer" data-panel-group="right"></div>
+          <div
+            class="panel-section"
+            data-initial-ratio="0.4"
+            data-min-height="160"
+          >
+            <div class="panel-section-content" id="layer-panel-wrapper">
+              <!-- レイヤーGUIがここに配置されます -->
+            </div>
+          </div>
         </div>
       </aside>
     </div>
@@ -260,6 +346,7 @@
     <script src="src/ui/FileManager.js"></script>
     <script src="src/ui/ZoomPanManager.js"></script>
     <script src="src/ui/ToolPropertiesPanel.js"></script>
+    <script src="src/ui/PanelLayoutManager.js"></script>
 
     <!-- アプリケーション -->
     <script src="src/core/App.js"></script>

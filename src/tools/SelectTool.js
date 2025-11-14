@@ -12,6 +12,15 @@ class SelectTool extends BaseTool {
     this.startVector = null;
     this.startPoint = null;
     this.startAngle = 0; // 追加：初期角度
+    this.multiInitialMatrices = [];
+    this.handleOptions = {
+      resize: true,
+      rotate: true,
+      translate: true,
+    };
+    this.isMarqueeSelecting = false;
+    this.marqueeStart = null;
+    this.marqueeRect = null;
   }
 
   sanitizeColorValue(value, fallback = "#000000") {
@@ -68,12 +77,55 @@ class SelectTool extends BaseTool {
       "左クリック: オブジェクトを選択",
       "Shift/Ctrl+左クリック: 複数選択",
       "ドラッグ: 選択オブジェクトを移動",
+      "中心ハンドルドラッグ: 平行移動",
       "ハンドルをドラッグ: サイズ変更",
       "回転ハンドルをドラッグ: 回転",
+      "空白ドラッグ: 矩形選択（非選択時）",
       "Delete: 選択削除",
       "Ctrl+C/V/X: コピー/貼り付け/切り取り",
       "Ctrl+A: すべて選択",
     ];
+  }
+
+  getToolProperties() {
+    return [
+      {
+        type: "checkbox",
+        label: "リサイズハンドル",
+        checkLabel: "表示する",
+        value: this.handleOptions.resize,
+        onChange: (checked) => {
+          this.handleOptions.resize = checked;
+          this.refreshHandles();
+        },
+      },
+      {
+        type: "checkbox",
+        label: "回転ハンドル",
+        checkLabel: "表示する",
+        value: this.handleOptions.rotate,
+        onChange: (checked) => {
+          this.handleOptions.rotate = checked;
+          this.refreshHandles();
+        },
+      },
+      {
+        type: "checkbox",
+        label: "中心ハンドル",
+        checkLabel: "表示する",
+        value: this.handleOptions.translate,
+        onChange: (checked) => {
+          this.handleOptions.translate = checked;
+          this.refreshHandles();
+        },
+      },
+    ];
+  }
+
+  refreshHandles() {
+    if (this.selectedObject) {
+      this.addControlPoints();
+    }
   }
 
   activate() {
@@ -83,6 +135,12 @@ class SelectTool extends BaseTool {
 
   deactivate() {
     this.isDragging = this.isResizing = this.isRotating = false; // isRotizing → isRotating
+    this.isMarqueeSelecting = false;
+    this.marqueeStart = null;
+    if (this.marqueeRect && this.marqueeRect.parentNode) {
+      this.marqueeRect.parentNode.removeChild(this.marqueeRect);
+    }
+    this.marqueeRect = null;
     super.deactivate();
   }
 
@@ -101,6 +159,12 @@ class SelectTool extends BaseTool {
     this.selectedObject = null;
     window.selectedObject = null;
     window.selectedObjects = [];
+    this.isMarqueeSelecting = false;
+    this.marqueeStart = null;
+    if (this.marqueeRect && this.marqueeRect.parentNode) {
+      this.marqueeRect.parentNode.removeChild(this.marqueeRect);
+    }
+    this.marqueeRect = null;
 
     if (
       this.toolManager &&
@@ -216,6 +280,7 @@ class SelectTool extends BaseTool {
         !el.classList.contains("control-handle") &&
         !el.classList.contains("rotate-handle") &&
         !el.classList.contains("rotate-line") &&
+        !el.classList.contains("translate-handle") &&
         el.tagName !== "defs"
     );
 
@@ -243,6 +308,7 @@ class SelectTool extends BaseTool {
     this.isRotating = false; // isRotizing → isRotating
     this.resizeHandle = null;
     this.currentPoint = this.getSVGPoint(event);
+    this.multiInitialMatrices = [];
 
     // Shift/Ctrlキーの状態を取得
     const isMultiSelect = event.shiftKey || event.ctrlKey;
@@ -296,6 +362,22 @@ class SelectTool extends BaseTool {
       return;
     }
 
+    if (
+      event.target.classList &&
+      event.target.classList.contains("translate-handle")
+    ) {
+      if (window.selectedObjects.length > 1) {
+        this.multiInitialMatrices = window.selectedObjects.map(
+          (obj) => obj.getCTM() || new DOMMatrix()
+        );
+      } else if (this.selectedObject) {
+        this.initialMatrix = this.selectedObject.getCTM() || new DOMMatrix();
+      }
+      this.startPoint = { ...this.currentPoint };
+      this.isDragging = true;
+      return;
+    }
+
     // 回転ハンドルなら
     if (
       event.target.classList &&
@@ -332,9 +414,13 @@ class SelectTool extends BaseTool {
       }
       this.startPoint = { ...this.currentPoint };
     } else {
-      // キャンバスクリック時は複数選択でなければ選択解除
-      if (!isMultiSelect) {
+      // キャンバスクリック時は複数選択でなければ選択解除し、矩形選択を開始
+      if (!isMultiSelect && window.selectedObjects.length > 0) {
         this.deselectObject();
+      }
+
+      if (window.selectedObjects.length === 0) {
+        this.startMarqueeSelection(this.currentPoint);
       }
     }
   }
@@ -345,6 +431,11 @@ class SelectTool extends BaseTool {
 
     // 現在位置を更新
     this.currentPoint = this.getSVGPoint(event);
+
+    if (this.isMarqueeSelecting) {
+      this.updateMarqueeSelection(this.currentPoint);
+      return;
+    }
 
     if (this.isResizing) {
       this.resizeObject();
@@ -361,8 +452,14 @@ class SelectTool extends BaseTool {
   }
 
   handleMouseUp(event) {
+    if (this.isMarqueeSelecting) {
+      this.finalizeMarqueeSelection();
+      return;
+    }
+
     this.isDragging = this.isResizing = this.isRotating = false; // isRotizing → isRotating
     this.resizeHandle = null;
+    this.multiInitialMatrices = [];
     if (this.selectedObject) this.addControlPoints();
   }
 
@@ -384,7 +481,8 @@ class SelectTool extends BaseTool {
       el === this.canvas ||
       el.classList.contains("control-handle") ||
       el.classList.contains("rotate-handle") ||
-      el.classList.contains("rotate-line")
+      el.classList.contains("rotate-line") ||
+      el.classList.contains("translate-handle")
     ) {
       return;
     }
@@ -418,11 +516,11 @@ class SelectTool extends BaseTool {
       } else {
         // 新しく追加
         el.setAttribute("stroke-dasharray", "5 5");
-        window.selectedObjects.push(el);
-        this.selectedObject = el;
-        window.selectedObject = el;
-        this.addControlPoints();
-      }
+      window.selectedObjects.push(el);
+      this.selectedObject = el;
+      window.selectedObject = el;
+      this.addControlPoints();
+    }
     } else {
       // 単一選択モード（既存の選択をクリア）
       if (this.selectedObject) {
@@ -599,24 +697,26 @@ class SelectTool extends BaseTool {
     const ctm = this.selectedObject.getCTM() || new DOMMatrix();
 
     // ハンドルを追加（変換を適用）
-    handles.forEach((h) => {
-      // ローカル座標→グローバル座標に変換
-      const pt = this.canvas.createSVGPoint();
-      pt.x = h.x;
-      pt.y = h.y;
-      const transformed = pt.matrixTransform(ctm);
+    if (this.handleOptions.resize) {
+      handles.forEach((h) => {
+        // ローカル座標→グローバル座標に変換
+        const pt = this.canvas.createSVGPoint();
+        pt.x = h.x;
+        pt.y = h.y;
+        const transformed = pt.matrixTransform(ctm);
 
-      const r = document.createElementNS(this.svgNS, "rect");
-      r.setAttribute("x", transformed.x - 4);
-      r.setAttribute("y", transformed.y - 4);
-      r.setAttribute("width", 8);
-      r.setAttribute("height", 8);
-      r.setAttribute("fill", "white");
-      r.setAttribute("stroke", "black");
-      r.setAttribute("cursor", h.cursor);
-      r.classList.add("control-handle", h.cls);
-      this.canvas.appendChild(r);
-    });
+        const r = document.createElementNS(this.svgNS, "rect");
+        r.setAttribute("x", transformed.x - 4);
+        r.setAttribute("y", transformed.y - 4);
+        r.setAttribute("width", 8);
+        r.setAttribute("height", 8);
+        r.setAttribute("fill", "white");
+        r.setAttribute("stroke", "black");
+        r.setAttribute("cursor", h.cursor);
+        r.classList.add("control-handle", h.cls);
+        this.canvas.appendChild(r);
+      });
+    }
 
     // 回転中心とハンドル位置を計算（変換適用）
     const center = { x: bb.x + bb.width / 2, y: bb.y + bb.height / 2 };
@@ -646,34 +746,165 @@ class SelectTool extends BaseTool {
     };
 
     // 回転ハンドル
-    const rot = document.createElementNS(this.svgNS, "circle");
-    rot.setAttribute("cx", rotHandlePos.x);
-    rot.setAttribute("cy", rotHandlePos.y);
-    rot.setAttribute("r", 5);
-    rot.setAttribute("fill", "white");
-    rot.setAttribute("stroke", "black");
-    rot.setAttribute("cursor", "pointer");
-    rot.classList.add("rotate-handle");
-    this.canvas.appendChild(rot);
+    if (this.handleOptions.rotate) {
+      const rot = document.createElementNS(this.svgNS, "circle");
+      rot.setAttribute("cx", rotHandlePos.x);
+      rot.setAttribute("cy", rotHandlePos.y);
+      rot.setAttribute("r", 5);
+      rot.setAttribute("fill", "white");
+      rot.setAttribute("stroke", "black");
+      rot.setAttribute("cursor", "pointer");
+      rot.classList.add("rotate-handle");
+      this.canvas.appendChild(rot);
 
-    // 回転ハンドルへの線
-    const line = document.createElementNS(this.svgNS, "line");
-    line.setAttribute("x1", transformedCenter.x);
-    line.setAttribute("y1", transformedCenter.y);
-    line.setAttribute("x2", rotHandlePos.x);
-    line.setAttribute("y2", rotHandlePos.y);
-    line.setAttribute("stroke", "black");
-    line.setAttribute("stroke-dasharray", "2 2");
-    line.classList.add("rotate-line");
-    this.canvas.appendChild(line);
+      // 回転ハンドルへの線
+      const line = document.createElementNS(this.svgNS, "line");
+      line.setAttribute("x1", transformedCenter.x);
+      line.setAttribute("y1", transformedCenter.y);
+      line.setAttribute("x2", rotHandlePos.x);
+      line.setAttribute("y2", rotHandlePos.y);
+      line.setAttribute("stroke", "black");
+      line.setAttribute("stroke-dasharray", "2 2");
+      line.classList.add("rotate-line");
+      this.canvas.appendChild(line);
+    }
+
+    if (this.handleOptions.translate) {
+      const translateHandle = document.createElementNS(this.svgNS, "circle");
+      translateHandle.setAttribute("cx", transformedCenter.x);
+      translateHandle.setAttribute("cy", transformedCenter.y);
+      translateHandle.setAttribute("r", 6);
+      translateHandle.setAttribute("fill", "#ffffff");
+      translateHandle.setAttribute("stroke", "#4a90e2");
+      translateHandle.setAttribute("stroke-width", "1.5");
+      translateHandle.setAttribute("cursor", "move");
+      translateHandle.classList.add("translate-handle");
+      this.canvas.appendChild(translateHandle);
+    }
   }
 
   removeControlPoints() {
     document
-      .querySelectorAll(".control-handle, .rotate-handle, .rotate-line")
+      .querySelectorAll(
+        ".control-handle, .rotate-handle, .rotate-line, .translate-handle"
+      )
       .forEach((el) => {
         if (el.parentNode) el.parentNode.removeChild(el);
       });
+  }
+
+  startMarqueeSelection(point) {
+    this.isMarqueeSelecting = true;
+    this.marqueeStart = { ...point };
+    if (this.marqueeRect && this.marqueeRect.parentNode) {
+      this.marqueeRect.parentNode.removeChild(this.marqueeRect);
+    }
+    this.marqueeRect = document.createElementNS(this.svgNS, "rect");
+    this.marqueeRect.classList.add("marquee-selection");
+    this.marqueeRect.setAttribute("x", point.x);
+    this.marqueeRect.setAttribute("y", point.y);
+    this.marqueeRect.setAttribute("width", 0);
+    this.marqueeRect.setAttribute("height", 0);
+    this.canvas.appendChild(this.marqueeRect);
+  }
+
+  updateMarqueeSelection(point) {
+    if (!this.isMarqueeSelecting || !this.marqueeRect || !this.marqueeStart) {
+      return;
+    }
+
+    const x = Math.min(this.marqueeStart.x, point.x);
+    const y = Math.min(this.marqueeStart.y, point.y);
+    const width = Math.abs(this.marqueeStart.x - point.x);
+    const height = Math.abs(this.marqueeStart.y - point.y);
+
+    this.marqueeRect.setAttribute("x", x);
+    this.marqueeRect.setAttribute("y", y);
+    this.marqueeRect.setAttribute("width", width);
+    this.marqueeRect.setAttribute("height", height);
+  }
+
+  finalizeMarqueeSelection() {
+    if (!this.isMarqueeSelecting) {
+      return;
+    }
+
+    this.isMarqueeSelecting = false;
+
+    if (!this.marqueeRect) {
+      return;
+    }
+
+    const rect = {
+      x: parseFloat(this.marqueeRect.getAttribute("x")) || 0,
+      y: parseFloat(this.marqueeRect.getAttribute("y")) || 0,
+      width: parseFloat(this.marqueeRect.getAttribute("width")) || 0,
+      height: parseFloat(this.marqueeRect.getAttribute("height")) || 0,
+    };
+
+    if (this.marqueeRect.parentNode) {
+      this.marqueeRect.parentNode.removeChild(this.marqueeRect);
+    }
+    this.marqueeRect = null;
+    this.marqueeStart = null;
+
+    if (rect.width < 2 || rect.height < 2) {
+      return;
+    }
+
+    const objects = Array.from(this.canvas.children).filter((el) => {
+      if (
+        !el ||
+        el.classList.contains("control-handle") ||
+        el.classList.contains("rotate-handle") ||
+        el.classList.contains("rotate-line") ||
+        el.classList.contains("translate-handle") ||
+        el.classList.contains("marquee-selection") ||
+        el.tagName === "defs"
+      ) {
+        return false;
+      }
+
+      const layerId = parseInt(el.getAttribute("data-layer"));
+      if (layerId) {
+        const layers = Array.isArray(window.layers) ? window.layers : [];
+        const layer = layers.find((l) => l.id === layerId);
+        if (layer && layer.locked) {
+          return false;
+        }
+      }
+
+      const bbox = this.getBoundingBox(el);
+      if (!bbox) return false;
+
+      const withinX =
+        bbox.x >= rect.x && bbox.x + bbox.width <= rect.x + rect.width;
+      const withinY =
+        bbox.y >= rect.y && bbox.y + bbox.height <= rect.y + rect.height;
+
+      return withinX && withinY;
+    });
+
+    if (objects.length === 0) {
+      return;
+    }
+
+    const previousSelection = Array.isArray(window.selectedObjects)
+      ? window.selectedObjects
+      : [];
+    previousSelection.forEach((obj) =>
+      obj.removeAttribute("stroke-dasharray")
+    );
+
+    window.selectedObjects = [];
+    objects.forEach((obj) => {
+      obj.setAttribute("stroke-dasharray", "5 5");
+      window.selectedObjects.push(obj);
+    });
+
+    this.selectedObject = window.selectedObjects[0];
+    window.selectedObject = this.selectedObject;
+    this.addControlPoints();
   }
 
   getBoundingBox(obj) {
