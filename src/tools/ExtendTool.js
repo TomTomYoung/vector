@@ -27,19 +27,27 @@ class ExtendTool extends BaseTool {
   createExtendControls() {
     if (document.getElementById("extend-controls")) return;
 
-    const toolbar = document.querySelector(".toolbar");
+    const container =
+      document.getElementById("style-controls-container") ||
+      document.querySelector(".toolbar");
+    if (!container) {
+      return;
+    }
+
     const controls = document.createElement("div");
     controls.id = "extend-controls";
-    controls.style.display = "inline-block";
-    controls.style.marginLeft = "10px";
+    controls.className = "style-control-group";
 
-    const info = document.createElement("span");
+    const heading = document.createElement("h4");
+    heading.textContent = "延長操作";
+    controls.appendChild(heading);
+
+    const info = document.createElement("p");
+    info.className = "control-info";
     info.textContent = "境界辺を選択してEnter、その後延長する線をクリック";
-    info.style.fontSize = "12px";
-    info.style.color = "#666";
     controls.appendChild(info);
 
-    toolbar.appendChild(controls);
+    container.appendChild(controls);
   }
 
   removeExtendControls() {

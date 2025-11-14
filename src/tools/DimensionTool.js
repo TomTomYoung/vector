@@ -29,12 +29,25 @@ class DimensionTool extends BaseTool {
   }
 
   createDimensionTypeSelector() {
-    if (document.getElementById("dimension-type-selector")) return;
+    if (document.getElementById("dimension-type-controls")) return;
 
-    const toolbar = document.querySelector(".toolbar");
+    const container =
+      document.getElementById("style-controls-container") ||
+      document.querySelector(".toolbar");
+    if (!container) {
+      return;
+    }
+
+    const controls = document.createElement("div");
+    controls.id = "dimension-type-controls";
+    controls.className = "style-control-group";
+
+    const heading = document.createElement("h4");
+    heading.textContent = "寸法タイプ";
+    controls.appendChild(heading);
+
     const selector = document.createElement("select");
     selector.id = "dimension-type-selector";
-    selector.style.marginLeft = "10px";
 
     const linearOption = document.createElement("option");
     linearOption.value = "linear";
@@ -55,13 +68,16 @@ class DimensionTool extends BaseTool {
       }
     });
 
-    toolbar.appendChild(selector);
+    selector.value = this.dimensionType;
+
+    controls.appendChild(selector);
+    container.appendChild(controls);
   }
 
   removeDimensionTypeSelector() {
-    const selector = document.getElementById("dimension-type-selector");
-    if (selector) {
-      selector.remove();
+    const controls = document.getElementById("dimension-type-controls");
+    if (controls) {
+      controls.remove();
     }
   }
 

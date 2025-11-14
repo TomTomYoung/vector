@@ -7,31 +7,64 @@ class GridManager {
   }
 
   init() {
-    const toolbar = document.querySelector(".toolbar");
+    const container =
+      document.getElementById("style-controls-container") ||
+      document.querySelector(".toolbar");
 
     // グリッド関連のボタンを追加
-    this.createGridButtons(toolbar);
+    this.createGridButtons(container);
   }
 
   createGridButtons(toolbar) {
-    const gridBtn = document.createElement("button");
-    gridBtn.id = "grid-btn";
-    gridBtn.textContent = "グリッド";
-    gridBtn.addEventListener("click", this.toggleGrid);
-    toolbar.appendChild(gridBtn);
+    if (!toolbar) {
+      return;
+    }
 
-    const snapBtn = document.createElement("button");
-    snapBtn.id = "snap-btn";
-    snapBtn.textContent = "グリッドスナップ";
-    snapBtn.addEventListener("click", this.toggleSnap);
-    toolbar.appendChild(snapBtn);
+    let group = document.getElementById("grid-controls-group");
+    if (!group) {
+      group = document.createElement("div");
+      group.id = "grid-controls-group";
+      group.className = "style-control-group";
 
-    const orthoBtn = document.createElement("button");
-    orthoBtn.id = "ortho-btn";
-    orthoBtn.textContent = "直交モード";
-    orthoBtn.title = "水平・垂直線に拘束 (F8)";
-    orthoBtn.addEventListener("click", this.toggleOrtho);
-    toolbar.appendChild(orthoBtn);
+      const heading = document.createElement("h4");
+      heading.textContent = "表示・補助";
+      group.appendChild(heading);
+
+      const stack = document.createElement("div");
+      stack.className = "button-stack";
+      stack.id = "grid-button-stack";
+      group.appendChild(stack);
+
+      toolbar.appendChild(group);
+    }
+
+    const stack =
+      document.getElementById("grid-button-stack") || group || toolbar;
+
+    if (!document.getElementById("grid-btn")) {
+      const gridBtn = document.createElement("button");
+      gridBtn.id = "grid-btn";
+      gridBtn.textContent = "グリッド";
+      gridBtn.addEventListener("click", this.toggleGrid);
+      stack.appendChild(gridBtn);
+    }
+
+    if (!document.getElementById("snap-btn")) {
+      const snapBtn = document.createElement("button");
+      snapBtn.id = "snap-btn";
+      snapBtn.textContent = "グリッドスナップ";
+      snapBtn.addEventListener("click", this.toggleSnap);
+      stack.appendChild(snapBtn);
+    }
+
+    if (!document.getElementById("ortho-btn")) {
+      const orthoBtn = document.createElement("button");
+      orthoBtn.id = "ortho-btn";
+      orthoBtn.textContent = "直交モード";
+      orthoBtn.title = "水平・垂直線に拘束 (F8)";
+      orthoBtn.addEventListener("click", this.toggleOrtho);
+      stack.appendChild(orthoBtn);
+    }
   }
 
   // グリッド表示の切り替え

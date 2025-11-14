@@ -36,31 +36,69 @@ class ZoomPanManager {
   }
 
   createZoomButtons() {
-    const toolbar = document.querySelector(".toolbar");
+    const toolbar =
+      document.getElementById("style-controls-container") ||
+      document.querySelector(".toolbar");
 
-    // ズームインボタン
-    const zoomInBtn = document.createElement("button");
-    zoomInBtn.textContent = "ズーム +";
-    zoomInBtn.addEventListener("click", () => this.zoomIn());
-    toolbar.appendChild(zoomInBtn);
+    if (!toolbar) {
+      return;
+    }
 
-    // ズームアウトボタン
-    const zoomOutBtn = document.createElement("button");
-    zoomOutBtn.textContent = "ズーム -";
-    zoomOutBtn.addEventListener("click", () => this.zoomOut());
-    toolbar.appendChild(zoomOutBtn);
+    let group = document.getElementById("zoom-controls-group");
+    if (!group) {
+      group = document.createElement("div");
+      group.id = "zoom-controls-group";
+      group.className = "style-control-group";
 
-    // ズームリセットボタン
-    const zoomResetBtn = document.createElement("button");
-    zoomResetBtn.textContent = "100%";
-    zoomResetBtn.addEventListener("click", () => this.resetZoom());
-    toolbar.appendChild(zoomResetBtn);
+      const heading = document.createElement("h4");
+      heading.textContent = "ズーム・ビュー";
+      group.appendChild(heading);
 
-    // ズーム表示
-    this.zoomDisplay = document.createElement("span");
-    this.zoomDisplay.textContent = " 100%";
-    this.zoomDisplay.style.marginLeft = "10px";
-    toolbar.appendChild(this.zoomDisplay);
+      const stack = document.createElement("div");
+      stack.className = "button-stack";
+      stack.id = "zoom-button-stack";
+      group.appendChild(stack);
+
+      const status = document.createElement("div");
+      status.className = "zoom-status";
+      status.id = "zoom-status";
+      status.textContent = "表示倍率: 100%";
+      group.appendChild(status);
+
+      toolbar.appendChild(group);
+    }
+
+    const stack =
+      document.getElementById("zoom-button-stack") || group || toolbar;
+
+    if (!document.getElementById("zoom-in-btn")) {
+      const zoomInBtn = document.createElement("button");
+      zoomInBtn.id = "zoom-in-btn";
+      zoomInBtn.textContent = "ズーム +";
+      zoomInBtn.addEventListener("click", () => this.zoomIn());
+      stack.appendChild(zoomInBtn);
+    }
+
+    if (!document.getElementById("zoom-out-btn")) {
+      const zoomOutBtn = document.createElement("button");
+      zoomOutBtn.id = "zoom-out-btn";
+      zoomOutBtn.textContent = "ズーム -";
+      zoomOutBtn.addEventListener("click", () => this.zoomOut());
+      stack.appendChild(zoomOutBtn);
+    }
+
+    if (!document.getElementById("zoom-reset-btn")) {
+      const zoomResetBtn = document.createElement("button");
+      zoomResetBtn.id = "zoom-reset-btn";
+      zoomResetBtn.textContent = "100%";
+      zoomResetBtn.addEventListener("click", () => this.resetZoom());
+      stack.appendChild(zoomResetBtn);
+    }
+
+    const status = document.getElementById("zoom-status");
+    if (status) {
+      this.zoomDisplay = status;
+    }
   }
 
   handleWheel(event) {
@@ -165,7 +203,9 @@ class ZoomPanManager {
 
     // ズーム表示を更新
     if (this.zoomDisplay) {
-      this.zoomDisplay.textContent = ` ${Math.round(this.zoom * 100)}%`;
+      this.zoomDisplay.textContent = `表示倍率: ${Math.round(
+        this.zoom * 100
+      )}%`;
     }
   }
 

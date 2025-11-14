@@ -39,6 +39,35 @@ class PathTool extends BaseTool {
 
   // パスモード切替ボタンを作成
   createModeButton() {
+    const container =
+      document.getElementById("style-controls-container") ||
+      document.querySelector(".toolbar");
+    if (!container) {
+      return;
+    }
+
+    let group = document.getElementById("path-mode-controls");
+    if (!group) {
+      group = document.createElement("div");
+      group.id = "path-mode-controls";
+      group.className = "style-control-group";
+
+      const heading = document.createElement("h4");
+      heading.textContent = "パスモード";
+      group.appendChild(heading);
+
+      const stack = document.createElement("div");
+      stack.className = "button-stack";
+      stack.id = "path-mode-stack";
+      group.appendChild(stack);
+
+      container.appendChild(group);
+    }
+
+    if (document.getElementById("path-mode-btn")) {
+      return;
+    }
+
     const pathModeBtn = document.createElement("button");
     pathModeBtn.id = "path-mode-btn";
     pathModeBtn.textContent = "ベジェモード";
@@ -53,14 +82,8 @@ class PathTool extends BaseTool {
       }
     });
 
-    // ツールバーに追加
-    const toolbar = document.querySelector(".toolbar");
-    const deleteBtn = document.getElementById("delete-btn");
-    if (deleteBtn) {
-      toolbar.insertBefore(pathModeBtn, deleteBtn);
-    } else {
-      toolbar.appendChild(pathModeBtn);
-    }
+    const stack = document.getElementById("path-mode-stack") || group;
+    stack.appendChild(pathModeBtn);
   }
 
   handleMouseDown(event) {

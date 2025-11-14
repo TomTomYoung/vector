@@ -25,19 +25,27 @@ class JoinTool extends BaseTool {
   createJoinControls() {
     if (document.getElementById("join-controls")) return;
 
-    const toolbar = document.querySelector(".toolbar");
+    const container =
+      document.getElementById("style-controls-container") ||
+      document.querySelector(".toolbar");
+    if (!container) {
+      return;
+    }
+
     const controls = document.createElement("div");
     controls.id = "join-controls";
-    controls.style.display = "inline-block";
-    controls.style.marginLeft = "10px";
+    controls.className = "style-control-group";
 
-    const info = document.createElement("span");
+    const heading = document.createElement("h4");
+    heading.textContent = "結合操作";
+    controls.appendChild(heading);
+
+    const info = document.createElement("p");
+    info.className = "control-info";
     info.textContent = "線を選択 (Enterで結合、Escでクリア)";
-    info.style.fontSize = "12px";
-    info.style.color = "#666";
     controls.appendChild(info);
 
-    toolbar.appendChild(controls);
+    container.appendChild(controls);
   }
 
   removeJoinControls() {
@@ -100,7 +108,7 @@ class JoinTool extends BaseTool {
   }
 
   updateInfo() {
-    const info = document.querySelector("#join-controls span");
+    const info = document.querySelector("#join-controls .control-info");
     if (info) {
       info.textContent = `線を選択 (${this.selectedElements.length}個選択中、Enterで結合、Escでクリア)`;
     }
