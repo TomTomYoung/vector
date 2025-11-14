@@ -140,6 +140,10 @@ class LineTool extends BaseTool {
     // 状態を保存
     this.saveState();
 
+    if (this.autoSelectAfterDraw && finishedLine && window.selectTool) {
+      window.selectTool.selectObject(finishedLine);
+    }
+
     // 線を確定（既にキャンバスに追加されている）
     this.currentLine = null;
     this.startPoint = null;
