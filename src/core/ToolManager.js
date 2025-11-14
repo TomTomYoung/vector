@@ -10,6 +10,7 @@ class ToolManager {
     this.temporaryToolContext = null;
     this._suspendTemporaryClear = false;
     this.toolbar = document.querySelector(".toolbar");
+    this.toolButtonsContainer = document.getElementById("tool-buttons-scroll");
 
     // イベントリスナー
     this.canvas.addEventListener("mousedown", this.handleMouseDown.bind(this));
@@ -36,12 +37,8 @@ class ToolManager {
     button.addEventListener("click", () => this.activateTool(name));
 
     // ボタンの位置を指定（オプション）
-    const deleteBtn = document.getElementById("delete-btn");
-    if (deleteBtn) {
-      this.toolbar.insertBefore(button, deleteBtn);
-    } else {
-      this.toolbar.appendChild(button);
-    }
+    const container = this.toolButtonsContainer || this.toolbar;
+    container.appendChild(button);
 
     return button;
   }
@@ -136,7 +133,8 @@ class ToolManager {
 
   // ツールボタンの見た目を更新
   updateToolButtons() {
-    document.querySelectorAll(".toolbar button").forEach((btn) => {
+    const container = this.toolButtonsContainer || this.toolbar;
+    container.querySelectorAll("button").forEach((btn) => {
       btn.style.backgroundColor = "";
     });
 

@@ -24,24 +24,16 @@ class ToolPropertiesPanel {
   }
 
   createPanel() {
-    // パネルコンテナ
-    this.panel = document.createElement("div");
-    this.panel.id = "tool-properties-panel";
-    this.panel.style.cssText = `
-      position: fixed;
-      right: 0;
-      top: 60px;
-      width: 280px;
-      height: calc(100vh - 60px);
-      background: #f5f5f5;
-      border-left: 1px solid #ccc;
-      padding: 15px;
-      overflow-y: auto;
-      font-family: Arial, sans-serif;
-      box-shadow: -2px 0 5px rgba(0,0,0,0.1);
-    `;
-
-    document.body.appendChild(this.panel);
+    // 既存のパネルコンテナを取得
+    const panelContainer = document.getElementById("tool-properties-panel");
+    if (panelContainer) {
+      this.panel = panelContainer;
+      this.panel.innerHTML = "";
+    } else {
+      this.panel = document.createElement("div");
+      this.panel.id = "tool-properties-panel";
+      document.body.appendChild(this.panel);
+    }
   }
 
   setupToolChangeListener() {
