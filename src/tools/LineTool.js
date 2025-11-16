@@ -23,6 +23,9 @@ class LineTool extends BaseTool {
     this.lineIdCounter = 1;
     this.geometryStyles = this.createGeometryStyles();
     this.selectionInteractionInProgress = false;
+    this.selectedLineObserver = null;
+    this.selectedLineObserverTarget = null;
+    this.selectedLineMutationHandle = null;
   }
 
   getTitle() {
@@ -102,6 +105,7 @@ class LineTool extends BaseTool {
   deactivate() {
     super.deactivate();
     this.resetDrawingState();
+    this.disconnectSelectedLineObserver();
   }
 
   handleMouseDown(event) {
@@ -211,6 +215,9 @@ class LineTool extends BaseTool {
     if (lineId) {
       this.selectedLineId = lineId;
       this.requestToolPanelRefresh();
+      if (this.autoSelectAfterDraw && finishedLine) {
+        this.observeSelectedLine(finishedLine);
+      }
     }
 
     if (this.autoSelectAfterDraw && finishedLine && window.selectTool) {
@@ -868,6 +875,7 @@ class LineTool extends BaseTool {
     if (!line) {
       this.selectedLineId = null;
       this.selectionInteractionInProgress = false;
+      this.disconnectSelectedLineObserver();
       this.requestToolPanelRefresh();
       return;
     }
@@ -880,6 +888,7 @@ class LineTool extends BaseTool {
       window.selectTool.selectObject(line, false);
     }
 
+    this.observeSelectedLine(line);
     this.requestToolPanelRefresh();
   }
 
@@ -1093,6 +1102,101 @@ class LineTool extends BaseTool {
       ? window.selectedObjects
       : [];
     return selections.includes(line);
+  }
+
+  observeSelectedLine(line) {
+    if (!window.MutationObserver || !line) {
+      this.disconnectSelectedLineObserver();
+      return;
+    }
+
+    if (this.selectedLineObserverTarget === line) {
+      return;
+    }
+
+    this.disconnectSelectedLineObserver();
+
+    this.selectedLineObserverTarget = line;
+    this.selectedLineObserver = new MutationObserver((mutations) => {
+      this.handleSelectedLineMutations(line, mutations);
+    });
+
+    this.selectedLineObserver.observe(line, {
+      attributes: true,
+      attributeFilter: [
+        "x1",
+        "y1",
+        "x2",
+        "y2",
+        "transform",
+        "stroke",
+        "stroke-width",
+        "stroke-dasharray",
+        "opacity",
+      ],
+    });
+  }
+
+  handleSelectedLineMutations(line, mutations) {
+    if (!mutations || line !== this.getSelectedLineElement()) {
+      return;
+    }
+
+    const hasAttributeChange = mutations.some(
+      (mutation) => mutation.type === "attributes"
+    );
+
+    if (!hasAttributeChange) {
+      return;
+    }
+
+    this.scheduleSelectedLineSync();
+  }
+
+  scheduleSelectedLineSync() {
+    const requestFrame =
+      window.requestAnimationFrame || window.setTimeout || ((cb) => cb());
+    const cancelFrame =
+      window.cancelAnimationFrame || window.clearTimeout || (() => {});
+
+    if (this.selectedLineMutationHandle) {
+      cancelFrame(this.selectedLineMutationHandle);
+      this.selectedLineMutationHandle = null;
+    }
+
+    this.selectedLineMutationHandle = requestFrame(() => {
+      this.selectedLineMutationHandle = null;
+      this.syncSelectedLineUiState();
+    });
+  }
+
+  syncSelectedLineUiState() {
+    const line = this.getSelectedLineElement();
+    if (!line) {
+      this.disconnectSelectedLineObserver();
+      return;
+    }
+
+    this.initializeLineMetadata(line);
+    this.updateSelectionStyleInputs(line);
+    this.requestToolPanelRefresh();
+  }
+
+  disconnectSelectedLineObserver() {
+    const cancelFrame =
+      window.cancelAnimationFrame || window.clearTimeout || (() => {});
+
+    if (this.selectedLineObserver) {
+      this.selectedLineObserver.disconnect();
+      this.selectedLineObserver = null;
+    }
+
+    if (this.selectedLineMutationHandle) {
+      cancelFrame(this.selectedLineMutationHandle);
+      this.selectedLineMutationHandle = null;
+    }
+
+    this.selectedLineObserverTarget = null;
   }
 
   tryBeginSelectionDelegation(event) {
