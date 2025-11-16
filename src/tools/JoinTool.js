@@ -19,16 +19,41 @@ class JoinTool extends BaseTool {
     return "結合";
   }
 
+  getInstructions() {
+    const count = this.selectedElements.length;
+    const instructions = [
+      "左クリック: 線またはポリラインを選択/解除",
+      "Enter: 選択した要素をつないで1本のポリラインにする",
+      "Esc: 選択をすべてクリア",
+    ];
+
+    if (count === 0) {
+      instructions.unshift("結合したい線を2本以上選択");
+    } else {
+      instructions.unshift(`現在${count}本選択中`);
+    }
+
+    return instructions;
+  }
+
+  updatePanel() {
+    if (window.toolPropertiesPanel) {
+      window.toolPropertiesPanel.updatePanel();
+    }
+  }
+
   activate() {
     super.activate();
     this.canvas.style.cursor = "crosshair";
     this.createJoinControls();
+    this.updatePanel();
   }
 
   deactivate() {
     super.deactivate();
     this.removeJoinControls();
     this.clearSelection();
+    this.updatePanel();
   }
 
   createJoinControls() {
@@ -90,6 +115,7 @@ class JoinTool extends BaseTool {
     element.setAttribute("stroke-width", "2");
 
     this.updateInfo();
+    this.updatePanel();
   }
 
   deselectElement(element) {
@@ -102,6 +128,7 @@ class JoinTool extends BaseTool {
     }
 
     this.updateInfo();
+    this.updatePanel();
   }
 
   clearSelection() {
@@ -114,6 +141,7 @@ class JoinTool extends BaseTool {
     });
     this.selectedElements = [];
     this.updateInfo();
+    this.updatePanel();
   }
 
   updateInfo() {
@@ -164,6 +192,7 @@ class JoinTool extends BaseTool {
 
     this.canvas.appendChild(polyline);
     this.clearSelection();
+    this.updatePanel();
   }
 
   elementToPoints(element) {
@@ -254,6 +283,7 @@ class JoinTool extends BaseTool {
 
     if (event.key === "Escape") {
       this.clearSelection();
+      this.updatePanel();
     }
   }
 }

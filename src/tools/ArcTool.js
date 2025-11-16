@@ -22,9 +22,38 @@ class ArcTool extends BaseTool {
     return "円弧";
   }
 
+  getInstructions() {
+    const stepPrompts = [
+      "左クリック: 円弧の始点を指定",
+      "左クリック: 円弧が通過する2点目を指定",
+      "左クリック: 円弧の終点を指定して確定",
+    ];
+
+    const instructions = ["3点を順番にクリックして円弧を作成"];
+    instructions.push(stepPrompts[Math.min(this.points.length, 2)]);
+
+    if (this.points.length === 1) {
+      instructions.push("マウス移動: 半径プレビューを確認");
+    }
+    if (this.points.length === 2) {
+      instructions.push("マウス移動: 3点目に応じた円弧をプレビュー");
+    }
+
+    instructions.push("Esc: 入力中の円弧をキャンセル");
+
+    return instructions;
+  }
+
+  updatePanel() {
+    if (window.toolPropertiesPanel) {
+      window.toolPropertiesPanel.updatePanel();
+    }
+  }
+
   activate() {
     super.activate();
     this.canvas.style.cursor = "crosshair";
+    this.updatePanel();
   }
 
   deactivate() {
@@ -42,6 +71,7 @@ class ArcTool extends BaseTool {
       this.previewCircle = null;
     }
     this.points = [];
+    this.updatePanel();
   }
 
   handleMouseDown(event) {
@@ -61,6 +91,8 @@ class ArcTool extends BaseTool {
       this.points.push(point);
       this.finishArc();
     }
+
+    this.updatePanel();
   }
 
   handleMouseMove(event) {
@@ -147,6 +179,8 @@ class ArcTool extends BaseTool {
       this.canvas.removeChild(this.previewCircle);
       this.previewCircle = null;
     }
+
+    this.updatePanel();
   }
 
   calculateArc(p1, p2, p3) {
@@ -215,6 +249,12 @@ class ArcTool extends BaseTool {
   handleKeyDown(event) {
     // Escapeキーでキャンセル
     if (event.key === "Escape") {
+      this.cancelArc();
+    }
+  }
+
+  handleKeyDown(event) {
+    if (event.key === "Escape" && this.points.length > 0) {
       this.cancelArc();
     }
   }

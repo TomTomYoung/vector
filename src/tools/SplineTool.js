@@ -20,14 +20,41 @@ class SplineTool extends BaseTool {
     return "スプライン";
   }
 
+  getInstructions() {
+    if (!this.isDrawing || this.points.length === 0) {
+      return [
+        "左クリック: スプラインの制御点を追加",
+        "点を2つ以上置いたらマウス移動でプレビュー",
+        "Enterまたはダブルクリック: スプラインを確定",
+        "Esc: 描画中のスプラインをキャンセル",
+      ];
+    }
+
+    return [
+      `現在の制御点数: ${this.points.length}`,
+      "マウス移動: 次の制御点位置をプレビュー",
+      "左クリック: 制御点を追加",
+      "Enterまたはダブルクリック: スプラインを確定",
+      "Esc: 描画中のスプラインをキャンセル",
+    ];
+  }
+
+  updatePanel() {
+    if (window.toolPropertiesPanel) {
+      window.toolPropertiesPanel.updatePanel();
+    }
+  }
+
   activate() {
     super.activate();
     this.canvas.style.cursor = "crosshair";
+    this.updatePanel();
   }
 
   deactivate() {
     super.deactivate();
     this.finishSpline();
+    this.updatePanel();
   }
 
   handleMouseDown(event) {
@@ -40,6 +67,7 @@ class SplineTool extends BaseTool {
 
     this.points.push(point);
     this.updateSpline();
+    this.updatePanel();
   }
 
   handleMouseMove(event) {
@@ -55,6 +83,7 @@ class SplineTool extends BaseTool {
     // ダブルクリックで完成
     event.preventDefault();
     this.finishSpline();
+    this.updatePanel();
   }
 
   updatePreview(previewPoint) {
@@ -124,6 +153,8 @@ class SplineTool extends BaseTool {
     this.points = [];
     this.currentSpline = null;
     this.isDrawing = false;
+
+    this.updatePanel();
   }
 
   generateSplinePath(points) {
@@ -166,11 +197,13 @@ class SplineTool extends BaseTool {
       this.points = [];
       this.currentSpline = null;
       this.isDrawing = false;
+      this.updatePanel();
     }
 
     // Enterキーで完成
     if (event.key === "Enter" && this.isDrawing) {
       this.finishSpline();
+      this.updatePanel();
     }
   }
 }

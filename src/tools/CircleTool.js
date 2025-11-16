@@ -18,9 +18,33 @@ class CircleTool extends BaseTool {
     return "円";
   }
 
+  getInstructions() {
+    if (!this.isDrawing) {
+      return [
+        "左クリック: 円の中心を指定",
+        "そのままドラッグして半径を調整",
+        "マウスボタンを離す: 円を確定",
+        "Esc: 描画をリセット",
+      ];
+    }
+
+    return [
+      "マウス移動: 半径を調整",
+      "マウスボタンを離す: 円を確定",
+      "Esc: 描画中の円をキャンセル",
+    ];
+  }
+
+  updatePanel() {
+    if (window.toolPropertiesPanel) {
+      window.toolPropertiesPanel.updatePanel();
+    }
+  }
+
   activate() {
     super.activate();
     this.canvas.style.cursor = "crosshair";
+    this.updatePanel();
   }
 
   handleMouseDown(event) {
@@ -45,6 +69,8 @@ class CircleTool extends BaseTool {
     this.applyDefaultAttributes(this.drawingObject);
 
     this.canvas.appendChild(this.drawingObject);
+
+    this.updatePanel();
   }
 
   handleMouseMove(event) {
@@ -73,6 +99,19 @@ class CircleTool extends BaseTool {
 
     this.isDrawing = false;
     this.drawingObject = null;
+
+    this.updatePanel();
+  }
+
+  handleKeyDown(event) {
+    if (event.key === "Escape" && this.isDrawing) {
+      if (this.drawingObject) {
+        this.canvas.removeChild(this.drawingObject);
+      }
+      this.isDrawing = false;
+      this.drawingObject = null;
+      this.updatePanel();
+    }
   }
 }
 

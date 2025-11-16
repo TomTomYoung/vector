@@ -19,10 +19,36 @@ class ExtendTool extends BaseTool {
     return "延長";
   }
 
+  getInstructions() {
+    if (this.mode === "select") {
+      const base = ["左クリック: 境界となる線・ポリライン・パスを選択"];
+      if (this.boundaryEdges.length > 0) {
+        base.push("Enter: 選択した境界で延長モードに切り替え");
+        base.push("再クリック: 境界選択を解除");
+      } else {
+        base.push("複数の境界を選択可能 (クリックで追加)");
+      }
+      base.push("Esc: 選択を全てクリア");
+      return base;
+    }
+
+    return [
+      "左クリック: 境界まで延長したい線分を選択",
+      "Esc: 境界選択に戻ってやり直し",
+    ];
+  }
+
+  updatePanel() {
+    if (window.toolPropertiesPanel) {
+      window.toolPropertiesPanel.updatePanel();
+    }
+  }
+
   activate() {
     super.activate();
     this.canvas.style.cursor = "crosshair";
     this.createExtendControls();
+    this.updatePanel();
   }
 
   deactivate() {
@@ -30,6 +56,7 @@ class ExtendTool extends BaseTool {
     this.removeExtendControls();
     this.clearBoundaryEdges();
     this.mode = "select";
+    this.updatePanel();
   }
 
   createExtendControls() {
@@ -99,6 +126,8 @@ class ExtendTool extends BaseTool {
     element.setAttribute("data-original-stroke", originalStroke);
     element.setAttribute("stroke", "#00ff00");
     element.setAttribute("stroke-width", "2");
+
+    this.updatePanel();
   }
 
   removeBoundaryEdge(element) {
@@ -113,6 +142,8 @@ class ExtendTool extends BaseTool {
       element.removeAttribute("data-boundary-edge");
       element.removeAttribute("data-original-stroke");
     }
+
+    this.updatePanel();
   }
 
   clearBoundaryEdges() {
@@ -120,6 +151,8 @@ class ExtendTool extends BaseTool {
       this.removeBoundaryEdge(edge);
     });
     this.boundaryEdges = [];
+
+    this.updatePanel();
   }
 
   extendElement(element) {
@@ -244,6 +277,7 @@ class ExtendTool extends BaseTool {
         if (info) {
           info.textContent = "延長する線をクリック (Escでリセット)";
         }
+        this.updatePanel();
       }
     }
 
@@ -254,6 +288,7 @@ class ExtendTool extends BaseTool {
       if (info) {
         info.textContent = "境界辺を選択してEnter、その後延長する線をクリック";
       }
+      this.updatePanel();
     }
   }
 }

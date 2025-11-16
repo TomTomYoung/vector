@@ -22,14 +22,43 @@ class PolylineTool extends BaseTool {
     return "ポリライン";
   }
 
+  getInstructions() {
+    if (!this.isDrawing || this.points.length === 0) {
+      return [
+        "左クリック: 始点を配置",
+        "続けてクリック: 頂点を追加",
+        "Enterまたはダブルクリック: ポリラインを確定",
+        "Esc: 作成中のポリラインをキャンセル",
+        "Backspace: 最後の頂点を削除",
+      ];
+    }
+
+    return [
+      `現在の頂点数: ${this.points.length}`,
+      "マウス移動: 次の辺をプレビュー",
+      "左クリック: 頂点を追加",
+      "Enterまたはダブルクリック: ポリラインを確定",
+      "Esc: 作成中のポリラインをキャンセル",
+      "Backspace: 最後の頂点を削除",
+    ];
+  }
+
+  updatePanel() {
+    if (window.toolPropertiesPanel) {
+      window.toolPropertiesPanel.updatePanel();
+    }
+  }
+
   activate() {
     super.activate();
     this.canvas.style.cursor = "crosshair";
+    this.updatePanel();
   }
 
   deactivate() {
     super.deactivate();
     this.finishPolyline();
+    this.updatePanel();
   }
 
   handleMouseDown(event) {
@@ -46,6 +75,8 @@ class PolylineTool extends BaseTool {
       this.points.push(point);
       this.updatePolyline();
     }
+
+    this.updatePanel();
   }
 
   handleMouseMove(event) {
@@ -65,6 +96,8 @@ class PolylineTool extends BaseTool {
       this.points.pop();
       this.finishPolyline();
     }
+
+    this.updatePanel();
   }
 
   createPolyline() {
@@ -141,6 +174,8 @@ class PolylineTool extends BaseTool {
     this.points = [];
     this.currentPolyline = null;
     this.isDrawing = false;
+
+    this.updatePanel();
   }
 
   handleKeyDown(event) {
@@ -156,11 +191,13 @@ class PolylineTool extends BaseTool {
       this.points = [];
       this.currentPolyline = null;
       this.isDrawing = false;
+      this.updatePanel();
     }
 
     // Enterキーで完成
     if (event.key === "Enter" && this.isDrawing) {
       this.finishPolyline();
+      this.updatePanel();
     }
 
     // Backspaceで最後の点を削除
@@ -168,6 +205,7 @@ class PolylineTool extends BaseTool {
       event.preventDefault();
       this.points.pop();
       this.updatePolyline();
+      this.updatePanel();
     }
   }
 }
