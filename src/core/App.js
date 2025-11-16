@@ -115,6 +115,10 @@ class App {
     const polylineTool = new PolylineTool(canvas, this.toolManager);
     this.toolManager.registerTool("polyline", polylineTool);
 
+    const verticesTool = new VerticesTool(canvas, this.toolManager);
+    this.toolManager.registerTool("vertices", verticesTool);
+    window.verticesTool = verticesTool;
+
     const textTool = new TextTool(canvas, this.toolManager);
     this.toolManager.registerTool("text", textTool);
 
