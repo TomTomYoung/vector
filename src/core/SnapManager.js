@@ -1,5 +1,14 @@
 // SnapManager.js
 // スナップ機能を管理（端点、中点、交点、グリッド）
+//
+// 【依存関係】
+// - GeometryUtils (window.GeometryUtils): 幾何計算ユーティリティ
+// - CoordinatesUtils (window.CoordinatesUtils): 座標変換ユーティリティ
+//
+// 【使用する外部関数】
+// - GeometryUtils.distance(p1, p2): 2点間の距離
+// - GeometryUtils.lineIntersection(line1, line2): 線分交点
+// - GeometryUtils.midpoint(p1, p2): 中点計算
 
 class SnapManager {
   constructor() {
@@ -219,7 +228,7 @@ class SnapManager {
     for (const el of elements) {
       const endpoints = this.getEndpoints(el);
       for (const ep of endpoints) {
-        const dist = this.distance(point, ep);
+        const dist = window.GeometryUtils.distance(point, ep);
         if (dist < minDist) {
           minDist = dist;
           closestPoint = ep;
@@ -250,7 +259,7 @@ class SnapManager {
     for (const el of elements) {
       const midpoints = this.getMidpoints(el);
       for (const mp of midpoints) {
-        const dist = this.distance(point, mp);
+        const dist = window.GeometryUtils.distance(point, mp);
         if (dist < minDist) {
           minDist = dist;
           closestPoint = mp;
@@ -266,11 +275,9 @@ class SnapManager {
   // グリッドスナップ
   snapToGrid(point, tolerance) {
     const gridSize = window.gridSize || 20;
-    const snappedX = Math.round(point.x / gridSize) * gridSize;
-    const snappedY = Math.round(point.y / gridSize) * gridSize;
-    const snappedPoint = { x: snappedX, y: snappedY };
+    const snappedPoint = window.CoordinatesUtils.snapToGrid(point, gridSize);
 
-    const dist = this.distance(point, snappedPoint);
+    const dist = window.GeometryUtils.distance(point, snappedPoint);
     if (dist < tolerance) {
       return { point: snappedPoint, distance: dist };
     }
@@ -297,7 +304,7 @@ class SnapManager {
       for (let j = i + 1; j < elements.length; j++) {
         const intersections = this.getIntersections(elements[i], elements[j]);
         for (const ip of intersections) {
-          const dist = this.distance(point, ip);
+          const dist = window.GeometryUtils.distance(point, ip);
           if (dist < minDist) {
             minDist = dist;
             closestPoint = ip;
@@ -334,7 +341,9 @@ class SnapManager {
         y: parseFloat(el2.getAttribute("y2")),
       };
 
-      const intersection = this.lineLineIntersection(p1, p2, p3, p4);
+      const line1 = { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y };
+      const line2 = { x1: p3.x, y1: p3.y, x2: p4.x, y2: p4.y };
+      const intersection = window.GeometryUtils.lineIntersection(line1, line2);
       if (intersection) intersections.push(intersection);
     }
 
@@ -359,12 +368,15 @@ class SnapManager {
 
       for (let i = 0; i < points1.length - 1; i++) {
         for (let j = 0; j < points2.length - 1; j++) {
-          const intersection = this.lineLineIntersection(
-            points1[i],
-            points1[i + 1],
-            points2[j],
-            points2[j + 1]
-          );
+          const line1 = {
+            x1: points1[i].x, y1: points1[i].y,
+            x2: points1[i + 1].x, y2: points1[i + 1].y
+          };
+          const line2 = {
+            x1: points2[j].x, y1: points2[j].y,
+            x2: points2[j + 1].x, y2: points2[j + 1].y
+          };
+          const intersection = window.GeometryUtils.lineIntersection(line1, line2);
           if (intersection) intersections.push(intersection);
         }
       }
@@ -390,12 +402,12 @@ class SnapManager {
         });
 
       for (let i = 0; i < points2.length - 1; i++) {
-        const intersection = this.lineLineIntersection(
-          p1,
-          p2,
-          points2[i],
-          points2[i + 1]
-        );
+        const line1 = { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y };
+        const line2 = {
+          x1: points2[i].x, y1: points2[i].y,
+          x2: points2[i + 1].x, y2: points2[i + 1].y
+        };
+        const intersection = window.GeometryUtils.lineIntersection(line1, line2);
         if (intersection) intersections.push(intersection);
       }
     }
@@ -405,34 +417,6 @@ class SnapManager {
     }
 
     return intersections;
-  }
-
-  // 2直線の交点を計算
-  lineLineIntersection(p1, p2, p3, p4) {
-    const x1 = p1.x,
-      y1 = p1.y;
-    const x2 = p2.x,
-      y2 = p2.y;
-    const x3 = p3.x,
-      y3 = p3.y;
-    const x4 = p4.x,
-      y4 = p4.y;
-
-    const denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
-    if (Math.abs(denom) < 0.0001) return null; // 平行
-
-    const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom;
-    const u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / denom;
-
-    // 線分の範囲内にある交点のみ
-    if (t >= 0 && t <= 1 && u >= 0 && u <= 1) {
-      return {
-        x: x1 + t * (x2 - x1),
-        y: y1 + t * (y2 - y1),
-      };
-    }
-
-    return null;
   }
 
   // 要素の端点を取得
@@ -498,7 +482,11 @@ class SnapManager {
         const y1 = parseFloat(element.getAttribute("y1"));
         const x2 = parseFloat(element.getAttribute("x2"));
         const y2 = parseFloat(element.getAttribute("y2"));
-        points.push({ x: (x1 + x2) / 2, y: (y1 + y2) / 2 });
+        const mid = window.GeometryUtils.midpoint(
+          { x: x1, y: y1 },
+          { x: x2, y: y2 }
+        );
+        points.push(mid);
         break;
 
       case "rect":
@@ -569,12 +557,6 @@ class SnapManager {
     }
   }
 
-  distance(p1, p2) {
-    const dx = p2.x - p1.x;
-    const dy = p2.y - p1.y;
-    return Math.sqrt(dx * dx + dy * dy);
-  }
-
   // 接線スナップ（円への接線）
   snapToTangent(point, tolerance, excludeElement) {
     const elements = Array.from(this.canvas.children).filter(
@@ -622,8 +604,8 @@ class SnapManager {
             y: cy + r * Math.sin(angle2),
           };
 
-          const dist1 = this.distance(point, tp1);
-          const dist2 = this.distance(point, tp2);
+          const dist1 = window.GeometryUtils.distance(point, tp1);
+          const dist2 = window.GeometryUtils.distance(point, tp2);
 
           if (dist1 < minDist) {
             minDist = dist1;
@@ -639,7 +621,7 @@ class SnapManager {
             x: cx + (r * dx) / dist,
             y: cy + (r * dy) / dist,
           };
-          const distToNearest = this.distance(point, nearestOnCircle);
+          const distToNearest = window.GeometryUtils.distance(point, nearestOnCircle);
           if (distToNearest < minDist) {
             minDist = distToNearest;
             closestPoint = nearestOnCircle;

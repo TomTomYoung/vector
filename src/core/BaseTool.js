@@ -1,5 +1,14 @@
 // BaseTool.js
 // 全ツールの基底クラス
+//
+// 【依存関係】
+// - StyleUtils (window.StyleUtils): スタイル管理ユーティリティ（推奨）
+// - SvgUtils (window.SvgUtils): SVG要素操作ユーティリティ（推奨）
+//
+// 【使用する外部関数】
+// - StyleUtils.applyStyle(element, style): 要素にスタイル適用（推奨）
+// - SvgUtils.createElement(tagName, attributes): SVG要素作成（推奨）
+
 class BaseTool {
   constructor(canvas, toolManager) {
     this.canvas = canvas;
