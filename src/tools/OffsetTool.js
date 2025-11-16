@@ -1,5 +1,15 @@
 // OffsetTool.js
 // オフセット（平行線）ツール
+//
+// 【依存関係】
+// - SvgUtils (window.SvgUtils): SVG要素作成
+// - GeometryUtils (window.GeometryUtils): 幾何計算
+//
+// 【使用する外部関数】
+// - SvgUtils.createElement(), createLine(), createCircle(), createRect(): SVG要素作成
+// - GeometryUtils.vectorLength(): ベクトルの長さ
+// - GeometryUtils.distance(): 2点間距離
+
 class OffsetTool extends BaseTool {
   constructor(canvas, toolManager) {
     super(canvas, toolManager);
@@ -127,13 +137,12 @@ class OffsetTool extends BaseTool {
     const y2 = parseFloat(line.getAttribute("y2"));
 
     // 線分の方向ベクトル
-    const dx = x2 - x1;
-    const dy = y2 - y1;
-    const len = Math.sqrt(dx * dx + dy * dy);
+    const vector = { x: x2 - x1, y: y2 - y1 };
+    const len = window.GeometryUtils.vectorLength(vector);
 
     // 垂直方向の単位ベクトル
-    const perpX = -dy / len;
-    const perpY = dx / len;
+    const perpX = -vector.y / len;
+    const perpY = vector.x / len;
 
     // クリック点がどちら側にあるかを判定
     const side = (clickPoint.x - x1) * perpX + (clickPoint.y - y1) * perpY;
@@ -143,16 +152,19 @@ class OffsetTool extends BaseTool {
     const offsetX = perpX * this.offsetDistance * direction;
     const offsetY = perpY * this.offsetDistance * direction;
 
-    // 新しい線を作成
-    const newLine = document.createElementNS(this.svgNS, "line");
-    newLine.setAttribute("x1", x1 + offsetX);
-    newLine.setAttribute("y1", y1 + offsetY);
-    newLine.setAttribute("x2", x2 + offsetX);
-    newLine.setAttribute("y2", y2 + offsetY);
-    newLine.setAttribute("stroke", line.getAttribute("stroke"));
-    newLine.setAttribute("stroke-width", line.getAttribute("stroke-width"));
-    newLine.setAttribute("fill", "none");
-    newLine.setAttribute("data-layer", window.currentLayerId);
+    // 新しい線を作成（SvgUtils.createLine を使用）
+    const newLine = window.SvgUtils.createLine(
+      x1 + offsetX,
+      y1 + offsetY,
+      x2 + offsetX,
+      y2 + offsetY,
+      {
+        stroke: line.getAttribute("stroke"),
+        "stroke-width": line.getAttribute("stroke-width"),
+        fill: "none",
+        "data-layer": window.currentLayerId
+      }
+    );
 
     this.canvas.appendChild(newLine);
   }
@@ -176,12 +188,11 @@ class OffsetTool extends BaseTool {
       const p1 = points[i];
       const p2 = points[i + 1];
 
-      const dx = p2.x - p1.x;
-      const dy = p2.y - p1.y;
-      const len = Math.sqrt(dx * dx + dy * dy);
+      const vector = { x: p2.x - p1.x, y: p2.y - p1.y };
+      const len = window.GeometryUtils.vectorLength(vector);
 
-      const perpX = -dy / len;
-      const perpY = dx / len;
+      const perpX = -vector.y / len;
+      const perpY = vector.x / len;
 
       // 最初の線分でクリック位置から方向を判定
       let direction = 1;
@@ -206,14 +217,15 @@ class OffsetTool extends BaseTool {
       });
     }
 
-    // 新しいポリラインを作成
-    const newPolyline = document.createElementNS(this.svgNS, "polyline");
+    // 新しいポリラインを作成（SvgUtils.createElement を使用）
     const newPointsStr = newPoints.map((p) => `${p.x},${p.y}`).join(" ");
-    newPolyline.setAttribute("points", newPointsStr);
-    newPolyline.setAttribute("stroke", polyline.getAttribute("stroke"));
-    newPolyline.setAttribute("stroke-width", polyline.getAttribute("stroke-width"));
-    newPolyline.setAttribute("fill", "none");
-    newPolyline.setAttribute("data-layer", window.currentLayerId);
+    const newPolyline = window.SvgUtils.createElement("polyline", {
+      points: newPointsStr,
+      stroke: polyline.getAttribute("stroke"),
+      "stroke-width": polyline.getAttribute("stroke-width"),
+      fill: "none",
+      "data-layer": window.currentLayerId
+    });
 
     this.canvas.appendChild(newPolyline);
   }
@@ -234,16 +246,19 @@ class OffsetTool extends BaseTool {
 
     const offset = isOutside ? this.offsetDistance : -this.offsetDistance;
 
-    // 新しい矩形を作成
-    const newRect = document.createElementNS(this.svgNS, "rect");
-    newRect.setAttribute("x", x - offset);
-    newRect.setAttribute("y", y - offset);
-    newRect.setAttribute("width", width + 2 * offset);
-    newRect.setAttribute("height", height + 2 * offset);
-    newRect.setAttribute("stroke", rect.getAttribute("stroke"));
-    newRect.setAttribute("stroke-width", rect.getAttribute("stroke-width"));
-    newRect.setAttribute("fill", rect.getAttribute("fill") || "none");
-    newRect.setAttribute("data-layer", window.currentLayerId);
+    // 新しい矩形を作成（SvgUtils.createRect を使用）
+    const newRect = window.SvgUtils.createRect(
+      x - offset,
+      y - offset,
+      width + 2 * offset,
+      height + 2 * offset,
+      {
+        stroke: rect.getAttribute("stroke"),
+        "stroke-width": rect.getAttribute("stroke-width"),
+        fill: rect.getAttribute("fill") || "none",
+        "data-layer": window.currentLayerId
+      }
+    );
 
     this.canvas.appendChild(newRect);
   }
@@ -253,9 +268,10 @@ class OffsetTool extends BaseTool {
     const cy = parseFloat(circle.getAttribute("cy"));
     const r = parseFloat(circle.getAttribute("r"));
 
-    // クリック点が円の外側か内側か
-    const dist = Math.sqrt(
-      Math.pow(clickPoint.x - cx, 2) + Math.pow(clickPoint.y - cy, 2)
+    // クリック点が円の外側か内側か（GeometryUtils.distance を使用）
+    const dist = window.GeometryUtils.distance(
+      { x: cx, y: cy },
+      clickPoint
     );
     const isOutside = dist > r;
 
@@ -263,15 +279,13 @@ class OffsetTool extends BaseTool {
 
     if (newR <= 0) return; // 負の半径は作成しない
 
-    // 新しい円を作成
-    const newCircle = document.createElementNS(this.svgNS, "circle");
-    newCircle.setAttribute("cx", cx);
-    newCircle.setAttribute("cy", cy);
-    newCircle.setAttribute("r", newR);
-    newCircle.setAttribute("stroke", circle.getAttribute("stroke"));
-    newCircle.setAttribute("stroke-width", circle.getAttribute("stroke-width"));
-    newCircle.setAttribute("fill", circle.getAttribute("fill") || "none");
-    newCircle.setAttribute("data-layer", window.currentLayerId);
+    // 新しい円を作成（SvgUtils.createCircle を使用）
+    const newCircle = window.SvgUtils.createCircle(cx, cy, newR, {
+      stroke: circle.getAttribute("stroke"),
+      "stroke-width": circle.getAttribute("stroke-width"),
+      fill: circle.getAttribute("fill") || "none",
+      "data-layer": window.currentLayerId
+    });
 
     this.canvas.appendChild(newCircle);
   }

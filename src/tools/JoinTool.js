@@ -1,5 +1,14 @@
 // JoinTool.js
 // 結合ツール（複数の線を1つのポリラインに結合）
+//
+// 【依存関係】
+// - SvgUtils (window.SvgUtils): SVG要素作成
+// - GeometryUtils (window.GeometryUtils): 幾何計算
+//
+// 【使用する外部関数】
+// - SvgUtils.createElement(): SVG要素作成
+// - GeometryUtils.distance(): 2点間距離
+
 class JoinTool extends BaseTool {
   constructor(canvas, toolManager) {
     super(canvas, toolManager);
@@ -144,13 +153,14 @@ class JoinTool extends BaseTool {
       el.parentNode.removeChild(el);
     });
 
-    // 新しいポリラインを作成
-    const polyline = document.createElementNS(this.svgNS, "polyline");
-    polyline.setAttribute("points", orderedPoints.map((p) => `${p.x},${p.y}`).join(" "));
-    polyline.setAttribute("stroke", stroke);
-    polyline.setAttribute("stroke-width", strokeWidth);
-    polyline.setAttribute("fill", "none");
-    polyline.setAttribute("data-layer", layerId);
+    // 新しいポリラインを作成（SvgUtils.createElement を使用）
+    const polyline = window.SvgUtils.createElement("polyline", {
+      points: orderedPoints.map((p) => `${p.x},${p.y}`).join(" "),
+      stroke: stroke,
+      "stroke-width": strokeWidth,
+      fill: "none",
+      "data-layer": layerId
+    });
 
     this.canvas.appendChild(polyline);
     this.clearSelection();
@@ -198,29 +208,29 @@ class JoinTool extends BaseTool {
         const firstPoint = orderedPoints[0];
         const lastPoint = orderedPoints[orderedPoints.length - 1];
 
-        // セグメントの始点が現在の終点と一致するか
-        if (this.distance(lastPoint, segment[0]) < tolerance) {
+        // セグメントの始点が現在の終点と一致するか（GeometryUtils.distance を使用）
+        if (window.GeometryUtils.distance(lastPoint, segment[0]) < tolerance) {
           orderedPoints.push(...segment.slice(1));
           usedIndices.push(i);
           changed = true;
           break;
         }
         // セグメントの終点が現在の終点と一致するか
-        else if (this.distance(lastPoint, segment[segment.length - 1]) < tolerance) {
+        else if (window.GeometryUtils.distance(lastPoint, segment[segment.length - 1]) < tolerance) {
           orderedPoints.push(...segment.slice(0, -1).reverse());
           usedIndices.push(i);
           changed = true;
           break;
         }
         // セグメントの終点が現在の始点と一致するか
-        else if (this.distance(firstPoint, segment[segment.length - 1]) < tolerance) {
+        else if (window.GeometryUtils.distance(firstPoint, segment[segment.length - 1]) < tolerance) {
           orderedPoints.unshift(...segment.slice(0, -1));
           usedIndices.push(i);
           changed = true;
           break;
         }
         // セグメントの始点が現在の始点と一致するか
-        else if (this.distance(firstPoint, segment[0]) < tolerance) {
+        else if (window.GeometryUtils.distance(firstPoint, segment[0]) < tolerance) {
           orderedPoints.unshift(...segment.slice(1).reverse());
           usedIndices.push(i);
           changed = true;
@@ -235,10 +245,6 @@ class JoinTool extends BaseTool {
     }
 
     return orderedPoints;
-  }
-
-  distance(p1, p2) {
-    return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
   }
 
   handleKeyDown(event) {

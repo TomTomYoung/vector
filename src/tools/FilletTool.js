@@ -1,5 +1,16 @@
 // FilletTool.js
 // フィレットツール（2つの線の間に円弧を作成）
+//
+// 【依存関係】
+// - SvgUtils (window.SvgUtils): SVG要素作成
+// - GeometryUtils (window.GeometryUtils): 幾何計算
+//
+// 【使用する外部関数】
+// - SvgUtils.createElement(): SVG要素作成
+// - GeometryUtils.distance(): 2点間距離
+// - GeometryUtils.normalizeVector(): ベクトル正規化
+// - GeometryUtils.dotProduct(): 内積計算
+
 class FilletTool extends BaseTool {
   constructor(canvas, toolManager) {
     super(canvas, toolManager);
@@ -144,40 +155,40 @@ class FilletTool extends BaseTool {
       return;
     }
 
-    // 各線の方向ベクトルを計算
-    const dir1 = this.normalize({
+    // 各線の方向ベクトルを計算（GeometryUtils.normalizeVector を使用）
+    const dir1 = window.GeometryUtils.normalizeVector({
       x: p2.x - p1.x,
       y: p2.y - p1.y,
     });
-    const dir2 = this.normalize({
+    const dir2 = window.GeometryUtils.normalizeVector({
       x: p4.x - p3.x,
       y: p4.y - p3.y,
     });
 
     // 交点から線分の端点への方向を調整
-    // 交点に近い端点を基準に方向を決定
-    const dist1_1 = this.distance(intersection, p1);
-    const dist1_2 = this.distance(intersection, p2);
+    // 交点に近い端点を基準に方向を決定（GeometryUtils.distance を使用）
+    const dist1_1 = window.GeometryUtils.distance(intersection, p1);
+    const dist1_2 = window.GeometryUtils.distance(intersection, p2);
     if (dist1_2 < dist1_1) {
       dir1.x = -dir1.x;
       dir1.y = -dir1.y;
     }
 
-    const dist2_1 = this.distance(intersection, p3);
-    const dist2_2 = this.distance(intersection, p4);
+    const dist2_1 = window.GeometryUtils.distance(intersection, p3);
+    const dist2_2 = window.GeometryUtils.distance(intersection, p4);
     if (dist2_2 < dist2_1) {
       dir2.x = -dir2.x;
       dir2.y = -dir2.y;
     }
 
     // 2つの方向ベクトルの間の角度の二等分線方向
-    const bisector = this.normalize({
+    const bisector = window.GeometryUtils.normalizeVector({
       x: dir1.x + dir2.x,
       y: dir1.y + dir2.y,
     });
 
-    // 角度を計算
-    const angle = Math.acos(dir1.x * dir2.x + dir1.y * dir2.y);
+    // 角度を計算（GeometryUtils.dotProduct を使用）
+    const angle = Math.acos(window.GeometryUtils.dotProduct(dir1, dir2));
     const halfAngle = angle / 2;
 
     // フィレット円の中心までの距離
@@ -212,19 +223,20 @@ class FilletTool extends BaseTool {
 
     this.saveState();
 
-    // 円弧を作成
-    const arc = document.createElementNS(this.svgNS, "path");
+    // 円弧を作成（SvgUtils.createElement を使用）
     const d = `M ${tangent1.x} ${tangent1.y} A ${this.radius} ${this.radius} 0 ${largeArcFlag} ${sweepFlag} ${tangent2.x} ${tangent2.y}`;
-    arc.setAttribute("d", d);
-    arc.setAttribute("stroke", line1.getAttribute("stroke"));
-    arc.setAttribute("stroke-width", line1.getAttribute("stroke-width"));
-    arc.setAttribute("fill", "none");
-    arc.setAttribute("data-layer", window.currentLayerId);
+    const arc = window.SvgUtils.createElement("path", {
+      d: d,
+      stroke: line1.getAttribute("stroke"),
+      "stroke-width": line1.getAttribute("stroke-width"),
+      fill: "none",
+      "data-layer": window.currentLayerId
+    });
 
-    // 線分を接点まで短縮
+    // 線分を接点まで短縮（GeometryUtils.distance を使用）
     // line1の短縮
-    const distToP1 = this.distance(tangent1, p1);
-    const distToP2 = this.distance(tangent1, p2);
+    const distToP1 = window.GeometryUtils.distance(tangent1, p1);
+    const distToP2 = window.GeometryUtils.distance(tangent1, p2);
     if (distToP1 < distToP2) {
       line1.setAttribute("x1", tangent1.x);
       line1.setAttribute("y1", tangent1.y);
@@ -234,8 +246,8 @@ class FilletTool extends BaseTool {
     }
 
     // line2の短縮
-    const distToP3 = this.distance(tangent2, p3);
-    const distToP4 = this.distance(tangent2, p4);
+    const distToP3 = window.GeometryUtils.distance(tangent2, p3);
+    const distToP4 = window.GeometryUtils.distance(tangent2, p4);
     if (distToP3 < distToP4) {
       line2.setAttribute("x1", tangent2.x);
       line2.setAttribute("y1", tangent2.y);
@@ -268,8 +280,8 @@ class FilletTool extends BaseTool {
       y: p1.y + dirY * proj,
     };
 
-    // 垂線の足から円周上の点までの距離
-    const distToCenter = this.distance(foot, center);
+    // 垂線の足から円周上の点までの距離（GeometryUtils.distance を使用）
+    const distToCenter = window.GeometryUtils.distance(foot, center);
     if (Math.abs(distToCenter - radius) > 0.01) {
       // 接点が直線上にない場合、近似値を返す
       const ratio = radius / distToCenter;
@@ -282,6 +294,7 @@ class FilletTool extends BaseTool {
     return foot;
   }
 
+  // 2直線の交点を計算（無限延長）
   lineLineIntersectionInfinite(p1, p2, p3, p4) {
     const x1 = p1.x,
       y1 = p1.y;
@@ -301,16 +314,6 @@ class FilletTool extends BaseTool {
       x: x1 + t * (x2 - x1),
       y: y1 + t * (y2 - y1),
     };
-  }
-
-  normalize(v) {
-    const len = Math.sqrt(v.x * v.x + v.y * v.y);
-    if (len === 0) return { x: 0, y: 0 };
-    return { x: v.x / len, y: v.y / len };
-  }
-
-  distance(p1, p2) {
-    return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
   }
 
   handleKeyDown(event) {

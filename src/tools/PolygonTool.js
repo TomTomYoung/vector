@@ -1,5 +1,13 @@
 // PolygonTool.js
 // 多角形描画ツール
+//
+// 【依存関係】
+// - SvgUtils (window.SvgUtils): SVG要素作成
+//
+// 【使用する外部関数】
+// - SvgUtils.createElement(): SVG要素作成
+// - SvgUtils.createLine(): 線分要素作成
+
 class PolygonTool extends BaseTool {
   constructor(canvas, toolManager) {
     super(canvas, toolManager);
@@ -77,19 +85,20 @@ class PolygonTool extends BaseTool {
     }
 
     if (!this.drawingObject) {
-      // 新しい多角形を開始
-      this.drawingObject = document.createElementNS(this.svgNS, "polygon");
+      // 新しい多角形を開始（SvgUtils.createElement を使用）
+      this.drawingObject = window.SvgUtils.createElement("polygon");
 
       // スタイルを適用
       this.applyDefaultAttributes(this.drawingObject);
 
       this.canvas.appendChild(this.drawingObject);
 
-      // 一時的なガイドラインを作成
-      this.tempLine = document.createElementNS(this.svgNS, "line");
-      this.tempLine.setAttribute("stroke", "#000000");
-      this.tempLine.setAttribute("stroke-width", 1);
-      this.tempLine.setAttribute("stroke-dasharray", "4 4");
+      // 一時的なガイドラインを作成（SvgUtils.createLine を使用）
+      this.tempLine = window.SvgUtils.createLine(0, 0, 0, 0, {
+        stroke: "#000000",
+        "stroke-width": 1,
+        "stroke-dasharray": "4 4"
+      });
       this.canvas.appendChild(this.tempLine);
 
       this.polygonPoints = []; // 頂点配列を初期化

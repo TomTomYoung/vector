@@ -1,5 +1,14 @@
 // DimensionTool.js
 // 寸法線描画ツール
+//
+// 【依存関係】
+// - SvgUtils (window.SvgUtils): SVG要素作成
+// - GeometryUtils (window.GeometryUtils): 幾何計算
+//
+// 【使用する外部関数】
+// - SvgUtils.createElement(): SVG要素作成
+// - GeometryUtils.distance(): 2点間距離
+
 class DimensionTool extends BaseTool {
   constructor(canvas, toolManager) {
     super(canvas, toolManager);
@@ -129,7 +138,8 @@ class DimensionTool extends BaseTool {
       this.canvas.removeChild(this.currentDimension);
     }
 
-    this.currentDimension = document.createElementNS(this.svgNS, "g");
+    // グループ要素作成（SvgUtils.createElement を使用）
+    this.currentDimension = window.SvgUtils.createElement("g");
     this.canvas.appendChild(this.currentDimension);
   }
 
@@ -140,15 +150,18 @@ class DimensionTool extends BaseTool {
 
     const startPoint = this.points[0];
 
-    // 寸法線
-    const line = document.createElementNS(this.svgNS, "line");
-    line.setAttribute("x1", startPoint.x);
-    line.setAttribute("y1", startPoint.y);
-    line.setAttribute("x2", endPoint.x);
-    line.setAttribute("y2", endPoint.y);
-    line.setAttribute("stroke", "#ff0000");
-    line.setAttribute("stroke-width", "1");
-    line.setAttribute("stroke-dasharray", "5,5");
+    // 寸法線（SvgUtils.createLine を使用）
+    const line = window.SvgUtils.createLine(
+      startPoint.x,
+      startPoint.y,
+      endPoint.x,
+      endPoint.y,
+      {
+        stroke: "#ff0000",
+        "stroke-width": "1",
+        "stroke-dasharray": "5,5"
+      }
+    );
     this.currentDimension.appendChild(line);
   }
 
@@ -158,18 +171,17 @@ class DimensionTool extends BaseTool {
     const p1 = this.points[0];
     const p2 = this.points[1];
 
-    const group = document.createElementNS(this.svgNS, "g");
-    group.setAttribute("data-layer", window.currentLayerId);
+    // グループ要素作成（SvgUtils.createElement を使用）
+    const group = window.SvgUtils.createElement("g", {
+      "data-layer": window.currentLayerId
+    });
     group.classList.add("dimension");
 
-    // 寸法線
-    const line = document.createElementNS(this.svgNS, "line");
-    line.setAttribute("x1", p1.x);
-    line.setAttribute("y1", p1.y);
-    line.setAttribute("x2", p2.x);
-    line.setAttribute("y2", p2.y);
-    line.setAttribute("stroke", "#ff0000");
-    line.setAttribute("stroke-width", "1.5");
+    // 寸法線（SvgUtils.createLine を使用）
+    const line = window.SvgUtils.createLine(p1.x, p1.y, p2.x, p2.y, {
+      stroke: "#ff0000",
+      "stroke-width": "1.5"
+    });
     group.appendChild(line);
 
     // 矢印
@@ -184,20 +196,20 @@ class DimensionTool extends BaseTool {
     const arrow2 = this.createArrow(p2, angle + Math.PI, arrowSize);
     group.appendChild(arrow2);
 
-    // 寸法値
-    const distance = Math.sqrt(
-      Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2)
-    );
+    // 寸法値（GeometryUtils.distance を使用）
+    const distance = window.GeometryUtils.distance(p1, p2);
     const midX = (p1.x + p2.x) / 2;
     const midY = (p1.y + p2.y) / 2;
 
-    const text = document.createElementNS(this.svgNS, "text");
-    text.setAttribute("x", midX);
-    text.setAttribute("y", midY - 5);
-    text.setAttribute("fill", "#ff0000");
-    text.setAttribute("font-size", "14");
-    text.setAttribute("font-family", "Arial");
-    text.setAttribute("text-anchor", "middle");
+    // テキスト要素作成（SvgUtils.createElement を使用）
+    const text = window.SvgUtils.createElement("text", {
+      x: midX,
+      y: midY - 5,
+      fill: "#ff0000",
+      "font-size": "14",
+      "font-family": "Arial",
+      "text-anchor": "middle"
+    });
     text.textContent = distance.toFixed(1);
     group.appendChild(text);
 
@@ -216,8 +228,10 @@ class DimensionTool extends BaseTool {
     const p2 = this.points[1]; // 頂点
     const p3 = this.points[2]; // 第2辺の終点
 
-    const group = document.createElementNS(this.svgNS, "g");
-    group.setAttribute("data-layer", window.currentLayerId);
+    // グループ要素作成（SvgUtils.createElement を使用）
+    const group = window.SvgUtils.createElement("g", {
+      "data-layer": window.currentLayerId
+    });
     group.classList.add("dimension");
 
     // 2つの辺の角度を計算
@@ -234,8 +248,7 @@ class DimensionTool extends BaseTool {
     // 円弧の半径
     const arcRadius = 30;
 
-    // 円弧を描画
-    const arc = document.createElementNS(this.svgNS, "path");
+    // 円弧を描画（SvgUtils.createElement を使用）
     const startAngle = angle1;
     const endAngle = angle2;
 
@@ -247,26 +260,29 @@ class DimensionTool extends BaseTool {
     const largeArcFlag = angleDiff > Math.PI ? 1 : 0;
 
     const arcPath = `M ${x1} ${y1} A ${arcRadius} ${arcRadius} 0 ${largeArcFlag} 1 ${x2} ${y2}`;
-    arc.setAttribute("d", arcPath);
-    arc.setAttribute("stroke", "#ff0000");
-    arc.setAttribute("stroke-width", "1.5");
-    arc.setAttribute("fill", "none");
+    const arc = window.SvgUtils.createElement("path", {
+      d: arcPath,
+      stroke: "#ff0000",
+      "stroke-width": "1.5",
+      fill: "none"
+    });
     group.appendChild(arc);
 
-    // 角度テキスト
+    // 角度テキスト（SvgUtils.createElement を使用）
     const textAngle = angle1 + angleDiff / 2;
     const textRadius = arcRadius + 15;
     const textX = p2.x + textRadius * Math.cos(textAngle);
     const textY = p2.y + textRadius * Math.sin(textAngle);
 
-    const text = document.createElementNS(this.svgNS, "text");
-    text.setAttribute("x", textX);
-    text.setAttribute("y", textY);
-    text.setAttribute("fill", "#ff0000");
-    text.setAttribute("font-size", "14");
-    text.setAttribute("font-family", "Arial");
-    text.setAttribute("text-anchor", "middle");
-    text.setAttribute("dominant-baseline", "middle");
+    const text = window.SvgUtils.createElement("text", {
+      x: textX,
+      y: textY,
+      fill: "#ff0000",
+      "font-size": "14",
+      "font-family": "Arial",
+      "text-anchor": "middle",
+      "dominant-baseline": "middle"
+    });
     text.textContent = angleDeg.toFixed(1) + "°";
     group.appendChild(text);
 
@@ -274,8 +290,6 @@ class DimensionTool extends BaseTool {
   }
 
   createArrow(point, angle, size) {
-    const arrow = document.createElementNS(this.svgNS, "polygon");
-
     const x1 = point.x;
     const y1 = point.y;
     const x2 = x1 + size * Math.cos(angle + Math.PI / 6);
@@ -283,8 +297,11 @@ class DimensionTool extends BaseTool {
     const x3 = x1 + size * Math.cos(angle - Math.PI / 6);
     const y3 = y1 + size * Math.sin(angle - Math.PI / 6);
 
-    arrow.setAttribute("points", `${x1},${y1} ${x2},${y2} ${x3},${y3}`);
-    arrow.setAttribute("fill", "#ff0000");
+    // 矢印ポリゴン作成（SvgUtils.createElement を使用）
+    const arrow = window.SvgUtils.createElement("polygon", {
+      points: `${x1},${y1} ${x2},${y2} ${x3},${y3}`,
+      fill: "#ff0000"
+    });
 
     return arrow;
   }

@@ -1,5 +1,14 @@
 // CircleTool.js
 // 円描画ツール
+//
+// 【依存関係】
+// - SvgUtils (window.SvgUtils): SVG要素作成
+// - GeometryUtils (window.GeometryUtils): 幾何計算
+//
+// 【使用する外部関数】
+// - SvgUtils.createCircle(): 円要素作成
+// - GeometryUtils.distance(): 2点間距離（半径計算）
+
 class CircleTool extends BaseTool {
   constructor(canvas, toolManager) {
     super(canvas, toolManager);
@@ -25,11 +34,12 @@ class CircleTool extends BaseTool {
     // 描画開始
     this.isDrawing = true;
 
-    // 円を作成
-    this.drawingObject = document.createElementNS(this.svgNS, "circle");
-    this.drawingObject.setAttribute("cx", this.startPoint.x);
-    this.drawingObject.setAttribute("cy", this.startPoint.y);
-    this.drawingObject.setAttribute("r", 0);
+    // 円を作成（SvgUtils.createCircle を使用）
+    this.drawingObject = window.SvgUtils.createCircle(
+      this.startPoint.x,
+      this.startPoint.y,
+      0
+    );
 
     // スタイルを適用
     this.applyDefaultAttributes(this.drawingObject);
@@ -42,10 +52,8 @@ class CircleTool extends BaseTool {
 
     if (!this.isActive || !this.isDrawing || !this.drawingObject) return;
 
-    // 円の半径を計算
-    const dx = this.currentPoint.x - this.startPoint.x;
-    const dy = this.currentPoint.y - this.startPoint.y;
-    const radius = Math.sqrt(dx * dx + dy * dy);
+    // 円の半径を計算（GeometryUtils.distance を使用）
+    const radius = window.GeometryUtils.distance(this.startPoint, this.currentPoint);
 
     this.drawingObject.setAttribute("r", radius);
   }

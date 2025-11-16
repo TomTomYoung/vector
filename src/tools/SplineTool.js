@@ -1,5 +1,12 @@
 // SplineTool.js
 // スプライン曲線描画ツール（Catmull-Rom スプライン）
+//
+// 【依存関係】
+// - SvgUtils (window.SvgUtils): SVG要素作成
+//
+// 【使用する外部関数】
+// - SvgUtils.createElement(): SVG要素作成
+
 class SplineTool extends BaseTool {
   constructor(canvas, toolManager) {
     super(canvas, toolManager);
@@ -61,13 +68,15 @@ class SplineTool extends BaseTool {
     const pathData = this.generateSplinePath(allPoints);
     if (!pathData) return;
 
-    this.currentSpline = document.createElementNS(this.svgNS, "path");
-    this.currentSpline.setAttribute("d", pathData);
-    this.currentSpline.setAttribute("stroke", this.currentStyle.stroke);
-    this.currentSpline.setAttribute("stroke-width", this.currentStyle.strokeWidth);
-    this.currentSpline.setAttribute("fill", "none");
-    this.currentSpline.setAttribute("opacity", this.currentStyle.opacity);
-    this.currentSpline.setAttribute("stroke-dasharray", "3,3");
+    // プレビュー用パス作成（SvgUtils.createElement を使用）
+    this.currentSpline = window.SvgUtils.createElement("path", {
+      d: pathData,
+      stroke: this.currentStyle.stroke,
+      "stroke-width": this.currentStyle.strokeWidth,
+      fill: "none",
+      opacity: this.currentStyle.opacity,
+      "stroke-dasharray": "3,3"
+    });
     this.canvas.appendChild(this.currentSpline);
   }
 
@@ -81,12 +90,14 @@ class SplineTool extends BaseTool {
     const pathData = this.generateSplinePath(this.points);
     if (!pathData) return;
 
-    this.currentSpline = document.createElementNS(this.svgNS, "path");
-    this.currentSpline.setAttribute("d", pathData);
-    this.currentSpline.setAttribute("stroke", this.currentStyle.stroke);
-    this.currentSpline.setAttribute("stroke-width", this.currentStyle.strokeWidth);
-    this.currentSpline.setAttribute("fill", "none");
-    this.currentSpline.setAttribute("opacity", this.currentStyle.opacity);
+    // スプラインパス作成（SvgUtils.createElement を使用）
+    this.currentSpline = window.SvgUtils.createElement("path", {
+      d: pathData,
+      stroke: this.currentStyle.stroke,
+      "stroke-width": this.currentStyle.strokeWidth,
+      fill: "none",
+      opacity: this.currentStyle.opacity
+    });
     this.canvas.appendChild(this.currentSpline);
   }
 

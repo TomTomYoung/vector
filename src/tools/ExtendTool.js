@@ -1,5 +1,13 @@
 // ExtendTool.js
 // 延長ツール（線分を境界まで延長する）
+//
+// 【依存関係】
+// - GeometryUtils (window.GeometryUtils): 幾何計算
+//
+// 【使用する外部関数】
+// - GeometryUtils.distance(): 2点間距離
+// - GeometryUtils.vectorLength(): ベクトルの長さ
+
 class ExtendTool extends BaseTool {
   constructor(canvas, toolManager) {
     super(canvas, toolManager);
@@ -129,10 +137,10 @@ class ExtendTool extends BaseTool {
     const x2 = parseFloat(line.getAttribute("x2"));
     const y2 = parseFloat(line.getAttribute("y2"));
 
-    // 線分の方向ベクトル
+    // 線分の方向ベクトル（GeometryUtils.vectorLength を使用）
     const dx = x2 - x1;
     const dy = y2 - y1;
-    const len = Math.sqrt(dx * dx + dy * dy);
+    const len = window.GeometryUtils.vectorLength({ x: dx, y: dy });
     const dirX = dx / len;
     const dirY = dy / len;
 
@@ -166,19 +174,15 @@ class ExtendTool extends BaseTool {
           const dot = toIntersection.x * dirX + toIntersection.y * dirY;
 
           if (dot < 0) {
-            // 始点側
-            const dist = Math.sqrt(
-              Math.pow(intersection.x - x1, 2) + Math.pow(intersection.y - y1, 2)
-            );
+            // 始点側（GeometryUtils.distance を使用）
+            const dist = window.GeometryUtils.distance(intersection, { x: x1, y: y1 });
             if (dist < minDistStart) {
               minDistStart = dist;
               bestStart = intersection;
             }
           } else if (dot > len) {
-            // 終点側
-            const dist = Math.sqrt(
-              Math.pow(intersection.x - x2, 2) + Math.pow(intersection.y - y2, 2)
-            );
+            // 終点側（GeometryUtils.distance を使用）
+            const dist = window.GeometryUtils.distance(intersection, { x: x2, y: y2 });
             if (dist < minDistEnd) {
               minDistEnd = dist;
               bestEnd = intersection;

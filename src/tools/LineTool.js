@@ -1,5 +1,16 @@
 // LineTool.js
 // 直線描画ツール
+//
+// 【依存関係】
+// - SvgUtils (window.SvgUtils): SVG要素作成
+// - CoordinatesUtils (window.CoordinatesUtils): 座標スナップ
+// - StyleUtils (window.StyleUtils): スタイル適用
+//
+// 【使用する外部関数】
+// - SvgUtils.createElement(): SVG要素作成
+// - CoordinatesUtils.snapToOrtho(): 直交スナップ
+// - StyleUtils.applyStyle(): スタイル適用
+
 class LineTool extends BaseTool {
   constructor(canvas, toolManager) {
     super(canvas, toolManager);
@@ -176,37 +187,34 @@ class LineTool extends BaseTool {
     this.startPoint = point;
     this.isDrawing = true;
 
-    this.currentLine = document.createElementNS(this.svgNS, "line");
-    this.currentLine.setAttribute("x1", this.startPoint.x);
-    this.currentLine.setAttribute("y1", this.startPoint.y);
-    this.currentLine.setAttribute("x2", this.startPoint.x);
-    this.currentLine.setAttribute("y2", this.startPoint.y);
-    this.currentLine.setAttribute("fill", "none");
-    this.applyLineAppearance(this.currentLine);
-    this.currentLine.setAttribute("data-layer", window.currentLayerId);
+    // SvgUtils.createLine を使用
+    this.currentLine = window.SvgUtils.createLine(
+      this.startPoint.x,
+      this.startPoint.y,
+      this.startPoint.x,
+      this.startPoint.y,
+      {
+        fill: "none",
+        "data-layer": window.currentLayerId
+      }
+    );
 
+    this.applyLineAppearance(this.currentLine);
     this.canvas.appendChild(this.currentLine);
   }
 
   updateCurrentLineEnd(point) {
     if (!this.currentLine || !this.startPoint) return;
 
-    let endX = point.x;
-    let endY = point.y;
+    let endPoint = point;
 
+    // 直交モード: CoordinatesUtils.snapToOrtho を使用
     if (window.orthoMode) {
-      const dx = Math.abs(endX - this.startPoint.x);
-      const dy = Math.abs(endY - this.startPoint.y);
-
-      if (dx > dy) {
-        endY = this.startPoint.y;
-      } else {
-        endX = this.startPoint.x;
-      }
+      endPoint = window.CoordinatesUtils.snapToOrtho(this.startPoint, point);
     }
 
-    this.currentLine.setAttribute("x2", endX);
-    this.currentLine.setAttribute("y2", endY);
+    this.currentLine.setAttribute("x2", endPoint.x);
+    this.currentLine.setAttribute("y2", endPoint.y);
   }
 
   onCommonPropertiesChanged(properties) {
@@ -233,26 +241,18 @@ class LineTool extends BaseTool {
       ? {
           stroke: properties.strokeColor,
           strokeWidth: properties.strokeWidth,
-          strokeStyle: properties.strokeStyle,
-          opacity: "1",
+          strokeDasharray: window.StyleUtils.LINE_STYLES[properties.strokeStyle] || 'none',
+          opacity: 1,
+          fill: "none"
         }
-      : this.currentStyle;
+      : {
+          ...this.currentStyle,
+          strokeDasharray: window.StyleUtils.LINE_STYLES[this.currentStyle.strokeStyle] || 'none',
+          fill: "none"
+        };
 
-    line.setAttribute("stroke", style.stroke);
-    line.setAttribute("stroke-width", style.strokeWidth);
-    line.setAttribute("opacity", style.opacity || "1");
-    line.setAttribute("fill", "none");
-
-    const dashArrays = {
-      dashed: "10,5",
-      dotted: "2,3",
-    };
-    const dashValue = style.strokeStyle && dashArrays[style.strokeStyle];
-    if (dashValue) {
-      line.setAttribute("stroke-dasharray", dashValue);
-    } else {
-      line.removeAttribute("stroke-dasharray");
-    }
+    // StyleUtils.applyStyle を使用
+    window.StyleUtils.applyStyle(line, style);
   }
 }
 

@@ -1,5 +1,12 @@
 // RectangleTool.js
 // 長方形描画ツール
+//
+// 【依存関係】
+// - SvgUtils (window.SvgUtils): SVG要素作成
+//
+// 【使用する外部関数】
+// - SvgUtils.createRect(): 矩形要素作成
+
 class RectangleTool extends BaseTool {
   constructor(canvas, toolManager) {
     super(canvas, toolManager);
@@ -50,16 +57,10 @@ class RectangleTool extends BaseTool {
     // 描画開始
     this.isDrawing = true;
 
-    // 長方形を作成
-    this.drawingObject = document.createElementNS(this.svgNS, "rect");
-    this.drawingObject.setAttribute("x", 0);
-    this.drawingObject.setAttribute("y", 0);
-    this.drawingObject.setAttribute("width", 0);
-    this.drawingObject.setAttribute("height", 0);
-    this.drawingObject.setAttribute(
-      "transform",
-      `translate(${this.startPoint.x}, ${this.startPoint.y})`
-    );
+    // 長方形を作成（SvgUtils.createRect を使用）
+    this.drawingObject = window.SvgUtils.createRect(0, 0, 0, 0, {
+      transform: `translate(${this.startPoint.x}, ${this.startPoint.y})`
+    });
 
     // スタイルを適用
     this.applyDefaultAttributes(this.drawingObject);
