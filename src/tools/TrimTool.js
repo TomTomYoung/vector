@@ -1,5 +1,15 @@
 // TrimTool.js
 // トリムツール（線分を切り取る）
+//
+// 【依存関係】
+// - SvgUtils (window.SvgUtils): SVG要素作成
+// - GeometryUtils (window.GeometryUtils): 幾何計算
+//
+// 【使用する外部関数】
+// - SvgUtils.createLine(): 線分要素作成
+// - GeometryUtils.lineIntersection(): 線分交点計算
+// - GeometryUtils.distance(): 2点間距離
+
 class TrimTool extends BaseTool {
   constructor(canvas, toolManager) {
     super(canvas, toolManager);
@@ -139,7 +149,7 @@ class TrimTool extends BaseTool {
         const ex2 = parseFloat(edge.getAttribute("x2"));
         const ey2 = parseFloat(edge.getAttribute("y2"));
 
-        const intersection = this.lineLineIntersection(
+        const intersection = window.GeometryUtils.lineIntersection(
           { x: x1, y: y1 },
           { x: x2, y: y2 },
           { x: ex1, y: ey1 },
@@ -154,14 +164,10 @@ class TrimTool extends BaseTool {
 
     if (intersections.length === 0) return;
 
-    // クリック点に最も近い2つの交点を見つける
+    // クリック点に最も近い2つの交点を見つける（GeometryUtils.distance を使用）
     intersections.sort((a, b) => {
-      const distA = Math.sqrt(
-        Math.pow(a.x - clickPoint.x, 2) + Math.pow(a.y - clickPoint.y, 2)
-      );
-      const distB = Math.sqrt(
-        Math.pow(b.x - clickPoint.x, 2) + Math.pow(b.y - clickPoint.y, 2)
-      );
+      const distA = window.GeometryUtils.distance(a, clickPoint);
+      const distB = window.GeometryUtils.distance(b, clickPoint);
       return distA - distB;
     });
 
@@ -196,19 +202,22 @@ class TrimTool extends BaseTool {
         // 元の線を削除
         line.parentNode.removeChild(line);
 
-        // 残りの区間を新しい線分として作成
+        // 残りの区間を新しい線分として作成（SvgUtils.createLine を使用）
         for (let j = 0; j < intersectionTs.length - 1; j++) {
           if (j === i) continue; // 削除する区間はスキップ
 
-          const newLine = document.createElementNS(this.svgNS, "line");
-          newLine.setAttribute("x1", intersectionTs[j].point.x);
-          newLine.setAttribute("y1", intersectionTs[j].point.y);
-          newLine.setAttribute("x2", intersectionTs[j + 1].point.x);
-          newLine.setAttribute("y2", intersectionTs[j + 1].point.y);
-          newLine.setAttribute("stroke", line.getAttribute("stroke"));
-          newLine.setAttribute("stroke-width", line.getAttribute("stroke-width"));
-          newLine.setAttribute("fill", "none");
-          newLine.setAttribute("data-layer", window.currentLayerId);
+          const newLine = window.SvgUtils.createLine(
+            intersectionTs[j].point.x,
+            intersectionTs[j].point.y,
+            intersectionTs[j + 1].point.x,
+            intersectionTs[j + 1].point.y,
+            {
+              stroke: line.getAttribute("stroke"),
+              "stroke-width": line.getAttribute("stroke-width"),
+              fill: "none",
+              "data-layer": window.currentLayerId
+            }
+          );
 
           this.canvas.appendChild(newLine);
         }
@@ -216,32 +225,6 @@ class TrimTool extends BaseTool {
         break;
       }
     }
-  }
-
-  lineLineIntersection(p1, p2, p3, p4) {
-    const x1 = p1.x,
-      y1 = p1.y;
-    const x2 = p2.x,
-      y2 = p2.y;
-    const x3 = p3.x,
-      y3 = p3.y;
-    const x4 = p4.x,
-      y4 = p4.y;
-
-    const denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
-    if (Math.abs(denom) < 0.0001) return null;
-
-    const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom;
-    const u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / denom;
-
-    if (t >= 0 && t <= 1 && u >= 0 && u <= 1) {
-      return {
-        x: x1 + t * (x2 - x1),
-        y: y1 + t * (y2 - y1),
-      };
-    }
-
-    return null;
   }
 
   handleKeyDown(event) {

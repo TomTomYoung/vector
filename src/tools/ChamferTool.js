@@ -1,5 +1,15 @@
 // ChamferTool.js
 // 面取りツール（2つの線の間に斜線を作成）
+//
+// 【依存関係】
+// - SvgUtils (window.SvgUtils): SVG要素作成
+// - GeometryUtils (window.GeometryUtils): 幾何計算
+//
+// 【使用する外部関数】
+// - SvgUtils.createLine(): 線分要素作成
+// - GeometryUtils.distance(): 2点間距離
+// - GeometryUtils.normalizeVector(): ベクトル正規化
+
 class ChamferTool extends BaseTool {
   constructor(canvas, toolManager) {
     super(canvas, toolManager);
@@ -156,26 +166,26 @@ class ChamferTool extends BaseTool {
       return;
     }
 
-    // 各線の方向ベクトルを正規化
-    const dir1 = this.normalize({
+    // 各線の方向ベクトルを正規化（GeometryUtils.normalizeVector を使用）
+    const dir1 = window.GeometryUtils.normalizeVector({
       x: p2.x - p1.x,
       y: p2.y - p1.y,
     });
-    const dir2 = this.normalize({
+    const dir2 = window.GeometryUtils.normalizeVector({
       x: p4.x - p3.x,
       y: p4.y - p3.y,
     });
 
-    // 交点から線分の端点への方向を調整
-    const dist1_1 = this.distance(intersection, p1);
-    const dist1_2 = this.distance(intersection, p2);
+    // 交点から線分の端点への方向を調整（GeometryUtils.distance を使用）
+    const dist1_1 = window.GeometryUtils.distance(intersection, p1);
+    const dist1_2 = window.GeometryUtils.distance(intersection, p2);
     if (dist1_2 < dist1_1) {
       dir1.x = -dir1.x;
       dir1.y = -dir1.y;
     }
 
-    const dist2_1 = this.distance(intersection, p3);
-    const dist2_2 = this.distance(intersection, p4);
+    const dist2_1 = window.GeometryUtils.distance(intersection, p3);
+    const dist2_2 = window.GeometryUtils.distance(intersection, p4);
     if (dist2_2 < dist2_1) {
       dir2.x = -dir2.x;
       dir2.y = -dir2.y;
@@ -194,21 +204,24 @@ class ChamferTool extends BaseTool {
 
     this.saveState();
 
-    // 面取り線を作成
-    const chamferLine = document.createElementNS(this.svgNS, "line");
-    chamferLine.setAttribute("x1", chamferPoint1.x);
-    chamferLine.setAttribute("y1", chamferPoint1.y);
-    chamferLine.setAttribute("x2", chamferPoint2.x);
-    chamferLine.setAttribute("y2", chamferPoint2.y);
-    chamferLine.setAttribute("stroke", line1.getAttribute("stroke"));
-    chamferLine.setAttribute("stroke-width", line1.getAttribute("stroke-width"));
-    chamferLine.setAttribute("fill", "none");
-    chamferLine.setAttribute("data-layer", window.currentLayerId);
+    // 面取り線を作成（SvgUtils.createLine を使用）
+    const chamferLine = window.SvgUtils.createLine(
+      chamferPoint1.x,
+      chamferPoint1.y,
+      chamferPoint2.x,
+      chamferPoint2.y,
+      {
+        stroke: line1.getAttribute("stroke"),
+        "stroke-width": line1.getAttribute("stroke-width"),
+        fill: "none",
+        "data-layer": window.currentLayerId
+      }
+    );
 
-    // 線分を面取り点まで短縮
+    // 線分を面取り点まで短縮（GeometryUtils.distance を使用）
     // line1の短縮
-    const distToP1 = this.distance(chamferPoint1, p1);
-    const distToP2 = this.distance(chamferPoint1, p2);
+    const distToP1 = window.GeometryUtils.distance(chamferPoint1, p1);
+    const distToP2 = window.GeometryUtils.distance(chamferPoint1, p2);
     if (distToP1 < distToP2) {
       line1.setAttribute("x1", chamferPoint1.x);
       line1.setAttribute("y1", chamferPoint1.y);
@@ -218,8 +231,8 @@ class ChamferTool extends BaseTool {
     }
 
     // line2の短縮
-    const distToP3 = this.distance(chamferPoint2, p3);
-    const distToP4 = this.distance(chamferPoint2, p4);
+    const distToP3 = window.GeometryUtils.distance(chamferPoint2, p3);
+    const distToP4 = window.GeometryUtils.distance(chamferPoint2, p4);
     if (distToP3 < distToP4) {
       line2.setAttribute("x1", chamferPoint2.x);
       line2.setAttribute("y1", chamferPoint2.y);
@@ -232,6 +245,7 @@ class ChamferTool extends BaseTool {
     this.clearSelection();
   }
 
+  // 2直線の交点を計算（無限延長）
   lineLineIntersectionInfinite(p1, p2, p3, p4) {
     const x1 = p1.x,
       y1 = p1.y;
@@ -251,16 +265,6 @@ class ChamferTool extends BaseTool {
       x: x1 + t * (x2 - x1),
       y: y1 + t * (y2 - y1),
     };
-  }
-
-  normalize(v) {
-    const len = Math.sqrt(v.x * v.x + v.y * v.y);
-    if (len === 0) return { x: 0, y: 0 };
-    return { x: v.x / len, y: v.y / len };
-  }
-
-  distance(p1, p2) {
-    return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
   }
 
   handleKeyDown(event) {
