@@ -112,8 +112,21 @@ class App {
     const splineTool = new SplineTool(canvas, this.toolManager);
     this.toolManager.registerTool("spline", splineTool);
 
+    const quadraticBezierTool = new QuadraticBezierTool(canvas, this.toolManager);
+    this.toolManager.registerTool("quadraticBezier", quadraticBezierTool);
+
+    const cubicBezierTool = new CubicBezierTool(canvas, this.toolManager);
+    this.toolManager.registerTool("cubicBezier", cubicBezierTool);
+
+    const nthBezierTool = new NthBezierTool(canvas, this.toolManager);
+    this.toolManager.registerTool("nthBezier", nthBezierTool);
+
     const polylineTool = new PolylineTool(canvas, this.toolManager);
     this.toolManager.registerTool("polyline", polylineTool);
+
+    const verticesTool = new VerticesTool(canvas, this.toolManager);
+    this.toolManager.registerTool("vertices", verticesTool);
+    window.verticesTool = verticesTool;
 
     const textTool = new TextTool(canvas, this.toolManager);
     this.toolManager.registerTool("text", textTool);
