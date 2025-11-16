@@ -579,6 +579,33 @@ class LineTool extends BaseTool {
       wrapper.appendChild(row);
     });
 
+    // アフィン適用ボタンを追加
+    const applyButton = document.createElement("button");
+    applyButton.type = "button";
+    applyButton.textContent = "適用";
+    applyButton.style.cssText = `
+      width: 100%;
+      padding: 8px;
+      margin-top: 6px;
+      border-radius: 4px;
+      border: 1px solid #2f80ed;
+      background: #2f80ed;
+      color: #fff;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.2s;
+    `;
+    applyButton.addEventListener("mouseover", () => {
+      applyButton.style.background = "#1a6bd8";
+    });
+    applyButton.addEventListener("mouseout", () => {
+      applyButton.style.background = "#2f80ed";
+    });
+    applyButton.addEventListener("click", () => {
+      this.applyAffineToGeometry(line);
+    });
+    wrapper.appendChild(applyButton);
+
     container.appendChild(wrapper);
   }
 
@@ -850,6 +877,54 @@ class LineTool extends BaseTool {
         `matrix(${a}, ${b}, ${c}, ${d}, ${e}, ${f})`
       );
     }
+  }
+
+  applyAffineToGeometry(line) {
+    if (!line || !window.DOMPoint) {
+      return;
+    }
+
+    const transformAttr = line.getAttribute("transform");
+    if (!transformAttr) {
+      // transformがなければ何もしない
+      return;
+    }
+
+    const x1 = this.toNumber(line.getAttribute("x1"));
+    const y1 = this.toNumber(line.getAttribute("y1"));
+    const x2 = this.toNumber(line.getAttribute("x2"));
+    const y2 = this.toNumber(line.getAttribute("y2"));
+
+    // 現在のtransform行列を取得
+    let matrix;
+    try {
+      matrix = new DOMMatrix(transformAttr);
+    } catch (error) {
+      console.error("Failed to parse transform:", error);
+      return;
+    }
+
+    // 始点と終点に変換を適用
+    const p1 = new DOMPoint(x1, y1).matrixTransform(matrix);
+    const p2 = new DOMPoint(x2, y2).matrixTransform(matrix);
+
+    // 座標を更新
+    line.setAttribute("x1", p1.x);
+    line.setAttribute("y1", p1.y);
+    line.setAttribute("x2", p2.x);
+    line.setAttribute("y2", p2.y);
+
+    // transformをクリア
+    line.removeAttribute("transform");
+
+    // 状態を保存
+    this.saveState();
+
+    // 選択ビジュアルを更新
+    this.refreshSelectionVisuals(line);
+
+    // UIを更新
+    this.requestToolPanelRefresh();
   }
 
   getLineLocalCenter(line) {
