@@ -1,5 +1,12 @@
 // ToolManager.js
 // ツール管理クラス
+//
+// 【依存関係】
+// - CoordinatesUtils (window.CoordinatesUtils): 座標変換ユーティリティ
+//
+// 【使用する外部関数】
+// - CoordinatesUtils.snapToGrid(point, gridSize): グリッドスナップ
+
 class ToolManager {
   constructor(canvas) {
     this.canvas = canvas;
@@ -216,10 +223,7 @@ class ToolManager {
     if (!window.snapToGrid) return point;
 
     const gridSize = window.gridSize || 20;
-    return {
-      x: Math.round(point.x / gridSize) * gridSize,
-      y: Math.round(point.y / gridSize) * gridSize,
-    };
+    return window.CoordinatesUtils.snapToGrid(point, gridSize);
   }
 }
 
