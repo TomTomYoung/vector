@@ -19,6 +19,9 @@ class LineTool extends BaseTool {
     this.isDrawing = false;
     this.operationMode = "drag"; // "drag" または "twoClick"
     this.autoSelectAfterDraw = false;
+    this.selectedLineId = null;
+    this.lineIdCounter = 1;
+    this.geometryStyles = this.createGeometryStyles();
   }
 
   getTitle() {
@@ -65,7 +68,7 @@ class LineTool extends BaseTool {
   }
 
   getToolProperties() {
-    return [
+    const props = [
       {
         type: "checkbox",
         label: "作成後に選択状態にする",
@@ -75,7 +78,19 @@ class LineTool extends BaseTool {
           this.autoSelectAfterDraw = checked;
         },
       },
+      {
+        type: "custom",
+        label: "直線オブジェクト一覧",
+        render: (container) => this.renderLineList(container),
+      },
+      {
+        type: "custom",
+        label: "オブジェクトプロパティ",
+        render: (container) => this.renderSelectedLineProperties(container),
+      },
     ];
+
+    return props;
   }
 
   activate() {
@@ -147,6 +162,7 @@ class LineTool extends BaseTool {
     if (!this.currentLine) return;
 
     const finishedLine = this.currentLine;
+    const lineId = this.ensureLineId(finishedLine);
 
     // 状態を保存
     this.saveState();
@@ -159,6 +175,11 @@ class LineTool extends BaseTool {
     this.currentLine = null;
     this.startPoint = null;
     this.isDrawing = false;
+
+    if (lineId) {
+      this.selectedLineId = lineId;
+      this.requestToolPanelRefresh();
+    }
 
     if (this.autoSelectAfterDraw && finishedLine && window.selectTool) {
       if (
@@ -195,10 +216,12 @@ class LineTool extends BaseTool {
       this.startPoint.y,
       {
         fill: "none",
-        "data-layer": window.currentLayerId
+        "data-layer": window.currentLayerId,
+        "data-line-tool": "true",
       }
     );
 
+    this.initializeLineMetadata(this.currentLine);
     this.applyLineAppearance(this.currentLine);
     this.canvas.appendChild(this.currentLine);
   }
@@ -253,6 +276,524 @@ class LineTool extends BaseTool {
 
     // StyleUtils.applyStyle を使用
     window.StyleUtils.applyStyle(line, style);
+
+    if (style.strokeDasharray && style.strokeDasharray !== "none") {
+      line.setAttribute("stroke-dasharray", style.strokeDasharray);
+    } else {
+      line.removeAttribute("stroke-dasharray");
+    }
+
+    const strokeStyleKey =
+      (properties && properties.strokeStyle) || this.currentStyle.strokeStyle || "solid";
+    line.dataset.strokeStyle = strokeStyleKey;
+    this.initializeLineMetadata(line);
+  }
+
+  requestToolPanelRefresh() {
+    if (
+      window.toolPropertiesPanel &&
+      window.toolPropertiesPanel.currentTool === this
+    ) {
+      window.toolPropertiesPanel.updatePanel();
+    }
+  }
+
+  renderLineList(container) {
+    const lines = this.getLineElements();
+
+    container.style.display = "flex";
+    container.style.flexDirection = "column";
+    container.style.gap = "6px";
+
+    if (lines.length === 0) {
+      const empty = document.createElement("div");
+      empty.textContent = "直線オブジェクトがありません";
+      empty.style.fontSize = "12px";
+      empty.style.color = "#666";
+      container.appendChild(empty);
+      return;
+    }
+
+    const list = document.createElement("div");
+    list.style.display = "flex";
+    list.style.flexDirection = "column";
+    list.style.gap = "4px";
+
+    lines.forEach((line, index) => {
+      const lineId = this.ensureLineId(line);
+      const isSelected = lineId === this.selectedLineId;
+      const summary = this.getLineSummary(line, index);
+      const styleLabel = this.getGeometryStyleLabel(line);
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = `${summary} / ${styleLabel}`;
+      button.style.cssText = `
+        text-align: left;
+        padding: 6px 8px;
+        border-radius: 4px;
+        border: 1px solid ${isSelected ? "#2f80ed" : "#ccc"};
+        background: ${isSelected ? "#e8f0fe" : "#fff"};
+        color: ${isSelected ? "#1a73e8" : "#333"};
+        font-size: 12px;
+        cursor: pointer;
+      `;
+      button.addEventListener("click", () => {
+        this.selectLine(line);
+      });
+
+      list.appendChild(button);
+    });
+
+    container.appendChild(list);
+  }
+
+  renderSelectedLineProperties(container) {
+    const line = this.getSelectedLineElement();
+
+    if (!line) {
+      const empty = document.createElement("div");
+      empty.textContent = "一覧から直線を選択すると詳細を編集できます";
+      empty.style.fontSize = "12px";
+      empty.style.color = "#666";
+      container.appendChild(empty);
+      return;
+    }
+
+    const idLabel = document.createElement("div");
+    idLabel.textContent = `ID: ${line.dataset.lineId}`;
+    idLabel.style.fontSize = "12px";
+    idLabel.style.color = "#333";
+    idLabel.style.marginBottom = "6px";
+    container.appendChild(idLabel);
+
+    const geometryStyleKey = this.getLineGeometryStyle(line);
+    const options = Object.entries(this.geometryStyles).map(([key, def]) => ({
+      value: key,
+      label: def.label,
+    }));
+
+    const styleWrapper = document.createElement("div");
+    styleWrapper.style.display = "flex";
+    styleWrapper.style.flexDirection = "column";
+    styleWrapper.style.gap = "4px";
+    styleWrapper.style.marginBottom = "10px";
+
+    const styleLabel = document.createElement("label");
+    styleLabel.textContent = "幾何スタイル";
+    styleLabel.style.fontSize = "12px";
+    styleLabel.style.color = "#555";
+    styleWrapper.appendChild(styleLabel);
+
+    const styleSelect = document.createElement("select");
+    styleSelect.style.cssText = `
+      width: 100%;
+      padding: 6px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      font-size: 12px;
+    `;
+    options.forEach((opt) => {
+      const option = document.createElement("option");
+      option.value = opt.value;
+      option.textContent = opt.label;
+      if (opt.value === geometryStyleKey) {
+        option.selected = true;
+      }
+      styleSelect.appendChild(option);
+    });
+    styleSelect.addEventListener("change", (event) => {
+      line.dataset.geometryStyle = event.target.value;
+      this.saveState();
+      this.requestToolPanelRefresh();
+    });
+    styleWrapper.appendChild(styleSelect);
+    container.appendChild(styleWrapper);
+
+    const styleDef = this.geometryStyles[geometryStyleKey];
+    if (styleDef) {
+      const geometryWrapper = document.createElement("div");
+      geometryWrapper.style.display = "flex";
+      geometryWrapper.style.flexDirection = "column";
+      geometryWrapper.style.gap = "6px";
+      geometryWrapper.dataset.geometryStyle = geometryStyleKey;
+
+      const values = styleDef.getValues(line);
+
+      styleDef.fields.forEach((field) => {
+        const row = document.createElement("div");
+        row.style.display = "flex";
+        row.style.flexDirection = "column";
+
+        const label = document.createElement("label");
+        label.textContent = field.label;
+        label.style.fontSize = "12px";
+        label.style.color = "#555";
+        label.style.marginBottom = "2px";
+        row.appendChild(label);
+
+        const input = document.createElement("input");
+        input.type = field.type || "number";
+        input.value = values[field.id];
+        input.step = field.step || "1";
+        if (field.min !== undefined) input.min = field.min;
+        if (field.max !== undefined) input.max = field.max;
+        input.dataset.paramId = field.id;
+        input.style.cssText = `
+          width: 100%;
+          padding: 6px;
+          border-radius: 4px;
+          border: 1px solid #ccc;
+          font-size: 12px;
+        `;
+        input.addEventListener("change", () => {
+          this.updateLineGeometryFromInputs(line, geometryWrapper);
+        });
+
+        row.appendChild(input);
+
+        if (field.suffix) {
+          const suffix = document.createElement("div");
+          suffix.textContent = field.suffix;
+          suffix.style.fontSize = "11px";
+          suffix.style.color = "#888";
+          suffix.style.marginTop = "2px";
+          row.appendChild(suffix);
+        }
+
+        geometryWrapper.appendChild(row);
+      });
+
+      container.appendChild(geometryWrapper);
+    }
+
+    this.renderLineStyleControls(container, line);
+  }
+
+  renderLineStyleControls(container, line) {
+    const style = window.SvgUtils.getElementStyle(line);
+
+    const wrapper = document.createElement("div");
+    wrapper.style.display = "flex";
+    wrapper.style.flexDirection = "column";
+    wrapper.style.gap = "8px";
+    wrapper.style.marginTop = "10px";
+
+    const colorRow = document.createElement("div");
+    colorRow.style.display = "flex";
+    colorRow.style.flexDirection = "column";
+
+    const colorLabel = document.createElement("label");
+    colorLabel.textContent = "線色";
+    colorLabel.style.fontSize = "12px";
+    colorLabel.style.color = "#555";
+    colorLabel.style.marginBottom = "2px";
+    colorRow.appendChild(colorLabel);
+
+    const colorInput = document.createElement("input");
+    colorInput.type = "color";
+    colorInput.value = this.normalizeColorForInput(style.stroke);
+    colorInput.style.width = "60px";
+    colorInput.style.height = "34px";
+    colorInput.style.padding = "0";
+    colorInput.style.border = "none";
+    colorInput.addEventListener("change", (event) => {
+      line.setAttribute("stroke", event.target.value);
+      this.saveState();
+    });
+    colorRow.appendChild(colorInput);
+    wrapper.appendChild(colorRow);
+
+    const widthRow = document.createElement("div");
+    widthRow.style.display = "flex";
+    widthRow.style.flexDirection = "column";
+
+    const widthLabel = document.createElement("label");
+    widthLabel.textContent = "線幅";
+    widthLabel.style.fontSize = "12px";
+    widthLabel.style.color = "#555";
+    widthLabel.style.marginBottom = "2px";
+    widthRow.appendChild(widthLabel);
+
+    const widthInput = document.createElement("input");
+    widthInput.type = "number";
+    widthInput.value = style.strokeWidth;
+    widthInput.min = "0.5";
+    widthInput.step = "0.5";
+    widthInput.style.cssText = `
+      width: 100%;
+      padding: 6px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      font-size: 12px;
+    `;
+    widthInput.addEventListener("change", (event) => {
+      const width = parseFloat(event.target.value);
+      line.setAttribute("stroke-width", Number.isFinite(width) ? width : 1);
+      this.saveState();
+    });
+    widthRow.appendChild(widthInput);
+    wrapper.appendChild(widthRow);
+
+    const dashRow = document.createElement("div");
+    dashRow.style.display = "flex";
+    dashRow.style.flexDirection = "column";
+
+    const dashLabel = document.createElement("label");
+    dashLabel.textContent = "線スタイル";
+    dashLabel.style.fontSize = "12px";
+    dashLabel.style.color = "#555";
+    dashLabel.style.marginBottom = "2px";
+    dashRow.appendChild(dashLabel);
+
+    const select = document.createElement("select");
+    select.style.cssText = `
+      width: 100%;
+      padding: 6px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      font-size: 12px;
+    `;
+    const dashOptions = [
+      { value: "solid", label: "実線" },
+      { value: "dashed", label: "破線" },
+      { value: "dotted", label: "点線" },
+    ];
+    const currentStyle = this.getStrokeStyleKey(line);
+    dashOptions.forEach((opt) => {
+      const option = document.createElement("option");
+      option.value = opt.value;
+      option.textContent = opt.label;
+      if (opt.value === currentStyle) {
+        option.selected = true;
+      }
+      select.appendChild(option);
+    });
+    select.addEventListener("change", (event) => {
+      this.applyStrokeStyle(line, event.target.value);
+      this.saveState();
+      this.requestToolPanelRefresh();
+    });
+    dashRow.appendChild(select);
+    wrapper.appendChild(dashRow);
+
+    container.appendChild(wrapper);
+  }
+
+  updateLineGeometryFromInputs(line, wrapper) {
+    const styleKey = wrapper.dataset.geometryStyle || this.getDefaultGeometryStyle();
+    const styleDef = this.geometryStyles[styleKey];
+    if (!styleDef) {
+      return;
+    }
+
+    const values = {};
+    wrapper.querySelectorAll("[data-param-id]").forEach((input) => {
+      const id = input.dataset.paramId;
+      const parsed = parseFloat(input.value);
+      values[id] = Number.isFinite(parsed) ? parsed : 0;
+    });
+
+    styleDef.applyValues(line, values);
+    this.saveState();
+    this.requestToolPanelRefresh();
+  }
+
+  getLineElements() {
+    const lines = Array.from(
+      this.canvas.querySelectorAll('line[data-line-tool="true"]')
+    );
+    lines.forEach((line) => this.initializeLineMetadata(line));
+    return lines;
+  }
+
+  getSelectedLineElement() {
+    if (!this.selectedLineId) {
+      return null;
+    }
+
+    const line = this.canvas.querySelector(
+      `line[data-line-id="${this.selectedLineId}"]`
+    );
+
+    if (line && line.getAttribute("data-line-tool") === "true") {
+      return line;
+    }
+
+    this.selectedLineId = null;
+    return null;
+  }
+
+  selectLine(line) {
+    if (!line) {
+      this.selectedLineId = null;
+      this.requestToolPanelRefresh();
+      return;
+    }
+
+    const lineId = this.ensureLineId(line);
+    this.selectedLineId = lineId;
+
+    if (window.selectTool && typeof window.selectTool.selectObject === "function") {
+      window.selectTool.selectObject(line, false);
+    }
+
+    this.requestToolPanelRefresh();
+  }
+
+  initializeLineMetadata(line) {
+    if (!line) {
+      return;
+    }
+
+    if (line.getAttribute("data-line-tool") !== "true") {
+      line.setAttribute("data-line-tool", "true");
+    }
+
+    this.ensureLineId(line);
+
+    if (!line.dataset.geometryStyle) {
+      line.dataset.geometryStyle = this.getDefaultGeometryStyle();
+    }
+
+    if (!line.dataset.strokeStyle) {
+      line.dataset.strokeStyle = this.getStrokeStyleKey(line);
+    }
+  }
+
+  ensureLineId(line) {
+    if (!line.dataset.lineId) {
+      line.dataset.lineId = this.generateLineId();
+    }
+    return line.dataset.lineId;
+  }
+
+  generateLineId() {
+    return `line-${Date.now()}-${this.lineIdCounter++}`;
+  }
+
+  getDefaultGeometryStyle() {
+    return "endpoints";
+  }
+
+  createGeometryStyles() {
+    return {
+      endpoints: {
+        label: "座標 (x1, y1, x2, y2)",
+        fields: [
+          { id: "x1", label: "X1", step: "1" },
+          { id: "y1", label: "Y1", step: "1" },
+          { id: "x2", label: "X2", step: "1" },
+          { id: "y2", label: "Y2", step: "1" },
+        ],
+        getValues: (line) => ({
+          x1: this.toNumber(line.getAttribute("x1")),
+          y1: this.toNumber(line.getAttribute("y1")),
+          x2: this.toNumber(line.getAttribute("x2")),
+          y2: this.toNumber(line.getAttribute("y2")),
+        }),
+        applyValues: (line, values) => {
+          line.setAttribute("x1", values.x1);
+          line.setAttribute("y1", values.y1);
+          line.setAttribute("x2", values.x2);
+          line.setAttribute("y2", values.y2);
+        },
+      },
+      polar: {
+        label: "始点 + 長さ/角度",
+        fields: [
+          { id: "startX", label: "始点X", step: "1" },
+          { id: "startY", label: "始点Y", step: "1" },
+          { id: "length", label: "長さ", step: "1", min: 0 },
+          { id: "angle", label: "角度", step: "1", suffix: "度" },
+        ],
+        getValues: (line) => {
+          const x1 = this.toNumber(line.getAttribute("x1"));
+          const y1 = this.toNumber(line.getAttribute("y1"));
+          const x2 = this.toNumber(line.getAttribute("x2"));
+          const y2 = this.toNumber(line.getAttribute("y2"));
+          const dx = x2 - x1;
+          const dy = y2 - y1;
+          const length = Math.sqrt(dx * dx + dy * dy);
+          const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+          return {
+            startX: x1,
+            startY: y1,
+            length: Number.isFinite(length) ? Number(length.toFixed(2)) : 0,
+            angle: Number.isFinite(angle) ? Number(angle.toFixed(2)) : 0,
+          };
+        },
+        applyValues: (line, values) => {
+          const startX = values.startX;
+          const startY = values.startY;
+          const length = Math.max(0, values.length);
+          const angleRad = (values.angle * Math.PI) / 180;
+          const x2 = startX + length * Math.cos(angleRad);
+          const y2 = startY + length * Math.sin(angleRad);
+          line.setAttribute("x1", startX);
+          line.setAttribute("y1", startY);
+          line.setAttribute("x2", x2);
+          line.setAttribute("y2", y2);
+        },
+      },
+    };
+  }
+
+  getLineGeometryStyle(line) {
+    const key = line?.dataset?.geometryStyle;
+    if (key && this.geometryStyles[key]) {
+      return key;
+    }
+    return this.getDefaultGeometryStyle();
+  }
+
+  getGeometryStyleLabel(line) {
+    const key = this.getLineGeometryStyle(line);
+    return this.geometryStyles[key]?.label || "座標";
+  }
+
+  getLineSummary(line, index = 0) {
+    const x1 = this.toNumber(line.getAttribute("x1"));
+    const y1 = this.toNumber(line.getAttribute("y1"));
+    const x2 = this.toNumber(line.getAttribute("x2"));
+    const y2 = this.toNumber(line.getAttribute("y2"));
+    return `L${index + 1}: (${Math.round(x1)}, ${Math.round(y1)}) → (${Math.round(
+      x2
+    )}, ${Math.round(y2)})`;
+  }
+
+  toNumber(value, fallback = 0) {
+    const parsed = parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+
+  normalizeColorForInput(value) {
+    const rgb = window.StyleUtils.parseColor(value);
+    if (rgb) {
+      return window.StyleUtils.rgbToHex(rgb.r, rgb.g, rgb.b);
+    }
+    return "#000000";
+  }
+
+  getStrokeStyleKey(line) {
+    const dash = line.getAttribute("stroke-dasharray") || "none";
+    const entries = Object.entries(window.StyleUtils.LINE_STYLES || {});
+    for (const [key, pattern] of entries) {
+      if (pattern === dash) {
+        return key;
+      }
+    }
+    return line.dataset.strokeStyle || "solid";
+  }
+
+  applyStrokeStyle(line, styleKey) {
+    const pattern = window.StyleUtils.LINE_STYLES[styleKey] || "none";
+    if (pattern === "none") {
+      line.removeAttribute("stroke-dasharray");
+    } else {
+      line.setAttribute("stroke-dasharray", pattern);
+    }
+    line.dataset.strokeStyle = styleKey;
   }
 }
 
