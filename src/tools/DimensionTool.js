@@ -208,7 +208,8 @@ class DimensionTool extends BaseTool {
 
     // グループ要素作成（SvgUtils.createElement を使用）
     const group = window.SvgUtils.createElement("g", {
-      "data-layer": window.currentLayerId
+      "data-layer": window.currentLayerId,
+      "data-dimension-tool": "true"
     });
     group.classList.add("dimension");
 
@@ -265,7 +266,8 @@ class DimensionTool extends BaseTool {
 
     // グループ要素作成（SvgUtils.createElement を使用）
     const group = window.SvgUtils.createElement("g", {
-      "data-layer": window.currentLayerId
+      "data-layer": window.currentLayerId,
+      "data-dimension-tool": "true"
     });
     group.classList.add("dimension");
 

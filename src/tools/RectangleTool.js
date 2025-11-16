@@ -96,6 +96,7 @@ class RectangleTool extends BaseTool {
       width: 0,
       height: 0,
     });
+    this.drawingObject.setAttribute("data-rectangle-tool", "true");
 
     this.applyDefaultAttributes(this.drawingObject);
     this.canvas.appendChild(this.drawingObject);
@@ -1020,23 +1021,21 @@ class RectangleTool extends BaseTool {
   }
 
   getRectangleElements() {
-    const rectangles = Array.from(this.canvas.querySelectorAll("rect"));
+    const rectangles = Array.from(
+      this.canvas.querySelectorAll('rect[data-rectangle-tool="true"]')
+    );
     return rectangles.filter((rectangle) => {
       if (!rectangle.getAttribute("width") || !rectangle.getAttribute("height")) {
         return false;
       }
       this.initializeRectangleMetadata(rectangle);
-      return rectangle.getAttribute("data-rectangle-tool") === "true";
+      return true;
     });
   }
 
   initializeRectangleMetadata(rectangle) {
-    if (!rectangle) {
+    if (!rectangle || rectangle.getAttribute("data-rectangle-tool") !== "true") {
       return;
-    }
-
-    if (rectangle.getAttribute("data-rectangle-tool") !== "true") {
-      rectangle.setAttribute("data-rectangle-tool", "true");
     }
 
     if (!rectangle.dataset.strokeStyle) {
@@ -1082,6 +1081,10 @@ class RectangleTool extends BaseTool {
   }
 
   selectRectangle(rectangle) {
+    if (rectangle && rectangle.getAttribute("data-rectangle-tool") !== "true") {
+      rectangle = null;
+    }
+
     if (!rectangle) {
       this.selectedRectangleId = null;
       this.selectionInteractionInProgress = false;

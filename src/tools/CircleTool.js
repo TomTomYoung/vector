@@ -103,6 +103,7 @@ class CircleTool extends BaseTool {
       cy: this.startPoint.y,
       r: 0,
     });
+    this.drawingObject.setAttribute("data-circle-tool", "true");
     this.applyDefaultAttributes(this.drawingObject);
     this.canvas.appendChild(this.drawingObject);
   }
@@ -989,23 +990,21 @@ class CircleTool extends BaseTool {
   }
 
   getCircleElements() {
-    const circles = Array.from(this.canvas.querySelectorAll("circle"));
+    const circles = Array.from(
+      this.canvas.querySelectorAll('circle[data-circle-tool="true"]')
+    );
     return circles.filter((circle) => {
       if (!circle.getAttribute("r")) {
         return false;
       }
       this.initializeCircleMetadata(circle);
-      return circle.getAttribute("data-circle-tool") === "true";
+      return true;
     });
   }
 
   initializeCircleMetadata(circle) {
-    if (!circle) {
+    if (!circle || circle.getAttribute("data-circle-tool") !== "true") {
       return;
-    }
-
-    if (circle.getAttribute("data-circle-tool") !== "true") {
-      circle.setAttribute("data-circle-tool", "true");
     }
 
     if (!circle.dataset.strokeStyle) {
@@ -1051,6 +1050,10 @@ class CircleTool extends BaseTool {
   }
 
   selectCircle(circle) {
+    if (circle && circle.getAttribute("data-circle-tool") !== "true") {
+      circle = null;
+    }
+
     if (!circle) {
       this.selectedCircleId = null;
       this.selectionInteractionInProgress = false;

@@ -171,6 +171,7 @@ class ArcTool extends BaseTool {
     // 円弧を確定
     if (this.currentArc) {
       this.currentArc.setAttribute("data-layer", window.currentLayerId);
+      this.currentArc.setAttribute("data-arc-tool", "true");
       this.currentArc = null;
     }
 

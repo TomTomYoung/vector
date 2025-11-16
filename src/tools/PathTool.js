@@ -204,6 +204,7 @@ class PathTool extends BaseTool {
         "stroke-width": document.getElementById("stroke-width")?.value || "2",
         "data-layer": window.currentLayerId,
       });
+      this.currentPath.setAttribute("data-path-tool", "true");
 
       this.canvas.appendChild(this.currentPath);
 
@@ -778,13 +779,15 @@ class PathTool extends BaseTool {
   }
 
   getPathElements() {
-    const paths = Array.from(this.canvas.querySelectorAll("path"));
+    const paths = Array.from(
+      this.canvas.querySelectorAll('path[data-path-tool="true"]')
+    );
     return paths.filter((path) => {
       if (!path.getAttribute("d")) {
         return false;
       }
       this.initializePathMetadata(path);
-      return path.getAttribute("data-path-tool") === "true";
+      return true;
     });
   }
 
@@ -806,6 +809,10 @@ class PathTool extends BaseTool {
   }
 
   selectPath(path) {
+    if (path && path.getAttribute("data-path-tool") !== "true") {
+      path = null;
+    }
+
     if (!path) {
       this.selectedPathId = null;
       this.selectionInteractionInProgress = false;
@@ -827,12 +834,8 @@ class PathTool extends BaseTool {
   }
 
   initializePathMetadata(path) {
-    if (!path) {
+    if (!path || path.getAttribute("data-path-tool") !== "true") {
       return;
-    }
-
-    if (path.getAttribute("data-path-tool") !== "true") {
-      path.setAttribute("data-path-tool", "true");
     }
 
     if (!path.dataset.strokeStyle) {

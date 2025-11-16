@@ -147,6 +147,7 @@ class SplineTool extends BaseTool {
     // スプラインを確定
     if (this.currentSpline) {
       this.currentSpline.setAttribute("data-layer", window.currentLayerId);
+      this.currentSpline.setAttribute("data-spline-tool", "true");
       this.currentSpline.removeAttribute("stroke-dasharray");
     }
 

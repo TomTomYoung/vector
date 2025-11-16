@@ -10,6 +10,7 @@ class BezierToolBase extends BaseTool {
     this.title = options.title || 'ベジェ';
     this.instructions = options.instructions || null;
     this.options = options;
+    this.toolAttribute = options.toolAttribute || 'data-bezier-tool';
   }
 
   getTitle() {
@@ -143,6 +144,9 @@ class BezierToolBase extends BaseTool {
 
     const element = window.SvgUtils.createElement('path', { d: pathData });
     this.applyDefaultAttributes(element);
+    if (this.toolAttribute) {
+      element.setAttribute(this.toolAttribute, 'true');
+    }
     this.canvas.appendChild(element);
     this.saveState();
     this.resetDrawing();

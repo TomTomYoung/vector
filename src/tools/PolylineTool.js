@@ -169,6 +169,7 @@ class PolylineTool extends BaseTool {
       fill: "none",
       opacity: this.currentStyle.opacity,
     });
+    this.currentPolyline.setAttribute("data-polyline-tool", "true");
     this.canvas.appendChild(this.currentPolyline);
   }
 
@@ -1003,13 +1004,15 @@ class PolylineTool extends BaseTool {
   }
 
   getPolylineElements() {
-    const polylines = Array.from(this.canvas.querySelectorAll("polyline"));
+    const polylines = Array.from(
+      this.canvas.querySelectorAll('polyline[data-polyline-tool="true"]')
+    );
     return polylines.filter((polyline) => {
       if (!polyline.getAttribute("points")) {
         return false;
       }
       this.initializePolylineMetadata(polyline);
-      return polyline.getAttribute("data-polyline-tool") === "true";
+      return true;
     });
   }
 
@@ -1031,6 +1034,10 @@ class PolylineTool extends BaseTool {
   }
 
   selectPolyline(polyline) {
+    if (polyline && polyline.getAttribute("data-polyline-tool") !== "true") {
+      polyline = null;
+    }
+
     if (!polyline) {
       this.selectedPolylineId = null;
       this.selectionInteractionInProgress = false;
@@ -1057,7 +1064,7 @@ class PolylineTool extends BaseTool {
     }
 
     if (polyline.getAttribute("data-polyline-tool") !== "true") {
-      polyline.setAttribute("data-polyline-tool", "true");
+      return;
     }
 
     if (!polyline.dataset.strokeStyle) {

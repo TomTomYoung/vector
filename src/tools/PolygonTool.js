@@ -167,6 +167,7 @@ class PolygonTool extends BaseTool {
 
     if (!this.drawingObject) {
       this.drawingObject = window.SvgUtils.createElement("polygon");
+      this.drawingObject.setAttribute("data-polygon-tool", "true");
       this.applyDefaultAttributes(this.drawingObject);
       this.canvas.appendChild(this.drawingObject);
       this.isDrawing = true;
@@ -1056,13 +1057,15 @@ class PolygonTool extends BaseTool {
   }
 
   getPolygonElements() {
-    const polygons = Array.from(this.canvas.querySelectorAll("polygon"));
+    const polygons = Array.from(
+      this.canvas.querySelectorAll('polygon[data-polygon-tool="true"]')
+    );
     return polygons.filter((polygon) => {
       if (!polygon.getAttribute("points")) {
         return false;
       }
       this.initializePolygonMetadata(polygon);
-      return polygon.getAttribute("data-polygon-tool") === "true";
+      return true;
     });
   }
 
@@ -1084,6 +1087,10 @@ class PolygonTool extends BaseTool {
   }
 
   selectPolygon(polygon) {
+    if (polygon && polygon.getAttribute("data-polygon-tool") !== "true") {
+      polygon = null;
+    }
+
     if (!polygon) {
       this.selectedPolygonId = null;
       this.selectionInteractionInProgress = false;
@@ -1105,12 +1112,8 @@ class PolygonTool extends BaseTool {
   }
 
   initializePolygonMetadata(polygon) {
-    if (!polygon) {
+    if (!polygon || polygon.getAttribute("data-polygon-tool") !== "true") {
       return;
-    }
-
-    if (polygon.getAttribute("data-polygon-tool") !== "true") {
-      polygon.setAttribute("data-polygon-tool", "true");
     }
 
     if (!polygon.dataset.strokeStyle) {

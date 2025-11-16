@@ -1044,6 +1044,10 @@ class LineTool extends BaseTool {
   }
 
   selectLine(line) {
+    if (line && line.getAttribute("data-line-tool") !== "true") {
+      line = null;
+    }
+
     if (!line) {
       this.selectedLineId = null;
       this.selectionInteractionInProgress = false;
@@ -1065,12 +1069,8 @@ class LineTool extends BaseTool {
   }
 
   initializeLineMetadata(line) {
-    if (!line) {
+    if (!line || line.getAttribute("data-line-tool") !== "true") {
       return;
-    }
-
-    if (line.getAttribute("data-line-tool") !== "true") {
-      line.setAttribute("data-line-tool", "true");
     }
 
     this.ensureLineId(line);
