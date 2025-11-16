@@ -27,9 +27,11 @@ class VerticesTool extends BaseTool {
     this.geometryElements = [];
 
     this.handleRadius = 8;
-    this.currentMethod = "polyline"; // polyline | polygon | segments
-    this.closeShape = false;
-    this.fillEnabled = false;
+    this.methodSettings = {
+      segments: { enabled: false },
+      polyline: { enabled: true, closed: false },
+      polygon: { enabled: false, fillEnabled: false },
+    };
 
     this.isDraggingHandle = false;
     this.draggingHandleIndex = null;
@@ -56,16 +58,34 @@ class VerticesTool extends BaseTool {
   getToolProperties() {
     const props = [
       {
-        type: "select",
-        label: "描画メソッド",
-        value: this.currentMethod,
-        options: [
-          { value: "polyline", label: "連続線 (polyline)" },
-          { value: "polygon", label: "面 (polygon)" },
-          { value: "segments", label: "線分 (indices)" },
-        ],
-        onChange: (value) => {
-          this.currentMethod = value;
+        type: "checkbox",
+        label: "線分 (segments)",
+        value: this.methodSettings.segments.enabled,
+        onChange: (checked) => {
+          this.methodSettings.segments.enabled = checked;
+          this.rebuildIndices();
+          this.renderGeometry();
+          this.saveState();
+        },
+      },
+      {
+        type: "checkbox",
+        label: "連続線 (polyline)",
+        value: this.methodSettings.polyline.enabled,
+        onChange: (checked) => {
+          this.methodSettings.polyline.enabled = checked;
+          this.rebuildIndices();
+          this.renderGeometry();
+          this.requestToolPanelRefresh();
+          this.saveState();
+        },
+      },
+      {
+        type: "checkbox",
+        label: "面 (polygon)",
+        value: this.methodSettings.polygon.enabled,
+        onChange: (checked) => {
+          this.methodSettings.polygon.enabled = checked;
           this.rebuildIndices();
           this.renderGeometry();
           this.requestToolPanelRefresh();
@@ -86,13 +106,13 @@ class VerticesTool extends BaseTool {
       },
     ];
 
-    if (this.currentMethod === "polyline") {
+    if (this.methodSettings.polyline.enabled) {
       props.push({
         type: "checkbox",
         label: "始点と終点を接続",
-        value: this.closeShape,
+        value: this.methodSettings.polyline.closed,
         onChange: (checked) => {
-          this.closeShape = checked;
+          this.methodSettings.polyline.closed = checked;
           this.rebuildIndices();
           this.renderGeometry();
           this.saveState();
@@ -100,13 +120,13 @@ class VerticesTool extends BaseTool {
       });
     }
 
-    if (this.currentMethod === "polygon") {
+    if (this.methodSettings.polygon.enabled) {
       props.push({
         type: "checkbox",
-        label: "塗りつぶし", 
-        value: this.fillEnabled,
+        label: "塗りつぶし",
+        value: this.methodSettings.polygon.fillEnabled,
         onChange: (checked) => {
-          this.fillEnabled = checked;
+          this.methodSettings.polygon.fillEnabled = checked;
           this.rebuildIndices();
           this.renderGeometry();
           this.saveState();
@@ -291,7 +311,7 @@ class VerticesTool extends BaseTool {
     const vectors = this.verticesObject.vectors;
     const indices = [];
 
-    if (this.currentMethod === "segments") {
+    if (this.methodSettings.segments.enabled) {
       for (let i = 0; i < vectors.length - 1; i += 1) {
         indices.push({
           method: "line",
@@ -299,22 +319,22 @@ class VerticesTool extends BaseTool {
           params: {},
         });
       }
-    } else if (this.currentMethod === "polyline") {
-      if (vectors.length > 1) {
-        indices.push({
-          method: "polyline",
-          points: vectors.map((_, idx) => idx),
-          params: { closed: this.closeShape },
-        });
-      }
-    } else if (this.currentMethod === "polygon") {
-      if (vectors.length > 2) {
-        indices.push({
-          method: "polygon",
-          points: vectors.map((_, idx) => idx),
-          params: { fillEnabled: this.fillEnabled },
-        });
-      }
+    }
+
+    if (this.methodSettings.polyline.enabled && vectors.length > 1) {
+      indices.push({
+        method: "polyline",
+        points: vectors.map((_, idx) => idx),
+        params: { closed: this.methodSettings.polyline.closed },
+      });
+    }
+
+    if (this.methodSettings.polygon.enabled && vectors.length > 2) {
+      indices.push({
+        method: "polygon",
+        points: vectors.map((_, idx) => idx),
+        params: { fillEnabled: this.methodSettings.polygon.fillEnabled },
+      });
     }
 
     this.verticesObject.indices = indices;
