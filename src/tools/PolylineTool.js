@@ -1,5 +1,14 @@
 // PolylineTool.js
 // ポリライン（連続線分）描画ツール
+//
+// 【依存関係】
+// - SvgUtils (window.SvgUtils): SVG要素作成
+// - CoordinatesUtils (window.CoordinatesUtils): 座標スナップ
+//
+// 【使用する外部関数】
+// - SvgUtils.createElement(), createLine(): SVG要素作成
+// - CoordinatesUtils.snapToOrtho(): 直交スナップ
+
 class PolylineTool extends BaseTool {
   constructor(canvas, toolManager) {
     super(canvas, toolManager);
@@ -63,14 +72,13 @@ class PolylineTool extends BaseTool {
       this.canvas.removeChild(this.currentPolyline);
     }
 
-    this.currentPolyline = document.createElementNS(this.svgNS, "polyline");
-    this.currentPolyline.setAttribute("stroke", this.currentStyle.stroke);
-    this.currentPolyline.setAttribute(
-      "stroke-width",
-      this.currentStyle.strokeWidth
-    );
-    this.currentPolyline.setAttribute("fill", "none");
-    this.currentPolyline.setAttribute("opacity", this.currentStyle.opacity);
+    // SvgUtils.createElement を使用
+    this.currentPolyline = window.SvgUtils.createElement("polyline", {
+      stroke: this.currentStyle.stroke,
+      "stroke-width": this.currentStyle.strokeWidth,
+      fill: "none",
+      opacity: this.currentStyle.opacity
+    });
     this.canvas.appendChild(this.currentPolyline);
   }
 
@@ -84,36 +92,28 @@ class PolylineTool extends BaseTool {
   updatePreview(previewPoint) {
     if (this.points.length === 0) return;
 
-    // プレビュー線を更新
+    // プレビュー線を更新（SvgUtils.createLine を使用）
     if (!this.previewLine) {
-      this.previewLine = document.createElementNS(this.svgNS, "line");
-      this.previewLine.setAttribute("stroke", "#999");
-      this.previewLine.setAttribute("stroke-width", "1");
-      this.previewLine.setAttribute("stroke-dasharray", "5,5");
+      this.previewLine = window.SvgUtils.createLine(0, 0, 0, 0, {
+        stroke: "#999",
+        "stroke-width": "1",
+        "stroke-dasharray": "5,5"
+      });
       this.canvas.appendChild(this.previewLine);
     }
 
     const lastPoint = this.points[this.points.length - 1];
 
-    // 直交モード対応
-    let endX = previewPoint.x;
-    let endY = previewPoint.y;
-
+    // 直交モード対応（CoordinatesUtils.snapToOrtho を使用）
+    let endPoint = previewPoint;
     if (window.orthoMode) {
-      const dx = Math.abs(endX - lastPoint.x);
-      const dy = Math.abs(endY - lastPoint.y);
-
-      if (dx > dy) {
-        endY = lastPoint.y; // 水平
-      } else {
-        endX = lastPoint.x; // 垂直
-      }
+      endPoint = window.CoordinatesUtils.snapToOrtho(lastPoint, previewPoint);
     }
 
     this.previewLine.setAttribute("x1", lastPoint.x);
     this.previewLine.setAttribute("y1", lastPoint.y);
-    this.previewLine.setAttribute("x2", endX);
-    this.previewLine.setAttribute("y2", endY);
+    this.previewLine.setAttribute("x2", endPoint.x);
+    this.previewLine.setAttribute("y2", endPoint.y);
   }
 
   finishPolyline() {

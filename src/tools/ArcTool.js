@@ -1,5 +1,15 @@
 // ArcTool.js
 // 円弧描画ツール（3点指定：始点、通過点、終点）
+//
+// 【依存関係】
+// - SvgUtils (window.SvgUtils): SVG要素作成
+// - GeometryUtils (window.GeometryUtils): 幾何計算
+//
+// 【使用する外部関数】
+// - SvgUtils.createElement(), createCircle(): SVG要素作成
+// - GeometryUtils.distance(): 2点間距離
+// - GeometryUtils.normalizeAngle(): 角度正規化
+
 class ArcTool extends BaseTool {
   constructor(canvas, toolManager) {
     super(canvas, toolManager);
@@ -58,8 +68,8 @@ class ArcTool extends BaseTool {
     const point = this.getMousePosition(event);
 
     if (this.points.length === 1) {
-      // 始点から現在位置までの円をプレビュー
-      const radius = this.distance(this.points[0], point);
+      // 始点から現在位置までの円をプレビュー（GeometryUtils.distance を使用）
+      const radius = window.GeometryUtils.distance(this.points[0], point);
       if (this.previewCircle) {
         this.previewCircle.setAttribute("r", radius);
       }
@@ -70,14 +80,13 @@ class ArcTool extends BaseTool {
   }
 
   createPreviewCircle(center) {
-    this.previewCircle = document.createElementNS(this.svgNS, "circle");
-    this.previewCircle.setAttribute("cx", center.x);
-    this.previewCircle.setAttribute("cy", center.y);
-    this.previewCircle.setAttribute("r", 0);
-    this.previewCircle.setAttribute("stroke", "#999");
-    this.previewCircle.setAttribute("stroke-width", "1");
-    this.previewCircle.setAttribute("stroke-dasharray", "5,5");
-    this.previewCircle.setAttribute("fill", "none");
+    // SvgUtils.createCircle を使用
+    this.previewCircle = window.SvgUtils.createCircle(center.x, center.y, 0, {
+      stroke: "#999",
+      "stroke-width": "1",
+      "stroke-dasharray": "5,5",
+      fill: "none"
+    });
     this.canvas.appendChild(this.previewCircle);
   }
 
@@ -100,12 +109,14 @@ class ArcTool extends BaseTool {
     );
     if (!arcData) return;
 
-    this.currentArc = document.createElementNS(this.svgNS, "path");
-    this.currentArc.setAttribute("d", arcData.path);
-    this.currentArc.setAttribute("stroke", this.currentStyle.stroke);
-    this.currentArc.setAttribute("stroke-width", this.currentStyle.strokeWidth);
-    this.currentArc.setAttribute("fill", "none");
-    this.currentArc.setAttribute("opacity", this.currentStyle.opacity);
+    // SvgUtils.createElement を使用
+    this.currentArc = window.SvgUtils.createElement("path", {
+      d: arcData.path,
+      stroke: this.currentStyle.stroke,
+      "stroke-width": this.currentStyle.strokeWidth,
+      fill: "none",
+      opacity: this.currentStyle.opacity
+    });
     this.canvas.appendChild(this.currentArc);
   }
 
@@ -144,7 +155,8 @@ class ArcTool extends BaseTool {
     const center = this.calculateCircleCenter(p1, p2, p3);
     if (!center) return null;
 
-    const radius = this.distance(center, p1);
+    // GeometryUtils.distance を使用
+    const radius = window.GeometryUtils.distance(center, p1);
 
     // 各点の角度を計算
     const angle1 = Math.atan2(p1.y - center.y, p1.x - center.x);
@@ -188,8 +200,8 @@ class ArcTool extends BaseTool {
   }
 
   isLargeArc(a1, a2, a3) {
-    // 円弧が180度以上かどうか
-    const diff = this.normalizeAngle(a3 - a1);
+    // 円弧が180度以上かどうか（GeometryUtils.normalizeAngle を使用）
+    const diff = window.GeometryUtils.normalizeAngle(a3 - a1);
     return Math.abs(diff) > Math.PI;
   }
 
@@ -198,18 +210,6 @@ class ArcTool extends BaseTool {
     const cross =
       (a2 - a1) * Math.sin(a3 - a2) - (a3 - a2) * Math.sin(a2 - a1);
     return cross > 0;
-  }
-
-  normalizeAngle(angle) {
-    while (angle > Math.PI) angle -= 2 * Math.PI;
-    while (angle < -Math.PI) angle += 2 * Math.PI;
-    return angle;
-  }
-
-  distance(p1, p2) {
-    const dx = p2.x - p1.x;
-    const dy = p2.y - p1.y;
-    return Math.sqrt(dx * dx + dy * dy);
   }
 
   handleKeyDown(event) {
