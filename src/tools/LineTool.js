@@ -768,8 +768,11 @@ class LineTool extends BaseTool {
       matrix = new DOMMatrix();
     }
 
-    const translateX = matrix.e;
-    const translateY = matrix.f;
+    const anchor = this.getLineLocalCenter(line);
+    const anchorShift = this.getAnchorTranslation(matrix, anchor);
+
+    const translateX = matrix.e - anchorShift.x;
+    const translateY = matrix.f - anchorShift.y;
     const scaleX = Math.sqrt(matrix.a * matrix.a + matrix.b * matrix.b) || 0;
     let rotation = Math.atan2(matrix.b, matrix.a) * (180 / Math.PI);
     let scaleY;
@@ -833,8 +836,11 @@ class LineTool extends BaseTool {
     const b = sin * scaleX;
     const c = -sin * scaleY;
     const d = cos * scaleY;
-    const e = translateX;
-    const f = translateY;
+
+    const anchor = this.getLineLocalCenter(line);
+    const anchorShift = this.getAnchorTranslation({ a, b, c, d }, anchor);
+    const e = anchorShift.x + translateX;
+    const f = anchorShift.y + translateY;
 
     if (this.isIdentityMatrix({ a, b, c, d, e, f })) {
       line.removeAttribute("transform");
@@ -844,6 +850,55 @@ class LineTool extends BaseTool {
         `matrix(${a}, ${b}, ${c}, ${d}, ${e}, ${f})`
       );
     }
+  }
+
+  getLineLocalCenter(line) {
+    if (!line) {
+      return null;
+    }
+
+    const x1 = this.toNumber(line.getAttribute("x1"));
+    const y1 = this.toNumber(line.getAttribute("y1"));
+    const x2 = this.toNumber(line.getAttribute("x2"));
+    const y2 = this.toNumber(line.getAttribute("y2"));
+
+    if (
+      !Number.isFinite(x1) ||
+      !Number.isFinite(y1) ||
+      !Number.isFinite(x2) ||
+      !Number.isFinite(y2)
+    ) {
+      return null;
+    }
+
+    return {
+      x: (x1 + x2) / 2,
+      y: (y1 + y2) / 2,
+    };
+  }
+
+  getAnchorTranslation(matrix, anchor) {
+    if (!matrix || !anchor) {
+      return { x: 0, y: 0 };
+    }
+
+    const a = Number.isFinite(matrix.a) ? matrix.a : 1;
+    const b = Number.isFinite(matrix.b) ? matrix.b : 0;
+    const c = Number.isFinite(matrix.c) ? matrix.c : 0;
+    const d = Number.isFinite(matrix.d) ? matrix.d : 1;
+
+    if (!Number.isFinite(anchor.x) || !Number.isFinite(anchor.y)) {
+      return { x: 0, y: 0 };
+    }
+
+    const anchorX = anchor.x;
+    const anchorY = anchor.y;
+    const shiftedX = anchorX - (a * anchorX + c * anchorY);
+    const shiftedY = anchorY - (b * anchorX + d * anchorY);
+    return {
+      x: shiftedX,
+      y: shiftedY,
+    };
   }
 
   getLineElements() {
