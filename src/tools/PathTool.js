@@ -1,5 +1,12 @@
 // PathTool.js
 // パス描画ツール
+//
+// 【依存関係】
+// - SvgUtils (window.SvgUtils): SVG要素作成
+//
+// 【使用する外部関数】
+// - SvgUtils.createElement(): SVG要素作成
+
 class PathTool extends BaseTool {
   constructor(canvas, toolManager) {
     super(canvas, toolManager);
@@ -137,31 +144,23 @@ class PathTool extends BaseTool {
     }
 
     if (!this.currentPath) {
-      // 新しいパスを開始
+      // 新しいパスを開始（SvgUtils.createElement を使用）
       this.pathPoints = [];
-      this.currentPath = document.createElementNS(this.svgNS, "path");
-      this.currentPath.setAttribute("fill", "none");
-      this.currentPath.setAttribute(
-        "stroke",
-        document.getElementById("stroke-color")?.value || "#000000"
-      );
-      this.currentPath.setAttribute(
-        "stroke-width",
-        document.getElementById("stroke-width")?.value || "2"
-      );
-
-      // レイヤー情報を設定
-      if (window.currentLayerId) {
-        this.currentPath.setAttribute("data-layer", window.currentLayerId);
-      }
+      this.currentPath = window.SvgUtils.createElement("path", {
+        fill: "none",
+        stroke: document.getElementById("stroke-color")?.value || "#000000",
+        "stroke-width": document.getElementById("stroke-width")?.value || "2",
+        "data-layer": window.currentLayerId
+      });
 
       this.canvas.appendChild(this.currentPath);
 
-      // ガイドライン作成
-      this.tempLine = document.createElementNS(this.svgNS, "line");
-      this.tempLine.setAttribute("stroke", "#000000");
-      this.tempLine.setAttribute("stroke-width", 1);
-      this.tempLine.setAttribute("stroke-dasharray", "4 4");
+      // ガイドライン作成（SvgUtils.createElement を使用）
+      this.tempLine = window.SvgUtils.createElement("line", {
+        stroke: "#000000",
+        "stroke-width": 1,
+        "stroke-dasharray": "4 4"
+      });
       this.canvas.appendChild(this.tempLine);
     }
 

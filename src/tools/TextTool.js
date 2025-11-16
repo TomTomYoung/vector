@@ -1,5 +1,12 @@
 // TextTool.js
 // テキスト入力ツール
+//
+// 【依存関係】
+// - SvgUtils (window.SvgUtils): SVG要素作成
+//
+// 【使用する外部関数】
+// - SvgUtils.createElement(): SVG要素作成
+
 class TextTool extends BaseTool {
   constructor(canvas, toolManager) {
     super(canvas, toolManager);
@@ -29,24 +36,18 @@ class TextTool extends BaseTool {
     }
   }
 
-  // テキスト要素を作成
+  // テキスト要素を作成（SvgUtils.createElement を使用）
   createTextElement(point, content) {
     if (!content || content.trim() === "") return;
 
-    const text = document.createElementNS(this.svgNS, "text");
-    text.setAttribute("x", point.x);
-    text.setAttribute("y", point.y);
-    text.setAttribute(
-      "fill",
-      document.getElementById("fill-color")?.value || "#000000"
-    );
-    text.setAttribute("font-family", "Arial"); // 将来的にフォント選択UIを追加可能
-    text.setAttribute("font-size", "16px"); // 将来的にサイズ選択UIを追加可能
-
-    // レイヤー情報を設定
-    if (window.currentLayerId) {
-      text.setAttribute("data-layer", window.currentLayerId);
-    }
+    const text = window.SvgUtils.createElement("text", {
+      x: point.x,
+      y: point.y,
+      fill: document.getElementById("fill-color")?.value || "#000000",
+      "font-family": "Arial",
+      "font-size": "16px",
+      "data-layer": window.currentLayerId
+    });
 
     text.textContent = content;
 

@@ -1,5 +1,14 @@
 // SplitTool.js
 // 分割ツール（線を指定点で分割）
+//
+// 【依存関係】
+// - SvgUtils (window.SvgUtils): SVG要素作成
+// - GeometryUtils (window.GeometryUtils): 幾何計算
+//
+// 【使用する外部関数】
+// - SvgUtils.createLine(), createElement(): SVG要素作成
+// - GeometryUtils.distance(): 2点間距離
+
 class SplitTool extends BaseTool {
   constructor(canvas, toolManager) {
     super(canvas, toolManager);
@@ -80,9 +89,9 @@ class SplitTool extends BaseTool {
     // クリック点を線分上に投影
     const splitPoint = this.projectPointToLine(clickPoint, { x: x1, y: y1 }, { x: x2, y: y2 });
 
-    // 端点に近すぎる場合は分割しない
-    const distToP1 = this.distance(splitPoint, { x: x1, y: y1 });
-    const distToP2 = this.distance(splitPoint, { x: x2, y: y2 });
+    // 端点に近すぎる場合は分割しない（GeometryUtils.distance を使用）
+    const distToP1 = window.GeometryUtils.distance(splitPoint, { x: x1, y: y1 });
+    const distToP2 = window.GeometryUtils.distance(splitPoint, { x: x2, y: y2 });
     if (distToP1 < 5 || distToP2 < 5) return;
 
     this.saveState();
@@ -95,26 +104,20 @@ class SplitTool extends BaseTool {
     // 元の線を削除
     line.parentNode.removeChild(line);
 
-    // 2つの新しい線分を作成
-    const line1 = document.createElementNS(this.svgNS, "line");
-    line1.setAttribute("x1", x1);
-    line1.setAttribute("y1", y1);
-    line1.setAttribute("x2", splitPoint.x);
-    line1.setAttribute("y2", splitPoint.y);
-    line1.setAttribute("stroke", stroke);
-    line1.setAttribute("stroke-width", strokeWidth);
-    line1.setAttribute("fill", "none");
-    line1.setAttribute("data-layer", layerId);
+    // 2つの新しい線分を作成（SvgUtils.createLine を使用）
+    const line1 = window.SvgUtils.createLine(x1, y1, splitPoint.x, splitPoint.y, {
+      stroke: stroke,
+      "stroke-width": strokeWidth,
+      fill: "none",
+      "data-layer": layerId
+    });
 
-    const line2 = document.createElementNS(this.svgNS, "line");
-    line2.setAttribute("x1", splitPoint.x);
-    line2.setAttribute("y1", splitPoint.y);
-    line2.setAttribute("x2", x2);
-    line2.setAttribute("y2", y2);
-    line2.setAttribute("stroke", stroke);
-    line2.setAttribute("stroke-width", strokeWidth);
-    line2.setAttribute("fill", "none");
-    line2.setAttribute("data-layer", layerId);
+    const line2 = window.SvgUtils.createLine(splitPoint.x, splitPoint.y, x2, y2, {
+      stroke: stroke,
+      "stroke-width": strokeWidth,
+      fill: "none",
+      "data-layer": layerId
+    });
 
     this.canvas.appendChild(line1);
     this.canvas.appendChild(line2);
@@ -146,9 +149,9 @@ class SplitTool extends BaseTool {
 
     if (minDist > 5 || segmentIndex === -1) return; // 線から離れすぎている
 
-    // 端点に近すぎる場合は分割しない
-    const distToP1 = this.distance(splitPoint, points[segmentIndex]);
-    const distToP2 = this.distance(splitPoint, points[segmentIndex + 1]);
+    // 端点に近すぎる場合は分割しない（GeometryUtils.distance を使用）
+    const distToP1 = window.GeometryUtils.distance(splitPoint, points[segmentIndex]);
+    const distToP2 = window.GeometryUtils.distance(splitPoint, points[segmentIndex + 1]);
     if (distToP1 < 5 || distToP2 < 5) return;
 
     this.saveState();
@@ -168,19 +171,22 @@ class SplitTool extends BaseTool {
     const points2 = [splitPoint];
     points2.push(...points.slice(segmentIndex + 1));
 
-    const polyline1 = document.createElementNS(this.svgNS, "polyline");
-    polyline1.setAttribute("points", points1.map((p) => `${p.x},${p.y}`).join(" "));
-    polyline1.setAttribute("stroke", stroke);
-    polyline1.setAttribute("stroke-width", strokeWidth);
-    polyline1.setAttribute("fill", "none");
-    polyline1.setAttribute("data-layer", layerId);
+    // 2つの新しいポリラインを作成（SvgUtils.createElement を使用）
+    const polyline1 = window.SvgUtils.createElement("polyline", {
+      points: points1.map((p) => `${p.x},${p.y}`).join(" "),
+      stroke: stroke,
+      "stroke-width": strokeWidth,
+      fill: "none",
+      "data-layer": layerId
+    });
 
-    const polyline2 = document.createElementNS(this.svgNS, "polyline");
-    polyline2.setAttribute("points", points2.map((p) => `${p.x},${p.y}`).join(" "));
-    polyline2.setAttribute("stroke", stroke);
-    polyline2.setAttribute("stroke-width", strokeWidth);
-    polyline2.setAttribute("fill", "none");
-    polyline2.setAttribute("data-layer", layerId);
+    const polyline2 = window.SvgUtils.createElement("polyline", {
+      points: points2.map((p) => `${p.x},${p.y}`).join(" "),
+      stroke: stroke,
+      "stroke-width": strokeWidth,
+      fill: "none",
+      "data-layer": layerId
+    });
 
     this.canvas.appendChild(polyline1);
     this.canvas.appendChild(polyline2);
@@ -195,8 +201,8 @@ class SplitTool extends BaseTool {
   pointToLineDistance(point, p1, p2) {
     const dx = p2.x - p1.x;
     const dy = p2.y - p1.y;
-    const len = Math.sqrt(dx * dx + dy * dy);
-    if (len === 0) return this.distance(point, p1);
+    const len = window.GeometryUtils.vectorLength({ x: dx, y: dy });
+    if (len === 0) return window.GeometryUtils.distance(point, p1);
 
     // 線分のパラメータt (0 <= t <= 1)
     const t = Math.max(
@@ -212,14 +218,14 @@ class SplitTool extends BaseTool {
       y: p1.y + t * dy,
     };
 
-    return this.distance(point, projection);
+    return window.GeometryUtils.distance(point, projection);
   }
 
   // 点を線分上に投影
   projectPointToLine(point, p1, p2) {
     const dx = p2.x - p1.x;
     const dy = p2.y - p1.y;
-    const len = Math.sqrt(dx * dx + dy * dy);
+    const len = window.GeometryUtils.vectorLength({ x: dx, y: dy });
     if (len === 0) return { ...p1 };
 
     const t = Math.max(
@@ -234,10 +240,6 @@ class SplitTool extends BaseTool {
       x: p1.x + t * dx,
       y: p1.y + t * dy,
     };
-  }
-
-  distance(p1, p2) {
-    return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
   }
 }
 
