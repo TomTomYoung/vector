@@ -5,6 +5,7 @@ class NthBezierTool extends BezierToolBase {
     super(canvas, toolManager, {
       method: 'bezierN',
       title: 'n次ベジェ',
+      toolAttribute: 'data-nth-bezier-tool',
     });
     this.degree = 4;
     this.sampleCount = 80;

@@ -84,6 +84,11 @@ class LineTool extends BaseTool {
       },
       {
         type: "custom",
+        label: "選択状態",
+        render: (container) => this.renderSelectionControls(container),
+      },
+      {
+        type: "custom",
         label: "直線オブジェクト一覧",
         render: (container) => this.renderLineList(container),
       },
@@ -95,6 +100,43 @@ class LineTool extends BaseTool {
     ];
 
     return props;
+  }
+
+  renderSelectionControls(container) {
+    const line = this.getSelectedLineElement();
+    const lines = this.getLineElements();
+    const index = line ? lines.indexOf(line) : -1;
+
+    container.style.display = "flex";
+    container.style.flexDirection = "column";
+    container.style.gap = "6px";
+
+    const info = document.createElement("div");
+    info.textContent = line
+      ? this.getLineSummary(line, index >= 0 ? index : 0)
+      : "現在選択されていません";
+    info.style.fontSize = "12px";
+    info.style.color = line ? "#1a73e8" : "#666";
+    container.appendChild(info);
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = "選択解除";
+    button.disabled = !line;
+    button.style.cssText = `
+      padding: 6px 8px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      background: ${line ? "#fff" : "#f5f5f5"};
+      color: ${line ? "#333" : "#999"};
+      font-size: 12px;
+      cursor: ${line ? "pointer" : "not-allowed"};
+    `;
+    button.addEventListener("click", () => {
+      this.selectLine(null);
+    });
+
+    container.appendChild(button);
   }
 
   activate() {
@@ -1002,6 +1044,10 @@ class LineTool extends BaseTool {
   }
 
   selectLine(line) {
+    if (line && line.getAttribute("data-line-tool") !== "true") {
+      line = null;
+    }
+
     if (!line) {
       this.selectedLineId = null;
       this.selectionInteractionInProgress = false;
@@ -1023,12 +1069,8 @@ class LineTool extends BaseTool {
   }
 
   initializeLineMetadata(line) {
-    if (!line) {
+    if (!line || line.getAttribute("data-line-tool") !== "true") {
       return;
-    }
-
-    if (line.getAttribute("data-line-tool") !== "true") {
-      line.setAttribute("data-line-tool", "true");
     }
 
     this.ensureLineId(line);
