@@ -63,7 +63,8 @@ class TextTool extends BaseTool {
       fill: document.getElementById("fill-color")?.value || "#000000",
       "font-family": "Arial",
       "font-size": "16px",
-      "data-layer": window.currentLayerId
+      "data-layer": window.currentLayerId,
+      "data-text-tool": "true"
     });
 
     text.textContent = content;
