@@ -314,6 +314,12 @@ class ToolPropertiesPanel {
           });
           group.appendChild(colorInput);
           break;
+
+        case "custom":
+          if (typeof prop.render === "function") {
+            prop.render(group);
+          }
+          break;
       }
 
       section.appendChild(group);
