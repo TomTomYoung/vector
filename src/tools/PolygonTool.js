@@ -19,15 +19,36 @@ class PolygonTool extends BaseTool {
     return "多角形";
   }
 
+  getInstructions() {
+    const instructions = ["左クリック: 頂点を追加"];
+
+    if (this.polygonPoints.length > 0) {
+      instructions.push("マウス移動: 次の辺をプレビュー");
+    }
+
+    instructions.push("ダブルクリックまたはEnter: 多角形を確定");
+    instructions.push("Esc: 描画中の多角形をキャンセル");
+
+    return instructions;
+  }
+
+  updatePanel() {
+    if (window.toolPropertiesPanel) {
+      window.toolPropertiesPanel.updatePanel();
+    }
+  }
+
   activate() {
     super.activate();
     this.canvas.style.cursor = "crosshair";
+    this.updatePanel();
   }
 
   deactivate() {
     super.deactivate();
     // 描画中の多角形があればキャンセル
     this.cancelPolygon();
+    this.updatePanel();
   }
 
   cancel() {
@@ -41,6 +62,7 @@ class PolygonTool extends BaseTool {
 
     // クリックで頂点を追加
     this.handlePolygonClick(this.startPoint);
+    this.updatePanel();
   }
 
   handleMouseMove(event) {
@@ -66,6 +88,8 @@ class PolygonTool extends BaseTool {
     } else {
       this.cancelPolygon();
     }
+
+    this.updatePanel();
   }
 
   handleKeyDown(event) {
@@ -74,6 +98,11 @@ class PolygonTool extends BaseTool {
     // ESCキーでキャンセル
     if (event.key === "Escape") {
       this.cancelPolygon();
+      this.updatePanel();
+    }
+
+    if (event.key === "Enter" && this.polygonPoints.length >= 3) {
+      this.finishPolygon();
     }
   }
 
@@ -109,6 +138,7 @@ class PolygonTool extends BaseTool {
 
     // ポリゴンのパスを更新
     this.updatePolygonPath();
+    this.updatePanel();
   }
 
   // 多角形のパスを更新
@@ -155,6 +185,8 @@ class PolygonTool extends BaseTool {
     this.drawingObject = null;
     this.polygonPoints = [];
 
+    this.updatePanel();
+
     return createdObject;
   }
 
@@ -171,6 +203,7 @@ class PolygonTool extends BaseTool {
     this.drawingObject = null;
     this.tempLine = null;
     this.polygonPoints = [];
+    this.updatePanel();
   }
 }
 

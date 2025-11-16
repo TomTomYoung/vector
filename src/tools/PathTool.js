@@ -20,6 +20,31 @@ class PathTool extends BaseTool {
     return "パス";
   }
 
+  getInstructions() {
+    const modeLabel = this.pathMode === "line" ? "直線" : "ベジェ";
+    const instructions = [
+      `現在のモード: ${modeLabel}`,
+      this.pathMode === "line"
+        ? "左クリック: 折れ線の頂点を追加"
+        : "左クリック: 制御点/終点を順番に追加",
+      "ダブルクリックまたはEnter: パスを確定",
+      "Esc: 描画中のパスをキャンセル",
+      "ツールバーの『ベジェ/直線』ボタンでモード切替",
+    ];
+
+    if (this.pathPoints.length > 0) {
+      instructions.splice(2, 0, "マウス移動: 次の頂点位置をプレビュー");
+    }
+
+    return instructions;
+  }
+
+  updatePanel() {
+    if (window.toolPropertiesPanel) {
+      window.toolPropertiesPanel.updatePanel();
+    }
+  }
+
   activate() {
     super.activate();
     this.canvas.style.cursor = "crosshair";
@@ -28,6 +53,8 @@ class PathTool extends BaseTool {
     if (!document.getElementById("path-mode-btn")) {
       this.createModeButton();
     }
+
+    this.updatePanel();
   }
 
   deactivate() {
@@ -38,6 +65,7 @@ class PathTool extends BaseTool {
     } else if (this.currentPath) {
       this.cancelPath();
     }
+    this.updatePanel();
   }
 
   cancel() {
@@ -87,6 +115,8 @@ class PathTool extends BaseTool {
       if (this.currentPath) {
         this.updatePathData();
       }
+
+      this.updatePanel();
     });
 
     const stack = document.getElementById("path-mode-stack") || group;
@@ -100,6 +130,7 @@ class PathTool extends BaseTool {
 
     // パスのクリック処理
     this.handlePathClick(this.startPoint);
+    this.updatePanel();
   }
 
   handleMouseMove(event) {
@@ -125,6 +156,8 @@ class PathTool extends BaseTool {
     } else {
       this.cancelPath();
     }
+
+    this.updatePanel();
   }
 
   handleKeyDown(event) {
@@ -133,6 +166,11 @@ class PathTool extends BaseTool {
     // ESCキーでキャンセル
     if (event.key === "Escape") {
       this.cancelPath();
+      this.updatePanel();
+    }
+
+    if (event.key === "Enter" && this.pathPoints.length >= 2) {
+      this.finishPath();
     }
   }
 
@@ -244,6 +282,8 @@ class PathTool extends BaseTool {
     this.currentPath = null;
     this.pathPoints = [];
 
+    this.updatePanel();
+
     return createdPath;
   }
 
@@ -260,6 +300,8 @@ class PathTool extends BaseTool {
     this.currentPath = null;
     this.tempLine = null;
     this.pathPoints = [];
+
+    this.updatePanel();
   }
 }
 

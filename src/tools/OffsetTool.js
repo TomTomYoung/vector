@@ -22,18 +22,19 @@ class OffsetTool extends BaseTool {
   }
 
   getInstructions() {
+    const instructions = ["ツールプロパティの『オフセット距離』で離れ幅を設定"];
+
     if (!this.selectedElement) {
-      return [
-        "左クリック: オフセットする線・図形を選択",
-        "Esc: 選択解除",
-      ];
+      instructions.push("左クリック: オフセットする線分・図形を選択");
+      instructions.push("対応図形: 線分 / ポリライン / 矩形 / 円");
     } else {
-      return [
-        "左クリック: オフセット方向を指定",
-        "オフセット距離はツールプロパティで設定",
-        "Esc: 選択解除",
-      ];
+      instructions.push("左クリック: 選択図形の外側/内側をクリックして方向を決定");
+      instructions.push("もう一度選択するまで追加のオフセットを作成");
     }
+
+    instructions.push("Esc: 選択解除");
+
+    return instructions;
   }
 
   getToolProperties() {

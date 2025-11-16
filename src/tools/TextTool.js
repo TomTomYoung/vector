@@ -16,9 +16,24 @@ class TextTool extends BaseTool {
     return "テキスト";
   }
 
+  getInstructions() {
+    return [
+      "左クリック: テキストの配置位置を指定",
+      "表示されるダイアログに内容を入力してOKで確定",
+      "キャンセルするとテキストは作成されない",
+    ];
+  }
+
+  updatePanel() {
+    if (window.toolPropertiesPanel) {
+      window.toolPropertiesPanel.updatePanel();
+    }
+  }
+
   activate() {
     super.activate();
     this.canvas.style.cursor = "text";
+    this.updatePanel();
   }
 
   handleMouseDown(event) {
@@ -34,6 +49,8 @@ class TextTool extends BaseTool {
     if (textContent) {
       this.createTextElement(this.startPoint, textContent);
     }
+
+    this.updatePanel();
   }
 
   // テキスト要素を作成（SvgUtils.createElement を使用）

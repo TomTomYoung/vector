@@ -21,10 +21,36 @@ class TrimTool extends BaseTool {
     return "トリム";
   }
 
+  getInstructions() {
+    const instructions = ["対象: line / polyline / path の線分"];
+
+    if (this.mode === "select") {
+      instructions.push("左クリック: 切断に使う線分を選択 (複数可)");
+      instructions.push("Enter: 選択した線分でトリムモードに切り替え");
+      if (this.cuttingEdges.length > 0) {
+        instructions.push(`選択中の切断辺: ${this.cuttingEdges.length} 本`);
+      }
+    } else {
+      instructions.push("左クリック: 削除したい区間をクリック");
+      instructions.push("切断辺を追加したい場合はEscでリセットして再選択");
+    }
+
+    instructions.push("Esc: 選択をクリアして切断辺の選び直し");
+
+    return instructions;
+  }
+
+  updatePanel() {
+    if (window.toolPropertiesPanel) {
+      window.toolPropertiesPanel.updatePanel();
+    }
+  }
+
   activate() {
     super.activate();
     this.canvas.style.cursor = "crosshair";
     this.createTrimControls();
+    this.updatePanel();
   }
 
   deactivate() {
@@ -58,6 +84,13 @@ class TrimTool extends BaseTool {
     controls.appendChild(info);
 
     container.appendChild(controls);
+  }
+
+  updateTrimInfoText(message) {
+    const info = document.querySelector("#trim-controls .control-info");
+    if (info) {
+      info.textContent = message;
+    }
   }
 
   removeTrimControls() {
@@ -101,6 +134,7 @@ class TrimTool extends BaseTool {
     element.setAttribute("data-original-stroke", originalStroke);
     element.setAttribute("stroke", "#ff0000");
     element.setAttribute("stroke-width", "2");
+    this.updatePanel();
   }
 
   removeCuttingEdge(element) {
@@ -115,6 +149,7 @@ class TrimTool extends BaseTool {
       element.removeAttribute("data-cutting-edge");
       element.removeAttribute("data-original-stroke");
     }
+    this.updatePanel();
   }
 
   clearCuttingEdges() {
@@ -232,20 +267,16 @@ class TrimTool extends BaseTool {
       // 切断辺選択モードからトリムモードへ
       if (this.mode === "select" && this.cuttingEdges.length > 0) {
         this.mode = "trim";
-        const info = document.querySelector("#trim-controls span");
-        if (info) {
-          info.textContent = "トリムする部分をクリック (Escでリセット)";
-        }
+        this.updateTrimInfoText("トリムする部分をクリック (Escでリセット)");
+        this.updatePanel();
       }
     }
 
     if (event.key === "Escape") {
       this.clearCuttingEdges();
       this.mode = "select";
-      const info = document.querySelector("#trim-controls span");
-      if (info) {
-        info.textContent = "切断辺を選択してEnter、その後トリムする部分をクリック";
-      }
+      this.updateTrimInfoText("切断辺を選択してEnter、その後トリムする部分をクリック");
+      this.updatePanel();
     }
   }
 }

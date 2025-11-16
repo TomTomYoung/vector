@@ -21,10 +21,42 @@ class DimensionTool extends BaseTool {
     return "寸法";
   }
 
+  getInstructions() {
+    const instructions = ["左パネルの『寸法タイプ』で長さ寸法と角度寸法を切り替え"];
+
+    if (this.dimensionType === "linear") {
+      if (this.points.length === 0) {
+        instructions.push("1点目をクリック: 寸法線の始点を指定");
+      } else {
+        instructions.push("2点目をクリック: 寸法線の終点を指定");
+      }
+      instructions.push("2点指定で寸法線が確定");
+    } else {
+      const stepTexts = [
+        "1点目をクリック: 角度寸法の1辺の端点を指定",
+        "2点目をクリック: 角度の頂点を指定",
+        "3点目をクリック: もう一方の辺の端点を指定",
+      ];
+      instructions.push(stepTexts[this.points.length] || stepTexts[2]);
+      instructions.push("3点指定で角度寸法が確定");
+    }
+
+    instructions.push("Esc: 入力中の寸法をリセット");
+
+    return instructions;
+  }
+
+  updatePanel() {
+    if (window.toolPropertiesPanel) {
+      window.toolPropertiesPanel.updatePanel();
+    }
+  }
+
   activate() {
     super.activate();
     this.canvas.style.cursor = "crosshair";
     this.createDimensionTypeSelector();
+    this.updatePanel();
   }
 
   deactivate() {
@@ -75,6 +107,7 @@ class DimensionTool extends BaseTool {
         this.canvas.removeChild(this.currentDimension);
         this.currentDimension = null;
       }
+      this.updatePanel();
     });
 
     selector.value = this.dimensionType;
@@ -99,6 +132,8 @@ class DimensionTool extends BaseTool {
     } else {
       this.handleAngularDimension(point);
     }
+
+    this.updatePanel();
   }
 
   handleLinearDimension(point) {
@@ -313,6 +348,7 @@ class DimensionTool extends BaseTool {
         this.canvas.removeChild(this.currentDimension);
         this.currentDimension = null;
       }
+      this.updatePanel();
     }
   }
 }

@@ -18,15 +18,31 @@ class SplitTool extends BaseTool {
     return "分割";
   }
 
+  getInstructions() {
+    return [
+      "線またはポリライン上をクリック: クリック位置で分割",
+      "端点付近では分割されないので少し離してクリック",
+      "パス要素の分割は現在未対応",
+    ];
+  }
+
+  updatePanel() {
+    if (window.toolPropertiesPanel) {
+      window.toolPropertiesPanel.updatePanel();
+    }
+  }
+
   activate() {
     super.activate();
     this.canvas.style.cursor = "crosshair";
     this.createSplitControls();
+    this.updatePanel();
   }
 
   deactivate() {
     super.deactivate();
     this.removeSplitControls();
+    this.updatePanel();
   }
 
   createSplitControls() {
@@ -74,6 +90,8 @@ class SplitTool extends BaseTool {
     } else if (event.target.tagName === "path") {
       this.splitPath(event.target, clickPoint);
     }
+
+    this.updatePanel();
   }
 
   splitLine(line, clickPoint) {
