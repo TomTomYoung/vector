@@ -1042,6 +1042,12 @@ class PolylineTool extends BaseTool {
       this.selectedPolylineId = null;
       this.selectionInteractionInProgress = false;
       this.disconnectSelectedPolylineObserver();
+      if (
+        window.selectTool &&
+        typeof window.selectTool.deselectObject === "function"
+      ) {
+        window.selectTool.deselectObject();
+      }
       this.requestToolPanelRefresh();
       return;
     }

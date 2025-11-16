@@ -1058,6 +1058,12 @@ class CircleTool extends BaseTool {
       this.selectedCircleId = null;
       this.selectionInteractionInProgress = false;
       this.disconnectSelectedCircleObserver();
+      if (
+        window.selectTool &&
+        typeof window.selectTool.deselectObject === "function"
+      ) {
+        window.selectTool.deselectObject();
+      }
       this.requestToolPanelRefresh();
       return;
     }

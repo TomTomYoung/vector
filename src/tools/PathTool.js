@@ -817,6 +817,12 @@ class PathTool extends BaseTool {
       this.selectedPathId = null;
       this.selectionInteractionInProgress = false;
       this.disconnectSelectedPathObserver();
+      if (
+        window.selectTool &&
+        typeof window.selectTool.deselectObject === "function"
+      ) {
+        window.selectTool.deselectObject();
+      }
       this.requestToolPanelRefresh();
       return;
     }

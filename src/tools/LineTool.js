@@ -1052,6 +1052,12 @@ class LineTool extends BaseTool {
       this.selectedLineId = null;
       this.selectionInteractionInProgress = false;
       this.disconnectSelectedLineObserver();
+      if (
+        window.selectTool &&
+        typeof window.selectTool.deselectObject === "function"
+      ) {
+        window.selectTool.deselectObject();
+      }
       this.requestToolPanelRefresh();
       return;
     }

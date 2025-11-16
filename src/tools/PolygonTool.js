@@ -1095,6 +1095,12 @@ class PolygonTool extends BaseTool {
       this.selectedPolygonId = null;
       this.selectionInteractionInProgress = false;
       this.disconnectSelectedPolygonObserver();
+      if (
+        window.selectTool &&
+        typeof window.selectTool.deselectObject === "function"
+      ) {
+        window.selectTool.deselectObject();
+      }
       this.requestToolPanelRefresh();
       return;
     }

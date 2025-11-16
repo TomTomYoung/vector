@@ -1089,6 +1089,12 @@ class RectangleTool extends BaseTool {
       this.selectedRectangleId = null;
       this.selectionInteractionInProgress = false;
       this.disconnectSelectedRectangleObserver();
+      if (
+        window.selectTool &&
+        typeof window.selectTool.deselectObject === "function"
+      ) {
+        window.selectTool.deselectObject();
+      }
       this.requestToolPanelRefresh();
       return;
     }
