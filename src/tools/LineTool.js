@@ -22,6 +22,7 @@ class LineTool extends BaseTool {
     this.selectedLineId = null;
     this.lineIdCounter = 1;
     this.geometryStyles = this.createGeometryStyles();
+    this.selectionInteractionInProgress = false;
   }
 
   getTitle() {
@@ -104,6 +105,16 @@ class LineTool extends BaseTool {
   }
 
   handleMouseDown(event) {
+    if (!this.isActive) {
+      return;
+    }
+
+    this.selectionInteractionInProgress = false;
+
+    if (this.tryBeginSelectionDelegation(event)) {
+      return;
+    }
+
     super.handleMouseDown(event);
 
     if (event.button !== 0) {
@@ -126,6 +137,11 @@ class LineTool extends BaseTool {
   }
 
   handleMouseMove(event) {
+    if (this.selectionInteractionInProgress) {
+      this.delegateSelectionEvent("handleMouseMove", event);
+      return;
+    }
+
     super.handleMouseMove(event);
 
     if (this.isDrawing && this.currentLine) {
@@ -135,6 +151,12 @@ class LineTool extends BaseTool {
   }
 
   handleMouseUp(event) {
+    if (this.selectionInteractionInProgress) {
+      this.delegateSelectionEvent("handleMouseUp", event);
+      this.selectionInteractionInProgress = false;
+      return;
+    }
+
     if (!this.isActive) return;
 
     if (this.operationMode === "drag") {
@@ -156,6 +178,16 @@ class LineTool extends BaseTool {
     }
 
     super.handleMouseUp(event);
+  }
+
+  handleMouseLeave(event) {
+    if (this.selectionInteractionInProgress) {
+      this.delegateSelectionEvent("handleMouseUp", event);
+      this.selectionInteractionInProgress = false;
+      return;
+    }
+
+    super.handleMouseLeave(event);
   }
 
   finishLine() {
@@ -467,7 +499,80 @@ class LineTool extends BaseTool {
       container.appendChild(geometryWrapper);
     }
 
+    this.renderAffineControls(container, line);
     this.renderLineStyleControls(container, line);
+  }
+
+  renderAffineControls(container, line) {
+    if (!window.DOMMatrix) {
+      return;
+    }
+
+    const wrapper = document.createElement("div");
+    wrapper.style.display = "flex";
+    wrapper.style.flexDirection = "column";
+    wrapper.style.gap = "6px";
+    wrapper.style.marginTop = "10px";
+    wrapper.dataset.affineWrapper = "true";
+
+    const title = document.createElement("div");
+    title.textContent = "アフィン変換";
+    title.style.fontSize = "12px";
+    title.style.color = "#555";
+    title.style.marginBottom = "2px";
+    wrapper.appendChild(title);
+
+    const values = this.getAffineValues(line);
+    const fields = [
+      { id: "translateX", label: "平行移動 X", step: "1" },
+      { id: "translateY", label: "平行移動 Y", step: "1" },
+      { id: "rotation", label: "回転", step: "1", suffix: "度" },
+      { id: "scaleX", label: "拡大率 X", step: "0.1" },
+      { id: "scaleY", label: "拡大率 Y", step: "0.1" },
+    ];
+
+    fields.forEach((field) => {
+      const row = document.createElement("div");
+      row.style.display = "flex";
+      row.style.flexDirection = "column";
+
+      const label = document.createElement("label");
+      label.textContent = field.label;
+      label.style.fontSize = "12px";
+      label.style.color = "#555";
+      label.style.marginBottom = "2px";
+      row.appendChild(label);
+
+      const input = document.createElement("input");
+      input.type = "number";
+      input.step = field.step || "1";
+      input.value = values[field.id];
+      input.dataset.affineId = field.id;
+      input.style.cssText = `
+        width: 100%;
+        padding: 6px;
+        border-radius: 4px;
+        border: 1px solid #ccc;
+        font-size: 12px;
+      `;
+      input.addEventListener("change", () => {
+        this.updateAffineFromInputs(line, wrapper);
+      });
+      row.appendChild(input);
+
+      if (field.suffix) {
+        const suffix = document.createElement("div");
+        suffix.textContent = field.suffix;
+        suffix.style.fontSize = "11px";
+        suffix.style.color = "#888";
+        suffix.style.marginTop = "2px";
+        row.appendChild(suffix);
+      }
+
+      wrapper.appendChild(row);
+    });
+
+    container.appendChild(wrapper);
   }
 
   renderLineStyleControls(container, line) {
@@ -500,6 +605,7 @@ class LineTool extends BaseTool {
     colorInput.addEventListener("change", (event) => {
       line.setAttribute("stroke", event.target.value);
       this.saveState();
+      this.refreshSelectionVisuals(line);
     });
     colorRow.appendChild(colorInput);
     wrapper.appendChild(colorRow);
@@ -531,6 +637,7 @@ class LineTool extends BaseTool {
       const width = parseFloat(event.target.value);
       line.setAttribute("stroke-width", Number.isFinite(width) ? width : 1);
       this.saveState();
+      this.refreshSelectionVisuals(line);
     });
     widthRow.appendChild(widthInput);
     wrapper.appendChild(widthRow);
@@ -596,7 +703,140 @@ class LineTool extends BaseTool {
 
     styleDef.applyValues(line, values);
     this.saveState();
+    this.refreshSelectionVisuals(line);
     this.requestToolPanelRefresh();
+  }
+
+  updateAffineFromInputs(line, wrapper) {
+    if (!line || !wrapper) {
+      return;
+    }
+
+    const values = {};
+    wrapper.querySelectorAll("[data-affine-id]").forEach((input) => {
+      const id = input.dataset.affineId;
+      let parsed = parseFloat(input.value);
+      if (!Number.isFinite(parsed)) {
+        parsed = id && id.startsWith("scale") ? 1 : 0;
+      }
+      values[id] = parsed;
+    });
+
+    this.applyAffineValues(line, values);
+    this.saveState();
+    this.refreshSelectionVisuals(line);
+    this.updateAffineInputs(wrapper, line);
+  }
+
+  updateAffineInputs(wrapper, line) {
+    if (!wrapper || !line) {
+      return;
+    }
+
+    const latest = this.getAffineValues(line);
+    wrapper.querySelectorAll("[data-affine-id]").forEach((input) => {
+      const id = input.dataset.affineId;
+      if (id && latest[id] !== undefined) {
+        input.value = latest[id];
+      }
+    });
+  }
+
+  getAffineValues(line) {
+    if (!window.DOMMatrix || !line) {
+      return {
+        translateX: 0,
+        translateY: 0,
+        rotation: 0,
+        scaleX: 1,
+        scaleY: 1,
+      };
+    }
+
+    let matrix;
+    try {
+      const transform = line.getAttribute("transform");
+      matrix = transform ? new DOMMatrix(transform) : new DOMMatrix();
+    } catch (error) {
+      matrix = new DOMMatrix();
+    }
+
+    const translateX = matrix.e;
+    const translateY = matrix.f;
+    const scaleX = Math.sqrt(matrix.a * matrix.a + matrix.b * matrix.b) || 0;
+    let rotation = Math.atan2(matrix.b, matrix.a) * (180 / Math.PI);
+    let scaleY;
+    if (scaleX !== 0) {
+      const determinant = matrix.a * matrix.d - matrix.b * matrix.c;
+      scaleY = determinant / scaleX;
+    }
+
+    if (!Number.isFinite(scaleY)) {
+      const alt = Math.sqrt(matrix.c * matrix.c + matrix.d * matrix.d);
+      scaleY = alt || 0;
+      const determinant = matrix.a * matrix.d - matrix.b * matrix.c;
+      if (determinant < 0) {
+        scaleY *= -1;
+      }
+    }
+
+    return {
+      translateX: this.roundValue(translateX),
+      translateY: this.roundValue(translateY),
+      rotation: this.roundValue(rotation),
+      scaleX: this.roundValue(scaleX || 1, 4),
+      scaleY: this.roundValue(scaleY || 1, 4),
+    };
+  }
+
+  applyAffineValues(line, values) {
+    if (!line) {
+      return;
+    }
+
+    const current = this.getAffineValues(line);
+    const nextValues = {
+      ...current,
+      ...values,
+    };
+
+    const translateX = Number.isFinite(nextValues.translateX)
+      ? nextValues.translateX
+      : 0;
+    const translateY = Number.isFinite(nextValues.translateY)
+      ? nextValues.translateY
+      : 0;
+    const rotation = Number.isFinite(nextValues.rotation)
+      ? nextValues.rotation
+      : 0;
+    let scaleX = Number.isFinite(nextValues.scaleX) ? nextValues.scaleX : 1;
+    let scaleY = Number.isFinite(nextValues.scaleY) ? nextValues.scaleY : 1;
+
+    if (this.isAlmostZero(scaleX)) {
+      scaleX = scaleX < 0 ? -0.0001 : 0.0001;
+    }
+    if (this.isAlmostZero(scaleY)) {
+      scaleY = scaleY < 0 ? -0.0001 : 0.0001;
+    }
+
+    const angleRad = (rotation * Math.PI) / 180;
+    const cos = Math.cos(angleRad);
+    const sin = Math.sin(angleRad);
+    const a = cos * scaleX;
+    const b = sin * scaleX;
+    const c = -sin * scaleY;
+    const d = cos * scaleY;
+    const e = translateX;
+    const f = translateY;
+
+    if (this.isIdentityMatrix({ a, b, c, d, e, f })) {
+      line.removeAttribute("transform");
+    } else {
+      line.setAttribute(
+        "transform",
+        `matrix(${a}, ${b}, ${c}, ${d}, ${e}, ${f})`
+      );
+    }
   }
 
   getLineElements() {
@@ -627,12 +867,14 @@ class LineTool extends BaseTool {
   selectLine(line) {
     if (!line) {
       this.selectedLineId = null;
+      this.selectionInteractionInProgress = false;
       this.requestToolPanelRefresh();
       return;
     }
 
     const lineId = this.ensureLineId(line);
     this.selectedLineId = lineId;
+    this.selectionInteractionInProgress = false;
 
     if (window.selectTool && typeof window.selectTool.selectObject === "function") {
       window.selectTool.selectObject(line, false);
@@ -794,6 +1036,150 @@ class LineTool extends BaseTool {
       line.setAttribute("stroke-dasharray", pattern);
     }
     line.dataset.strokeStyle = styleKey;
+    this.refreshSelectionVisuals(line);
+  }
+
+  refreshSelectionVisuals(line) {
+    if (!this.isLineCurrentlySelected(line)) {
+      return;
+    }
+
+    if (window.selectTool) {
+      if (typeof window.selectTool.refreshHandles === "function") {
+        window.selectTool.refreshHandles();
+      } else if (typeof window.selectTool.addControlPoints === "function") {
+        window.selectTool.addControlPoints();
+      }
+    }
+
+    this.updateSelectionStyleInputs(line);
+  }
+
+  updateSelectionStyleInputs(line) {
+    if (!line) {
+      return;
+    }
+
+    const strokeInput = document.getElementById("stroke-color");
+    if (strokeInput) {
+      strokeInput.value = this.normalizeColorForInput(
+        line.getAttribute("stroke") || "#000000"
+      );
+    }
+
+    const widthInput = document.getElementById("stroke-width");
+    if (widthInput) {
+      const width = parseFloat(line.getAttribute("stroke-width"));
+      if (Number.isFinite(width)) {
+        widthInput.value = String(width);
+      }
+    }
+
+    const opacityInput = document.getElementById("opacity-input");
+    if (opacityInput) {
+      const opacity = parseFloat(line.getAttribute("opacity"));
+      if (Number.isFinite(opacity)) {
+        opacityInput.value = String(opacity);
+      }
+    }
+  }
+
+  isLineCurrentlySelected(line) {
+    if (!line) {
+      return false;
+    }
+
+    const selections = Array.isArray(window.selectedObjects)
+      ? window.selectedObjects
+      : [];
+    return selections.includes(line);
+  }
+
+  tryBeginSelectionDelegation(event) {
+    if (!this.shouldDelegateSelectionEvent(event)) {
+      return false;
+    }
+
+    const delegated = this.delegateSelectionEvent("handleMouseDown", event);
+    if (delegated) {
+      this.selectionInteractionInProgress = true;
+    }
+    return delegated;
+  }
+
+  shouldDelegateSelectionEvent(event) {
+    const line = this.getSelectedLineElement();
+    if (!line) {
+      return false;
+    }
+
+    const target = event?.target;
+    if (!target) {
+      return false;
+    }
+
+    if (target === line) {
+      return true;
+    }
+
+    return this.isSelectionHandleTarget(target);
+  }
+
+  isSelectionHandleTarget(target) {
+    if (!target || !target.classList) {
+      return false;
+    }
+
+    const classes = [
+      "control-handle",
+      "rotate-handle",
+      "rotate-line",
+      "translate-handle",
+    ];
+
+    return classes.some((cls) => target.classList.contains(cls));
+  }
+
+  delegateSelectionEvent(methodName, event) {
+    if (!window.selectTool) {
+      return false;
+    }
+
+    const handler = window.selectTool[methodName];
+    if (typeof handler === "function") {
+      handler.call(window.selectTool, event);
+      return true;
+    }
+
+    return false;
+  }
+
+  roundValue(value, decimals = 2) {
+    if (!Number.isFinite(value)) {
+      return 0;
+    }
+    const factor = Math.pow(10, decimals);
+    const rounded = Math.round(value * factor) / factor;
+    return this.isAlmostZero(rounded) ? 0 : rounded;
+  }
+
+  isAlmostZero(value, epsilon = 0.000001) {
+    return Math.abs(value) <= epsilon;
+  }
+
+  isIdentityMatrix(matrix) {
+    if (!matrix) {
+      return true;
+    }
+
+    return (
+      this.isAlmostZero((matrix.a ?? 0) - 1) &&
+      this.isAlmostZero(matrix.b ?? 0) &&
+      this.isAlmostZero(matrix.c ?? 0) &&
+      this.isAlmostZero((matrix.d ?? 0) - 1) &&
+      this.isAlmostZero(matrix.e ?? 0) &&
+      this.isAlmostZero(matrix.f ?? 0)
+    );
   }
 }
 
