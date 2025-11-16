@@ -23,13 +23,15 @@ import * as geometry from './geometry.js';
 import * as coordinates from './coordinates.js';
 import * as svg from './svg.js';
 import * as style from './style.js';
+import * as bezier from './bezier.js';
 
 // グローバルオブジェクトとして公開
 window.VectorUtils = {
   geometry,
   coordinates,
   svg,
-  style
+  style,
+  bezier,
 };
 
 // 個別にもアクセス可能にする（下位互換性のため）
@@ -37,5 +39,6 @@ window.GeometryUtils = geometry;
 window.CoordinatesUtils = coordinates;
 window.SvgUtils = svg;
 window.StyleUtils = style;
+window.BezierUtils = bezier;
 
 console.log('VectorUtils loaded:', Object.keys(window.VectorUtils));

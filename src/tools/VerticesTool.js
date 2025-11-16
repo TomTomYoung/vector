@@ -31,7 +31,20 @@ class VerticesTool extends BaseTool {
       segments: { enabled: false },
       polyline: { enabled: true, closed: false },
       polygon: { enabled: false, fillEnabled: false },
+      quadraticBezier: { enabled: false },
+      cubicBezier: { enabled: false },
+      bezierN: { enabled: false, degree: 4, sampleCount: 80 },
     };
+
+    this.methodOptions = [
+      { value: 'segments', label: '線分 (segments)' },
+      { value: 'polyline', label: '連続線 (polyline)' },
+      { value: 'polygon', label: '面 (polygon)' },
+      { value: 'quadraticBezier', label: '2次ベジェ' },
+      { value: 'cubicBezier', label: '3次ベジェ' },
+      { value: 'bezierN', label: 'n次ベジェ' },
+    ];
+    this.selectedMethodKey = 'polyline';
 
     this.isDraggingHandle = false;
     this.draggingHandleIndex = null;
@@ -48,50 +61,29 @@ class VerticesTool extends BaseTool {
 
   getInstructions() {
     return [
-      "クリックで頂点を追加", 
-      "ハンドルをドラッグして座標を編集", 
-      "プロパティで描画メソッドとパラメータを切り替え",
+      "クリックで頂点を追加",
+      "ハンドルをドラッグして座標を編集",
+      "右パネルのドロップダウンで描画メソッドを選択",
+      "必要に応じてメソッドを有効化しパラメータを調整",
+      "ベジェ系は先頭の必要頂点数を制御点として利用",
       "ダブルクリックで全頂点をリセット",
     ];
   }
 
   getToolProperties() {
+    const selectedKey = this.ensureSelectedMethodKey();
     const props = [
       {
-        type: "checkbox",
-        label: "線分 (segments)",
-        value: this.methodSettings.segments.enabled,
-        onChange: (checked) => {
-          this.methodSettings.segments.enabled = checked;
-          this.rebuildIndices();
-          this.renderGeometry();
-          this.saveState();
-        },
-      },
-      {
-        type: "checkbox",
-        label: "連続線 (polyline)",
-        value: this.methodSettings.polyline.enabled,
-        onChange: (checked) => {
-          this.methodSettings.polyline.enabled = checked;
-          this.rebuildIndices();
-          this.renderGeometry();
+        type: "select",
+        label: "メソッド選択",
+        options: this.methodOptions,
+        value: selectedKey,
+        onChange: (value) => {
+          this.selectedMethodKey = value;
           this.requestToolPanelRefresh();
-          this.saveState();
         },
       },
-      {
-        type: "checkbox",
-        label: "面 (polygon)",
-        value: this.methodSettings.polygon.enabled,
-        onChange: (checked) => {
-          this.methodSettings.polygon.enabled = checked;
-          this.rebuildIndices();
-          this.renderGeometry();
-          this.requestToolPanelRefresh();
-          this.saveState();
-        },
-      },
+      ...this.getMethodPropertyControls(selectedKey),
       {
         type: "number",
         label: "ハンドル半径",
@@ -106,35 +98,103 @@ class VerticesTool extends BaseTool {
       },
     ];
 
-    if (this.methodSettings.polyline.enabled) {
-      props.push({
-        type: "checkbox",
-        label: "始点と終点を接続",
-        value: this.methodSettings.polyline.closed,
-        onChange: (checked) => {
-          this.methodSettings.polyline.closed = checked;
-          this.rebuildIndices();
-          this.renderGeometry();
-          this.saveState();
-        },
-      });
-    }
-
-    if (this.methodSettings.polygon.enabled) {
-      props.push({
-        type: "checkbox",
-        label: "塗りつぶし",
-        value: this.methodSettings.polygon.fillEnabled,
-        onChange: (checked) => {
-          this.methodSettings.polygon.fillEnabled = checked;
-          this.rebuildIndices();
-          this.renderGeometry();
-          this.saveState();
-        },
-      });
-    }
-
     return props;
+  }
+
+  ensureSelectedMethodKey() {
+    if (this.methodOptions.find((opt) => opt.value === this.selectedMethodKey)) {
+      return this.selectedMethodKey;
+    }
+    this.selectedMethodKey = this.methodOptions[0]?.value || '';
+    return this.selectedMethodKey;
+  }
+
+  getMethodPropertyControls(methodKey) {
+    const settings = this.methodSettings[methodKey];
+    if (!settings) {
+      return [];
+    }
+
+    const controls = [
+      {
+        type: "checkbox",
+        label: "メソッド適用",
+        checkLabel: "描画に含める",
+        value: Boolean(settings.enabled),
+        onChange: (checked) => {
+          settings.enabled = checked;
+          this.rebuildIndices();
+          this.renderGeometry();
+          this.saveState();
+        },
+      },
+    ];
+
+    switch (methodKey) {
+      case "polyline":
+        controls.push({
+          type: "checkbox",
+          label: "ポリライン設定",
+          checkLabel: "始点と終点を接続",
+          value: Boolean(settings.closed),
+          onChange: (checked) => {
+            settings.closed = checked;
+            this.rebuildIndices();
+            this.renderGeometry();
+            this.saveState();
+          },
+        });
+        break;
+      case "polygon":
+        controls.push({
+          type: "checkbox",
+          label: "ポリゴン設定",
+          checkLabel: "塗りつぶし",
+          value: Boolean(settings.fillEnabled),
+          onChange: (checked) => {
+            settings.fillEnabled = checked;
+            this.rebuildIndices();
+            this.renderGeometry();
+            this.saveState();
+          },
+        });
+        break;
+      case "bezierN":
+        controls.push({
+          type: "number",
+          label: "次数 (n)",
+          value: settings.degree,
+          min: 2,
+          max: 12,
+          step: 1,
+          onChange: (value) => {
+            settings.degree = Math.max(2, Math.round(value || 2));
+            this.rebuildIndices();
+            this.renderGeometry();
+            this.saveState();
+            this.requestToolPanelRefresh();
+          },
+        });
+        controls.push({
+          type: "number",
+          label: "サンプル数",
+          value: settings.sampleCount,
+          min: 10,
+          max: 400,
+          step: 5,
+          onChange: (value) => {
+            settings.sampleCount = Math.max(10, Math.round(value || 10));
+            this.rebuildIndices();
+            this.renderGeometry();
+            this.saveState();
+          },
+        });
+        break;
+      default:
+        break;
+    }
+
+    return controls;
   }
 
   requestToolPanelRefresh() {
@@ -337,6 +397,37 @@ class VerticesTool extends BaseTool {
       });
     }
 
+    if (this.methodSettings.quadraticBezier.enabled && vectors.length >= 3) {
+      indices.push({
+        method: "quadraticBezier",
+        points: [0, 1, 2],
+        params: {},
+      });
+    }
+
+    if (this.methodSettings.cubicBezier.enabled && vectors.length >= 4) {
+      indices.push({
+        method: "cubicBezier",
+        points: [0, 1, 2, 3],
+        params: {},
+      });
+    }
+
+    if (this.methodSettings.bezierN.enabled) {
+      const degree = Math.max(2, Math.round(this.methodSettings.bezierN.degree));
+      const controlCount = degree + 1;
+      if (vectors.length >= controlCount) {
+        indices.push({
+          method: "bezierN",
+          points: Array.from({ length: controlCount }, (_, idx) => idx),
+          params: {
+            degree,
+            sampleCount: Math.max(10, Math.round(this.methodSettings.bezierN.sampleCount || 80)),
+          },
+        });
+      }
+    }
+
     this.verticesObject.indices = indices;
   }
 
@@ -393,6 +484,20 @@ class VerticesTool extends BaseTool {
         element = window.SvgUtils.createElement("polygon", {
           points: points.map((p) => `${p.x},${p.y}`).join(" "),
         });
+        break;
+      }
+      case "quadraticBezier":
+      case "cubicBezier":
+      case "bezierN": {
+        const bezier = window.VectorUtils?.bezier;
+        if (!bezier) {
+          return null;
+        }
+        const pathData = bezier.buildPathData(indice.method, points, indice.params);
+        if (!pathData) {
+          return null;
+        }
+        element = window.SvgUtils.createElement("path", { d: pathData });
         break;
       }
       default:
