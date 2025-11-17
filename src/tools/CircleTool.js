@@ -1,5 +1,5 @@
 // CircleTool.js
-// 円描画ツール（個別オブジェクト管理対応）
+// 円描画ツール（個別オブジェクト管理とアフィン操作対応）
 
 class CircleTool extends BaseTool {
   constructor(canvas, toolManager) {
@@ -311,6 +311,7 @@ class CircleTool extends BaseTool {
     const geometryWrapper = this.renderCircleGeometryControls(circle);
     container.appendChild(geometryWrapper);
 
+    this.renderAffineControls(container, circle);
     this.renderCircleStyleControls(container, circle);
   }
 
@@ -414,6 +415,312 @@ class CircleTool extends BaseTool {
     circle.setAttribute("cx", geometry.cx);
     circle.setAttribute("cy", geometry.cy);
     circle.setAttribute("r", geometry.r);
+  }
+
+  renderAffineControls(container, circle) {
+    if (!window.DOMMatrix) {
+      return;
+    }
+
+    const wrapper = document.createElement("div");
+    wrapper.style.display = "flex";
+    wrapper.style.flexDirection = "column";
+    wrapper.style.gap = "6px";
+    wrapper.style.marginTop = "10px";
+
+    const title = document.createElement("div");
+    title.textContent = "アフィン変換";
+    title.style.fontSize = "12px";
+    title.style.color = "#555";
+    wrapper.appendChild(title);
+
+    const controls = [
+      { id: "translateX", label: "移動X", step: "1" },
+      { id: "translateY", label: "移動Y", step: "1" },
+      { id: "rotation", label: "回転", step: "1" },
+      { id: "scaleX", label: "拡大X", step: "0.01" },
+      { id: "scaleY", label: "拡大Y", step: "0.01" },
+    ];
+
+    const currentValues = this.getAffineValues(circle);
+
+    controls.forEach((control) => {
+      const row = document.createElement("div");
+      row.style.display = "flex";
+      row.style.flexDirection = "column";
+
+      const label = document.createElement("label");
+      label.textContent = control.label;
+      label.style.fontSize = "11px";
+      label.style.color = "#555";
+      label.style.marginBottom = "2px";
+      row.appendChild(label);
+
+      const input = document.createElement("input");
+      input.type = "number";
+      input.step = control.step;
+      input.value = currentValues[control.id];
+      input.dataset.affineId = control.id;
+      if (control.id.startsWith("scale")) {
+        input.min = "-10";
+      }
+      input.style.cssText = `
+        width: 100%;
+        padding: 6px;
+        border-radius: 4px;
+        border: 1px solid #ccc;
+        font-size: 12px;
+      `;
+      input.addEventListener("change", () => {
+        this.updateAffineFromInputs(circle, wrapper);
+      });
+
+      row.appendChild(input);
+      wrapper.appendChild(row);
+    });
+
+    const buttonsRow = document.createElement("div");
+    buttonsRow.style.display = "flex";
+    buttonsRow.style.gap = "8px";
+    buttonsRow.style.marginTop = "4px";
+
+    const applyButton = document.createElement("button");
+    applyButton.type = "button";
+    applyButton.textContent = "適用";
+    applyButton.style.cssText = `
+      flex: 1;
+      padding: 6px 8px;
+      border-radius: 4px;
+      border: 1px solid #2f80ed;
+      background: #e8f0fe;
+      color: #1a73e8;
+      font-size: 12px;
+      cursor: pointer;
+    `;
+    applyButton.addEventListener("click", () => {
+      this.applyAffineToGeometry(circle);
+      this.updateAffineInputs(wrapper, circle);
+    });
+    buttonsRow.appendChild(applyButton);
+
+    const resetButton = document.createElement("button");
+    resetButton.type = "button";
+    resetButton.textContent = "リセット";
+    resetButton.style.cssText = `
+      flex: 1;
+      padding: 6px 8px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      background: #fff;
+      color: #333;
+      font-size: 12px;
+      cursor: pointer;
+    `;
+    resetButton.addEventListener("click", () => {
+      circle.removeAttribute("transform");
+      this.updateAffineInputs(wrapper, circle);
+      this.refreshSelectionVisuals(circle);
+    });
+    buttonsRow.appendChild(resetButton);
+
+    wrapper.appendChild(buttonsRow);
+    container.appendChild(wrapper);
+  }
+
+  getAffineValues(circle) {
+    if (!circle) {
+      return {
+        translateX: 0,
+        translateY: 0,
+        rotation: 0,
+        scaleX: 1,
+        scaleY: 1,
+      };
+    }
+
+    const transformAttr = circle.getAttribute("transform");
+    if (!transformAttr || !window.DOMMatrix) {
+      return {
+        translateX: 0,
+        translateY: 0,
+        rotation: 0,
+        scaleX: 1,
+        scaleY: 1,
+      };
+    }
+
+    let matrix;
+    try {
+      matrix = new DOMMatrix(transformAttr);
+    } catch (error) {
+      console.error("Failed to parse transform:", error);
+      return {
+        translateX: 0,
+        translateY: 0,
+        rotation: 0,
+        scaleX: 1,
+        scaleY: 1,
+      };
+    }
+
+    const rotation = Math.atan2(matrix.b, matrix.a) * (180 / Math.PI);
+    const scaleX = Math.sqrt(matrix.a * matrix.a + matrix.b * matrix.b) || 1;
+    const scaleY =
+      Math.sqrt(matrix.c * matrix.c + matrix.d * matrix.d) *
+        (matrix.d < 0 ? -1 : 1) || 1;
+
+    return {
+      translateX: this.roundValue(matrix.e, 3),
+      translateY: this.roundValue(matrix.f, 3),
+      rotation: this.roundValue(rotation, 2),
+      scaleX: this.roundValue(scaleX, 3),
+      scaleY: this.roundValue(scaleY, 3),
+    };
+  }
+
+  updateAffineFromInputs(circle, wrapper) {
+    if (!circle || !wrapper) {
+      return;
+    }
+
+    const values = {};
+    wrapper.querySelectorAll("[data-affine-id]").forEach((input) => {
+      const id = input.dataset.affineId;
+      let parsed = parseFloat(input.value);
+      if (!Number.isFinite(parsed)) {
+        parsed = id && id.startsWith("scale") ? 1 : 0;
+      }
+      values[id] = parsed;
+    });
+
+    this.applyAffineValues(circle, values);
+    this.saveState();
+    this.refreshSelectionVisuals(circle);
+    this.updateAffineInputs(wrapper, circle);
+  }
+
+  updateAffineInputs(wrapper, circle) {
+    if (!wrapper || !circle) {
+      return;
+    }
+
+    const latest = this.getAffineValues(circle);
+    wrapper.querySelectorAll("[data-affine-id]").forEach((input) => {
+      const id = input.dataset.affineId;
+      if (id && latest[id] !== undefined) {
+        input.value = latest[id];
+      }
+    });
+  }
+
+  applyAffineValues(circle, values) {
+    if (!circle) {
+      return;
+    }
+
+    const current = this.getAffineValues(circle);
+    const next = {
+      ...current,
+      ...values,
+    };
+
+    const translateX = Number.isFinite(next.translateX) ? next.translateX : 0;
+    const translateY = Number.isFinite(next.translateY) ? next.translateY : 0;
+    const rotation = Number.isFinite(next.rotation) ? next.rotation : 0;
+    let scaleX = Number.isFinite(next.scaleX) ? next.scaleX : 1;
+    let scaleY = Number.isFinite(next.scaleY) ? next.scaleY : 1;
+
+    if (this.isAlmostZero(scaleX)) {
+      scaleX = scaleX < 0 ? -0.0001 : 0.0001;
+    }
+    if (this.isAlmostZero(scaleY)) {
+      scaleY = scaleY < 0 ? -0.0001 : 0.0001;
+    }
+
+    const angleRad = (rotation * Math.PI) / 180;
+    const cos = Math.cos(angleRad);
+    const sin = Math.sin(angleRad);
+    const a = cos * scaleX;
+    const b = sin * scaleX;
+    const c = -sin * scaleY;
+    const d = cos * scaleY;
+
+    const anchor = this.getCircleLocalCenter(circle);
+    const anchorShift = this.getAnchorTranslation({ a, b, c, d }, anchor);
+    const e = anchorShift.x + translateX;
+    const f = anchorShift.y + translateY;
+
+    if (this.isIdentityMatrix({ a, b, c, d, e, f })) {
+      circle.removeAttribute("transform");
+    } else {
+      circle.setAttribute("transform", `matrix(${a}, ${b}, ${c}, ${d}, ${e}, ${f})`);
+    }
+  }
+
+  applyAffineToGeometry(circle) {
+    if (!circle || !window.DOMPoint) {
+      return;
+    }
+
+    const transformAttr = circle.getAttribute("transform");
+    if (!transformAttr) {
+      return;
+    }
+
+    let matrix;
+    try {
+      matrix = new DOMMatrix(transformAttr);
+    } catch (error) {
+      console.error("Failed to parse transform:", error);
+      return;
+    }
+
+    const geometry = this.getCircleGeometry(circle);
+    const center = new DOMPoint(geometry.cx, geometry.cy).matrixTransform(matrix);
+    const radiusPoint = new DOMPoint(geometry.cx + geometry.r, geometry.cy).matrixTransform(
+      matrix
+    );
+
+    const dx = radiusPoint.x - center.x;
+    const dy = radiusPoint.y - center.y;
+    const radius = Math.sqrt(dx * dx + dy * dy);
+
+    circle.setAttribute("cx", this.roundValue(center.x, 4));
+    circle.setAttribute("cy", this.roundValue(center.y, 4));
+    circle.setAttribute("r", this.roundValue(radius, 4));
+    circle.removeAttribute("transform");
+
+    this.saveState();
+    this.refreshSelectionVisuals(circle);
+    this.requestToolPanelRefresh();
+  }
+
+  getCircleLocalCenter(circle) {
+    return this.getCircleGeometry(circle);
+  }
+
+  getAnchorTranslation(matrix, anchor) {
+    if (!matrix || !anchor) {
+      return { x: 0, y: 0 };
+    }
+
+    const a = Number.isFinite(matrix.a) ? matrix.a : 1;
+    const b = Number.isFinite(matrix.b) ? matrix.b : 0;
+    const c = Number.isFinite(matrix.c) ? matrix.c : 0;
+    const d = Number.isFinite(matrix.d) ? matrix.d : 1;
+
+    if (!Number.isFinite(anchor.cx ?? anchor.x) || !Number.isFinite(anchor.cy ?? anchor.y)) {
+      return { x: 0, y: 0 };
+    }
+
+    const anchorX = anchor.cx ?? anchor.x;
+    const anchorY = anchor.cy ?? anchor.y;
+    const shiftedX = anchorX - (a * anchorX + c * anchorY);
+    const shiftedY = anchorY - (b * anchorX + d * anchorY);
+    return {
+      x: shiftedX,
+      y: shiftedY,
+    };
   }
 
   renderCircleStyleControls(container, circle) {
@@ -951,6 +1258,20 @@ class CircleTool extends BaseTool {
     return Math.abs(value) <= epsilon;
   }
 
+  isIdentityMatrix(matrix) {
+    if (!matrix) {
+      return true;
+    }
+
+    return (
+      this.isAlmostZero((matrix.a ?? 0) - 1) &&
+      this.isAlmostZero(matrix.b ?? 0) &&
+      this.isAlmostZero(matrix.c ?? 0) &&
+      this.isAlmostZero((matrix.d ?? 0) - 1) &&
+      this.isAlmostZero(matrix.e ?? 0) &&
+      this.isAlmostZero(matrix.f ?? 0)
+    );
+  }
 }
 
 window.CircleTool = CircleTool;
