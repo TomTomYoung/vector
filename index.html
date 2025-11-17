@@ -299,6 +299,20 @@
         padding: 2px 5px;
         font-size: 12px;
       }
+
+      /* Transform Layers Panel */
+      #transform-layers-panel {
+        background: #1a1a1a;
+        color: #fff;
+        height: 100%;
+        overflow-y: auto;
+        box-sizing: border-box;
+      }
+
+      .side-panel {
+        background: #1a1a1a;
+        color: #fff;
+      }
     </style>
   </head>
 
@@ -342,7 +356,7 @@
         <div class="panel-group" data-panel-group="right">
           <div
             class="panel-section"
-            data-initial-ratio="0.6"
+            data-initial-ratio="0.4"
             data-min-height="200"
           >
             <div class="panel-section-content">
@@ -352,11 +366,21 @@
           <div class="panel-resizer" data-panel-group="right"></div>
           <div
             class="panel-section"
-            data-initial-ratio="0.4"
+            data-initial-ratio="0.3"
             data-min-height="160"
           >
             <div class="panel-section-content" id="layer-panel-wrapper">
               <!-- レイヤーGUIがここに配置されます -->
+            </div>
+          </div>
+          <div class="panel-resizer" data-panel-group="right"></div>
+          <div
+            class="panel-section"
+            data-initial-ratio="0.3"
+            data-min-height="160"
+          >
+            <div class="panel-section-content">
+              <div id="transform-layers-panel"></div>
             </div>
           </div>
         </div>
@@ -406,6 +430,7 @@
     <script src="src/ui/FileManager.js"></script>
     <script src="src/ui/ZoomPanManager.js"></script>
     <script src="src/ui/ToolPropertiesPanel.js"></script>
+    <script src="src/ui/TransformLayersPanel.js"></script>
     <script src="src/ui/PanelLayoutManager.js"></script>
 
     <!-- アプリケーション -->

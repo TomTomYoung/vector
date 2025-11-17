@@ -21,6 +21,20 @@ class SelectTool extends BaseTool {
     this.isMarqueeSelecting = false;
     this.marqueeStart = null;
     this.marqueeRect = null;
+
+    // アフィン変換レイヤーシステム
+    this.transformManagers = new WeakMap(); // SVG要素 -> TransformManager
+    this.transformLayersPanel = null;
+    this.initTransformLayersPanel();
+  }
+
+  initTransformLayersPanel() {
+    // TransformLayersPanelのインスタンスを作成（グローバルに1つ）
+    if (!window.transformLayersPanel) {
+      window.transformLayersPanel = new TransformLayersPanel();
+      window.transformLayersPanel.hide();
+    }
+    this.transformLayersPanel = window.transformLayersPanel;
   }
 
   sanitizeColorValue(value, fallback = "#000000") {
@@ -165,6 +179,12 @@ class SelectTool extends BaseTool {
       this.marqueeRect.parentNode.removeChild(this.marqueeRect);
     }
     this.marqueeRect = null;
+
+    // アフィン変換レイヤーパネルを非表示
+    if (this.transformLayersPanel) {
+      this.transformLayersPanel.hide();
+      this.transformLayersPanel.setTransformManager(null, null);
+    }
 
     if (
       this.toolManager &&
@@ -588,7 +608,61 @@ class SelectTool extends BaseTool {
       }
 
       this.addControlPoints();
+
+      // アフィン変換レイヤーシステムの初期化
+      this.setupTransformManager(el);
     }
+  }
+
+  /**
+   * 選択されたオブジェクトのTransformManagerをセットアップ
+   */
+  setupTransformManager(element) {
+    if (!element) return;
+
+    // 既存のTransformManagerを取得、なければ作成
+    let manager = this.transformManagers.get(element);
+
+    if (!manager) {
+      // data属性から復元を試みる
+      const serializedData = element.getAttribute('data-transform-layers');
+      if (serializedData) {
+        try {
+          const data = JSON.parse(serializedData);
+          manager = window.VectorUtils.TransformManager.deserialize(data);
+        } catch (e) {
+          console.warn('Failed to deserialize transform layers:', e);
+        }
+      }
+
+      // まだマネージャーがない場合は新規作成
+      if (!manager) {
+        const currentMatrix = element.getCTM() || new DOMMatrix();
+        manager = new window.VectorUtils.TransformManager(currentMatrix);
+      }
+
+      this.transformManagers.set(element, manager);
+    }
+
+    // パネルにセット
+    if (this.transformLayersPanel) {
+      this.transformLayersPanel.setTransformManager(manager, (matrix) => {
+        // 変換が更新されたときのコールバック
+        element.setAttribute('transform', matrix.toString());
+        // data属性に保存
+        this.saveTransformManagerToElement(element, manager);
+      });
+      this.transformLayersPanel.show();
+    }
+  }
+
+  /**
+   * TransformManagerをSVG要素のdata属性に保存
+   */
+  saveTransformManagerToElement(element, manager) {
+    if (!element || !manager) return;
+    const serialized = JSON.stringify(manager.serialize());
+    element.setAttribute('data-transform-layers', serialized);
   }
 
   // 移動処理
