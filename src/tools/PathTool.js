@@ -43,7 +43,7 @@ class PathTool extends BaseTool {
     ];
 
     instructions.push(
-      "選択リストから既存パスを選び、ジオメトリとスタイルを編集できます"
+      "選択リストから既存パスを選び、ジオメトリ・スタイル・アフィン変換を編集できます"
     );
 
     return instructions;
@@ -420,6 +420,7 @@ class PathTool extends BaseTool {
 
     this.renderPathMeta(container, path);
     this.renderPathDataEditor(container, path);
+    this.renderAffineControls(container, path);
     this.renderPathStyleControls(container, path);
   }
 
@@ -473,6 +474,103 @@ class PathTool extends BaseTool {
     wrapper.appendChild(textarea);
 
     container.appendChild(wrapper);
+  }
+
+  renderAffineControls(container, path) {
+    if (!window.DOMMatrix) {
+      return;
+    }
+
+    const wrapper = document.createElement("div");
+    wrapper.style.display = "flex";
+    wrapper.style.flexDirection = "column";
+    wrapper.style.gap = "8px";
+    wrapper.style.marginTop = "10px";
+
+    const title = document.createElement("div");
+    title.textContent = "アフィン変換";
+    title.style.fontSize = "12px";
+    title.style.color = "#555";
+    wrapper.appendChild(title);
+
+    const fields = [
+      { key: "translateX", label: "平行移動 X", value: 0 },
+      { key: "translateY", label: "平行移動 Y", value: 0 },
+      { key: "scaleX", label: "拡大率 X", value: 1 },
+      { key: "scaleY", label: "拡大率 Y", value: 1 },
+      { key: "rotate", label: "回転 (°)", value: 0 },
+    ];
+
+    const inputs = {};
+
+    fields.forEach((field) => {
+      const row = document.createElement("div");
+      row.style.display = "flex";
+      row.style.flexDirection = "column";
+
+      const label = document.createElement("label");
+      label.textContent = field.label;
+      label.style.fontSize = "11px";
+      label.style.color = "#555";
+      label.style.marginBottom = "2px";
+      row.appendChild(label);
+
+      const input = document.createElement("input");
+      input.type = "number";
+      input.value = field.value;
+      input.step = field.key.startsWith("scale") ? "0.1" : "1";
+      input.style.cssText = `
+        width: 100%;
+        padding: 6px;
+        border-radius: 4px;
+        border: 1px solid #ccc;
+        font-size: 12px;
+      `;
+      row.appendChild(input);
+      wrapper.appendChild(row);
+
+      inputs[field.key] = input;
+    });
+
+    const applyButton = document.createElement("button");
+    applyButton.type = "button";
+    applyButton.textContent = "適用";
+    applyButton.style.cssText = `
+      padding: 6px 8px;
+      border-radius: 4px;
+      border: 1px solid #2f80ed;
+      background: #2f80ed;
+      color: #fff;
+      font-size: 12px;
+      cursor: pointer;
+    `;
+    applyButton.addEventListener("click", () => {
+      this.applyAffineTransform(path, inputs);
+    });
+    wrapper.appendChild(applyButton);
+
+    container.appendChild(wrapper);
+  }
+
+  applyAffineTransform(path, inputs) {
+    const translateX = parseFloat(inputs.translateX.value) || 0;
+    const translateY = parseFloat(inputs.translateY.value) || 0;
+    const scaleX = parseFloat(inputs.scaleX.value) || 1;
+    const scaleY = parseFloat(inputs.scaleY.value) || 1;
+    const rotate = parseFloat(inputs.rotate.value) || 0;
+
+    const matrix = new DOMMatrix()
+      .translate(translateX, translateY)
+      .rotate(rotate)
+      .scale(scaleX, scaleY);
+
+    const existing = path.getAttribute("transform");
+    const base = existing ? new DOMMatrix(existing) : new DOMMatrix();
+    const combined = base.multiply(matrix);
+    path.setAttribute("transform", combined.toString());
+
+    this.saveState();
+    this.refreshSelectionVisuals(path);
   }
 
   renderPathStyleControls(container, path) {
