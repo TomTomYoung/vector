@@ -673,7 +673,7 @@ class SelectTool extends BaseTool {
       element.setAttribute('transform', matrix.toString());
       // data属性に保存
       this.saveTransformManagerToElement(element, manager);
-    });
+    }, element); // 要素も渡す
     this.transformLayersPanel.show();
   }
 

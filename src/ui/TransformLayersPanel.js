@@ -7,6 +7,7 @@ class TransformLayersPanel {
     this.transformManager = null;
     this.selectedLayerId = null;
     this.onApplyCallback = null;
+    this.currentElement = null; // 現在選択されている要素
 
     this.init();
   }
@@ -34,7 +35,7 @@ class TransformLayersPanel {
   /**
    * TransformManagerを設定
    */
-  setTransformManager(manager, onApply) {
+  setTransformManager(manager, onApply, element = null) {
     // 既存のリスナーを削除
     if (this.transformManager) {
       this.transformManager.removeChangeListener(this.boundUpdatePanel);
@@ -42,6 +43,7 @@ class TransformLayersPanel {
 
     this.transformManager = manager;
     this.onApplyCallback = onApply;
+    this.currentElement = element;
     this.selectedLayerId = null;
 
     // 新しいリスナーを追加
@@ -232,6 +234,16 @@ class TransformLayersPanel {
       this.selectedLayerId = this.selectedLayerId === layer.id ? null : layer.id;
       this.updatePanel();
     };
+    nameLabel.ondblclick = (e) => {
+      e.stopPropagation();
+      const currentName = layer.name;
+      const newName = prompt('レイヤー名を入力:', currentName);
+      if (newName !== null && newName.trim() !== '') {
+        layer.name = newName.trim();
+        this.transformManager.notifyChange();
+      }
+    };
+    nameLabel.title = 'ダブルクリックで名前を編集';
     header.appendChild(nameLabel);
 
     // 上へボタン
@@ -310,15 +322,65 @@ class TransformLayersPanel {
 
     // 原点（回転とスケールのみ）
     if (layer.type === 'rotate' || layer.type === 'scale') {
-      details.appendChild(this.createPropertyRow('原点 X', layer.origin.x, (value) => {
-        layer.origin.x = parseFloat(value) || 0;
-        this.transformManager.notifyChange();
-      }, 'number', 0.1));
+      // 原点リセットボタン
+      const resetOriginBtn = document.createElement('button');
+      resetOriginBtn.textContent = '原点を中心にリセット';
+      resetOriginBtn.style.cssText = `
+        width: 100%;
+        padding: 6px;
+        margin-bottom: 8px;
+        background: #3a7bc8;
+        color: #fff;
+        border: none;
+        border-radius: 3px;
+        cursor: pointer;
+        font-size: 11px;
+        transition: background 0.2s;
+      `;
+      resetOriginBtn.onmouseover = () => resetOriginBtn.style.background = '#4a8bd8';
+      resetOriginBtn.onmouseout = () => resetOriginBtn.style.background = '#3a7bc8';
+      resetOriginBtn.onclick = () => {
+        if (this.currentElement) {
+          try {
+            const bbox = this.currentElement.getBBox();
+            const ctm = this.currentElement.getCTM();
+            const centerLocal = {
+              x: bbox.x + bbox.width / 2,
+              y: bbox.y + bbox.height / 2
+            };
 
-      details.appendChild(this.createPropertyRow('原点 Y', layer.origin.y, (value) => {
-        layer.origin.y = parseFloat(value) || 0;
-        this.transformManager.notifyChange();
-      }, 'number', 0.1));
+            if (ctm) {
+              const pt = this.currentElement.ownerSVGElement.createSVGPoint();
+              pt.x = centerLocal.x;
+              pt.y = centerLocal.y;
+              const transformed = pt.matrixTransform(ctm);
+              layer.origin.x = transformed.x;
+              layer.origin.y = transformed.y;
+            } else {
+              layer.origin.x = centerLocal.x;
+              layer.origin.y = centerLocal.y;
+            }
+            this.transformManager.notifyChange();
+          } catch (e) {
+            console.warn('Failed to reset origin:', e);
+          }
+        }
+      };
+      details.appendChild(resetOriginBtn);
+
+      details.appendChild(this.createPropertyRow('原点 X',
+        Math.round(layer.origin.x * 10) / 10,
+        (value) => {
+          layer.origin.x = parseFloat(value) || 0;
+          this.transformManager.notifyChange();
+        }, 'number', 0.1));
+
+      details.appendChild(this.createPropertyRow('原点 Y',
+        Math.round(layer.origin.y * 10) / 10,
+        (value) => {
+          layer.origin.y = parseFloat(value) || 0;
+          this.transformManager.notifyChange();
+        }, 'number', 0.1));
     }
 
     // タイプ別パラメータ
@@ -404,9 +466,36 @@ class TransformLayersPanel {
       return;
     }
 
-    // デフォルトの原点は (0, 0) だが、実際の使用時には選択オブジェクトの中心などに設定される
+    // 選択オブジェクトの中心を原点として取得
+    let origin = { x: 0, y: 0 };
+    if (this.currentElement) {
+      try {
+        const bbox = this.currentElement.getBBox();
+        const ctm = this.currentElement.getCTM();
+
+        // バウンディングボックスの中心をローカル座標で計算
+        const centerLocal = {
+          x: bbox.x + bbox.width / 2,
+          y: bbox.y + bbox.height / 2
+        };
+
+        // CTMを使ってグローバル座標に変換
+        if (ctm) {
+          const pt = this.currentElement.ownerSVGElement.createSVGPoint();
+          pt.x = centerLocal.x;
+          pt.y = centerLocal.y;
+          const transformed = pt.matrixTransform(ctm);
+          origin = { x: transformed.x, y: transformed.y };
+        } else {
+          origin = centerLocal;
+        }
+      } catch (e) {
+        console.warn('Failed to get element center:', e);
+      }
+    }
+
     const layer = new window.VectorUtils.TransformLayer(type, {
-      origin: { x: 0, y: 0 }
+      origin: origin
     });
 
     this.transformManager.addLayer(layer);
