@@ -25,10 +25,14 @@ class SelectTool extends BaseTool {
     // アフィン変換レイヤーシステム
     this.transformManagers = new WeakMap(); // SVG要素 -> TransformManager
     this.transformLayersPanel = null;
-    this.initTransformLayersPanel();
   }
 
   initTransformLayersPanel() {
+    // 遅延初期化：TransformLayersPanelが読み込まれているか確認
+    if (typeof TransformLayersPanel === 'undefined') {
+      return; // まだ読み込まれていない
+    }
+
     // TransformLayersPanelのインスタンスを作成（グローバルに1つ）
     if (!window.transformLayersPanel) {
       window.transformLayersPanel = new TransformLayersPanel();
@@ -145,6 +149,10 @@ class SelectTool extends BaseTool {
   activate() {
     super.activate();
     this.canvas.style.cursor = "default";
+    // 遅延初期化を試みる
+    if (!this.transformLayersPanel) {
+      this.initTransformLayersPanel();
+    }
   }
 
   deactivate() {
@@ -620,6 +628,21 @@ class SelectTool extends BaseTool {
   setupTransformManager(element) {
     if (!element) return;
 
+    // 遅延初期化を試みる
+    if (!this.transformLayersPanel) {
+      this.initTransformLayersPanel();
+    }
+
+    // パネルが利用できない場合はスキップ
+    if (!this.transformLayersPanel) {
+      return;
+    }
+
+    // VectorUtilsが読み込まれているか確認
+    if (!window.VectorUtils || !window.VectorUtils.TransformManager) {
+      return;
+    }
+
     // 既存のTransformManagerを取得、なければ作成
     let manager = this.transformManagers.get(element);
 
@@ -645,15 +668,13 @@ class SelectTool extends BaseTool {
     }
 
     // パネルにセット
-    if (this.transformLayersPanel) {
-      this.transformLayersPanel.setTransformManager(manager, (matrix) => {
-        // 変換が更新されたときのコールバック
-        element.setAttribute('transform', matrix.toString());
-        // data属性に保存
-        this.saveTransformManagerToElement(element, manager);
-      });
-      this.transformLayersPanel.show();
-    }
+    this.transformLayersPanel.setTransformManager(manager, (matrix) => {
+      // 変換が更新されたときのコールバック
+      element.setAttribute('transform', matrix.toString());
+      // data属性に保存
+      this.saveTransformManagerToElement(element, manager);
+    });
+    this.transformLayersPanel.show();
   }
 
   /**

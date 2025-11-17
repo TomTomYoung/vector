@@ -399,6 +399,10 @@ class TransformLayersPanel {
    */
   addLayer(type) {
     if (!this.transformManager) return;
+    if (!window.VectorUtils || !window.VectorUtils.TransformLayer) {
+      console.error('VectorUtils.TransformLayer is not available');
+      return;
+    }
 
     // デフォルトの原点は (0, 0) だが、実際の使用時には選択オブジェクトの中心などに設定される
     const layer = new window.VectorUtils.TransformLayer(type, {
