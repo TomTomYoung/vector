@@ -50,9 +50,12 @@ class ToolPropertiesPanel {
     // 選択が変更されたときにパネルを更新（アフィン変換レイヤー用）
     // window.selectedObjectの変更を定期的にチェック
     let lastSelectedObject = null;
+    let lastSelectionCount = 0;
     setInterval(() => {
-      if (window.selectedObject !== lastSelectedObject) {
+      const currentSelectionCount = window.selectedObjects ? window.selectedObjects.length : 0;
+      if (window.selectedObject !== lastSelectedObject || currentSelectionCount !== lastSelectionCount) {
         lastSelectedObject = window.selectedObject;
+        lastSelectionCount = currentSelectionCount;
         this.updatePanel();
       }
     }, 100);
@@ -520,12 +523,21 @@ class ToolPropertiesPanel {
       return;
     }
 
+    // 複数選択の場合はスキップ（単一選択のみサポート）
+    if (window.selectedObjects && window.selectedObjects.length !== 1) {
+      return;
+    }
+
+    // 要素が有効かチェック
+    const element = window.selectedObject;
+    if (!element || !element.ownerSVGElement) {
+      return;
+    }
+
     // VectorUtilsが読み込まれているか確認
     if (!window.VectorUtils || !window.VectorUtils.TransformManager) {
       return;
     }
-
-    const element = window.selectedObject;
 
     // TransformManagerを取得または作成
     let manager = this.transformManagers.get(element);
