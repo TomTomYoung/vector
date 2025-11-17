@@ -24,6 +24,7 @@ import * as coordinates from './coordinates.js';
 import * as svg from './svg.js';
 import * as style from './style.js';
 import * as bezier from './bezier.js';
+import { TransformLayer, TransformManager } from './transformManager.js';
 
 // グローバルオブジェクトとして公開
 window.VectorUtils = {
@@ -32,6 +33,8 @@ window.VectorUtils = {
   svg,
   style,
   bezier,
+  TransformLayer,
+  TransformManager,
 };
 
 // 個別にもアクセス可能にする（下位互換性のため）
