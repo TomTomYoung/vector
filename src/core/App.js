@@ -51,7 +51,6 @@ class App {
 
     // UIコンポーネントの初期化 - レイヤーパネルを最初に初期化
     this.layerPanel = new LayerPanel();
-    this.stylePanel = new StylePanel();
     this.historyManager = new HistoryManager();
     this.alignmentPanel = new AlignmentPanel();
     this.gridManager = new GridManager();

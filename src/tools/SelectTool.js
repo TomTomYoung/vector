@@ -119,7 +119,18 @@ class SelectTool extends BaseTool {
           this.refreshHandles();
         },
       },
+      {
+        type: "custom",
+        label: "オブジェクトプロパティ",
+        render: (container) => this.renderSelectedObjectStyles(container),
+      },
     ];
+  }
+
+  updatePanel() {
+    if (window.toolPropertiesPanel) {
+      window.toolPropertiesPanel.updatePanel();
+    }
   }
 
   refreshHandles() {
@@ -534,60 +545,10 @@ class SelectTool extends BaseTool {
       window.selectedObject = el;
       window.selectedObjects = [el];
 
-      // スタイルを反映
-      const fillInput = document.getElementById("fill-color");
-      if (fillInput) {
-        const fallbackFill =
-          fillInput.value && typeof fillInput.value === "string"
-            ? fillInput.value
-            : "#ffffff";
-        fillInput.value = this.sanitizeColorValue(
-          el.getAttribute("fill"),
-          fallbackFill
-        );
-      }
-
-      const strokeInput = document.getElementById("stroke-color");
-      if (strokeInput) {
-        const fallbackStroke =
-          strokeInput.value && typeof strokeInput.value === "string"
-            ? strokeInput.value
-            : "#000000";
-        strokeInput.value = this.sanitizeColorValue(
-          el.getAttribute("stroke"),
-          fallbackStroke
-        );
-      }
-
-      const strokeWidthInput = document.getElementById("stroke-width");
-      if (strokeWidthInput) {
-        const fallbackWidth = this.sanitizeNumericValue(
-          strokeWidthInput.value,
-          2
-        );
-        const sanitizedWidth = this.sanitizeNumericValue(
-          el.getAttribute("stroke-width"),
-          fallbackWidth
-        );
-        strokeWidthInput.value = String(sanitizedWidth);
-      }
-
-      const opacityInput = document.getElementById("opacity-input");
-      if (opacityInput) {
-        const fallbackOpacity = this.sanitizeNumericValue(
-          opacityInput.value,
-          1
-        );
-        let sanitizedOpacity = this.sanitizeNumericValue(
-          el.getAttribute("opacity"),
-          fallbackOpacity
-        );
-        if (sanitizedOpacity < 0) sanitizedOpacity = 0;
-        if (sanitizedOpacity > 1) sanitizedOpacity = 1;
-        opacityInput.value = String(sanitizedOpacity);
-      }
-
       this.addControlPoints();
+
+      // 右ペインのツールプロパティパネルを更新
+      this.updatePanel();
     }
   }
 
@@ -962,6 +923,254 @@ class SelectTool extends BaseTool {
       console.error("バウンディングボックスの取得に失敗しました", e);
       // フォールバック処理
       return null;
+    }
+  }
+
+  renderSelectedObjectStyles(container) {
+    const selectedObj = window.selectedObject;
+
+    if (!selectedObj || window.selectedObjects.length !== 1) {
+      const empty = document.createElement("div");
+      empty.textContent = "オブジェクトを選択すると編集できます";
+      empty.style.fontSize = "12px";
+      empty.style.color = "#666";
+      container.appendChild(empty);
+      return;
+    }
+
+    const style = window.SvgUtils.getElementStyle(selectedObj);
+
+    const wrapper = document.createElement("div");
+    wrapper.style.display = "flex";
+    wrapper.style.flexDirection = "column";
+    wrapper.style.gap = "8px";
+    wrapper.style.marginTop = "10px";
+
+    // 線色
+    const strokeRow = document.createElement("div");
+    strokeRow.style.display = "flex";
+    strokeRow.style.flexDirection = "column";
+
+    const strokeLabel = document.createElement("label");
+    strokeLabel.textContent = "線色";
+    strokeLabel.style.fontSize = "12px";
+    strokeLabel.style.color = "#555";
+    strokeLabel.style.marginBottom = "2px";
+    strokeRow.appendChild(strokeLabel);
+
+    const strokeInput = document.createElement("input");
+    strokeInput.type = "color";
+    strokeInput.value = this.normalizeColorForInput(style.stroke);
+    strokeInput.style.width = "60px";
+    strokeInput.style.height = "34px";
+    strokeInput.style.padding = "0";
+    strokeInput.style.border = "none";
+    strokeInput.addEventListener("change", (event) => {
+      selectedObj.setAttribute("stroke", event.target.value);
+      this.saveState();
+    });
+    strokeRow.appendChild(strokeInput);
+    wrapper.appendChild(strokeRow);
+
+    // 線幅
+    const widthRow = document.createElement("div");
+    widthRow.style.display = "flex";
+    widthRow.style.flexDirection = "column";
+
+    const widthLabel = document.createElement("label");
+    widthLabel.textContent = "線幅";
+    widthLabel.style.fontSize = "12px";
+    widthLabel.style.color = "#555";
+    widthLabel.style.marginBottom = "2px";
+    widthRow.appendChild(widthLabel);
+
+    const widthInput = document.createElement("input");
+    widthInput.type = "number";
+    widthInput.value = style.strokeWidth;
+    widthInput.min = "0";
+    widthInput.step = "0.5";
+    widthInput.style.cssText = `
+      width: 100%;
+      padding: 6px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      font-size: 12px;
+    `;
+    widthInput.addEventListener("change", (event) => {
+      const width = parseFloat(event.target.value);
+      selectedObj.setAttribute("stroke-width", Number.isFinite(width) ? width : 1);
+      this.saveState();
+    });
+    widthRow.appendChild(widthInput);
+    wrapper.appendChild(widthRow);
+
+    // 線スタイル
+    const dashRow = document.createElement("div");
+    dashRow.style.display = "flex";
+    dashRow.style.flexDirection = "column";
+
+    const dashLabel = document.createElement("label");
+    dashLabel.textContent = "線スタイル";
+    dashLabel.style.fontSize = "12px";
+    dashLabel.style.color = "#555";
+    dashLabel.style.marginBottom = "2px";
+    dashRow.appendChild(dashLabel);
+
+    const dashSelect = document.createElement("select");
+    dashSelect.style.cssText = `
+      width: 100%;
+      padding: 6px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      font-size: 12px;
+    `;
+    const dashOptions = [
+      { value: "solid", label: "実線" },
+      { value: "dashed", label: "破線" },
+      { value: "dotted", label: "点線" },
+    ];
+    const currentStyle = this.getStrokeStyleKey(selectedObj);
+    dashOptions.forEach((opt) => {
+      const option = document.createElement("option");
+      option.value = opt.value;
+      option.textContent = opt.label;
+      if (opt.value === currentStyle) {
+        option.selected = true;
+      }
+      dashSelect.appendChild(option);
+    });
+    dashSelect.addEventListener("change", (event) => {
+      this.applyStrokeStyle(selectedObj, event.target.value);
+      this.saveState();
+      this.updatePanel();
+    });
+    dashRow.appendChild(dashSelect);
+    wrapper.appendChild(dashRow);
+
+    // 塗り色
+    const fillRow = document.createElement("div");
+    fillRow.style.display = "flex";
+    fillRow.style.flexDirection = "column";
+
+    const fillLabel = document.createElement("label");
+    fillLabel.textContent = "塗り色";
+    fillLabel.style.fontSize = "12px";
+    fillLabel.style.color = "#555";
+    fillLabel.style.marginBottom = "2px";
+    fillRow.appendChild(fillLabel);
+
+    const fillInput = document.createElement("input");
+    fillInput.type = "color";
+    fillInput.value = this.normalizeColorForInput(style.fill);
+    fillInput.style.width = "60px";
+    fillInput.style.height = "34px";
+    fillInput.style.padding = "0";
+    fillInput.style.border = "none";
+    fillInput.addEventListener("change", (event) => {
+      selectedObj.setAttribute("fill", event.target.value);
+      this.saveState();
+    });
+    fillRow.appendChild(fillInput);
+    wrapper.appendChild(fillRow);
+
+    // 不透明度
+    const opacityRow = document.createElement("div");
+    opacityRow.style.display = "flex";
+    opacityRow.style.flexDirection = "column";
+
+    const opacityLabel = document.createElement("label");
+    opacityLabel.textContent = "不透明度";
+    opacityLabel.style.fontSize = "12px";
+    opacityLabel.style.color = "#555";
+    opacityLabel.style.marginBottom = "2px";
+    opacityRow.appendChild(opacityLabel);
+
+    const opacityInput = document.createElement("input");
+    opacityInput.type = "number";
+    opacityInput.value = style.opacity;
+    opacityInput.min = "0";
+    opacityInput.max = "1";
+    opacityInput.step = "0.05";
+    opacityInput.style.cssText = `
+      width: 100%;
+      padding: 6px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      font-size: 12px;
+    `;
+    opacityInput.addEventListener("change", (event) => {
+      let value = parseFloat(event.target.value);
+      if (!Number.isFinite(value)) {
+        value = 1;
+      }
+      value = Math.min(1, Math.max(0, value));
+      selectedObj.setAttribute("opacity", value);
+      this.saveState();
+    });
+    opacityRow.appendChild(opacityInput);
+    wrapper.appendChild(opacityRow);
+
+    container.appendChild(wrapper);
+  }
+
+  normalizeColorForInput(value) {
+    const rgb = window.StyleUtils.parseColor(value);
+    if (rgb) {
+      return window.StyleUtils.rgbToHex(rgb.r, rgb.g, rgb.b);
+    }
+    return "#000000";
+  }
+
+  getStrokeStyleKey(element) {
+    if (!element) return "solid";
+
+    const dashArray = element.getAttribute("stroke-dasharray");
+    if (!dashArray || dashArray === "none") return "solid";
+
+    const normalized = dashArray.trim().replace(/\s+/g, " ");
+
+    if (window.StyleUtils && window.StyleUtils.LINE_STYLES) {
+      for (const [key, pattern] of Object.entries(window.StyleUtils.LINE_STYLES)) {
+        if (pattern === normalized) {
+          return key;
+        }
+      }
+    }
+
+    if (normalized.includes("5 5") || normalized.includes("10 10")) {
+      return "dashed";
+    }
+    if (normalized.includes("2 2") || normalized.includes("1 1")) {
+      return "dotted";
+    }
+
+    return "solid";
+  }
+
+  applyStrokeStyle(element, styleKey) {
+    if (!element) return;
+
+    if (styleKey === "solid") {
+      element.removeAttribute("stroke-dasharray");
+      return;
+    }
+
+    if (window.StyleUtils && window.StyleUtils.LINE_STYLES) {
+      const pattern = window.StyleUtils.LINE_STYLES[styleKey];
+      if (pattern) {
+        element.setAttribute("stroke-dasharray", pattern);
+        return;
+      }
+    }
+
+    const fallbackPatterns = {
+      dashed: "10 10",
+      dotted: "2 2",
+    };
+
+    const pattern = fallbackPatterns[styleKey];
+    if (pattern) {
+      element.setAttribute("stroke-dasharray", pattern);
     }
   }
 }
