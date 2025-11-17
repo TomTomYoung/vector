@@ -204,7 +204,9 @@ class ToolPropertiesPanel {
   }
 
   createCommonPropertiesSection() {
-    const section = this.createSection("共通プロパティ");
+    const section = this.createSection("オブジェクト生成時共通プロパティ", {
+      emphasize: true,
+    });
 
     // 塗りつぶし色
     const fillGroup = this.createPropertyGroup("塗りつぶし");
@@ -287,7 +289,9 @@ class ToolPropertiesPanel {
       return;
     }
 
-    const section = this.createSection("ツール固有設定");
+    const section = this.createSection("ツール固有プロパティ", {
+      emphasize: true,
+    });
 
     toolProps.forEach((prop) => {
       const group = this.createPropertyGroup(prop.label);
@@ -348,21 +352,32 @@ class ToolPropertiesPanel {
     this.panel.appendChild(section);
   }
 
-  createSection(title) {
+  createSection(title, options = {}) {
+    const { emphasize = false } = options;
     const section = document.createElement("div");
+    const baseBackground = emphasize
+      ? "linear-gradient(180deg, #fdfbff 0%, #f2f5ff 100%)"
+      : "#fafafa";
+    const borderColor = emphasize ? "#92a5ff" : "#dfe3ec";
+
     section.style.cssText = `
       margin-bottom: 20px;
-      padding-bottom: 15px;
-      border-bottom: 1px solid #ddd;
+      padding: 16px;
+      border: 2px solid ${borderColor};
+      border-radius: 12px;
+      background: ${baseBackground};
+      box-shadow: 0 4px 10px rgba(17, 38, 146, 0.08);
     `;
 
     const heading = document.createElement("h4");
     heading.textContent = title;
     heading.style.cssText = `
       margin: 0 0 10px 0;
-      font-size: 14px;
-      color: #333;
+      font-size: 15px;
+      color: #1d2d50;
       font-weight: bold;
+      padding-bottom: 6px;
+      border-bottom: 1px dashed ${emphasize ? "#b5c1ff" : "#d0d7e3"};
     `;
     section.appendChild(heading);
 
@@ -371,8 +386,24 @@ class ToolPropertiesPanel {
 
   createPropertyGroup(label) {
     const group = document.createElement("div");
+    const isObjectPropertiesGroup = label === "オブジェクトプロパティ";
     group.style.cssText = `
       margin-bottom: 12px;
+      padding: 12px;
+      border: 1px solid ${
+        isObjectPropertiesGroup ? "#b28bff" : "#d5dae6"
+      };
+      border-radius: 10px;
+      background: ${
+        isObjectPropertiesGroup
+          ? "linear-gradient(180deg, #fef9ff 0%, #f5f1ff 100%)"
+          : "#ffffff"
+      };
+      box-shadow: ${
+        isObjectPropertiesGroup
+          ? "0 2px 8px rgba(83, 54, 161, 0.18)"
+          : "0 1px 3px rgba(15, 23, 42, 0.08)"
+      };
     `;
 
     const labelEl = document.createElement("label");
@@ -381,7 +412,8 @@ class ToolPropertiesPanel {
       display: block;
       margin-bottom: 5px;
       font-size: 13px;
-      color: #555;
+      color: ${isObjectPropertiesGroup ? "#402b75" : "#555"};
+      font-weight: ${isObjectPropertiesGroup ? "bold" : "normal"};
     `;
     group.appendChild(labelEl);
 
