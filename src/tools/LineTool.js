@@ -548,7 +548,474 @@ class LineTool extends BaseTool {
       container.appendChild(geometryWrapper);
     }
 
+    this.renderAffineControls(container, line);
     this.renderLineStyleControls(container, line);
+  }
+
+  renderAffineControls(container, line) {
+    if (!window.DOMMatrix) {
+      return;
+    }
+
+    const wrapper = document.createElement("div");
+    wrapper.style.display = "flex";
+    wrapper.style.flexDirection = "column";
+    wrapper.style.gap = "6px";
+    wrapper.style.marginTop = "10px";
+    wrapper.dataset.affineWrapper = "true";
+
+    const title = document.createElement("div");
+    title.textContent = "アフィン変換";
+    title.style.fontSize = "12px";
+    title.style.color = "#555";
+    title.style.marginBottom = "2px";
+    wrapper.appendChild(title);
+
+    const values = this.getAffineValues(line);
+    const fields = [
+      { id: "translateX", label: "平行移動 X", step: "1" },
+      { id: "translateY", label: "平行移動 Y", step: "1" },
+      { id: "rotation", label: "回転", step: "1", suffix: "度" },
+      { id: "scaleX", label: "拡大率 X", step: "0.1" },
+      { id: "scaleY", label: "拡大率 Y", step: "0.1" },
+    ];
+
+    fields.forEach((field) => {
+      const row = document.createElement("div");
+      row.style.display = "flex";
+      row.style.flexDirection = "column";
+
+      const label = document.createElement("label");
+      label.textContent = field.label;
+      label.style.fontSize = "12px";
+      label.style.color = "#555";
+      label.style.marginBottom = "2px";
+      row.appendChild(label);
+
+      const input = document.createElement("input");
+      input.type = "number";
+      input.step = field.step || "1";
+      input.value = values[field.id];
+      input.dataset.affineId = field.id;
+      input.style.cssText = `
+        width: 100%;
+        padding: 6px;
+        border-radius: 4px;
+        border: 1px solid #ccc;
+        font-size: 12px;
+      `;
+      input.addEventListener("change", () => {
+        this.updateAffineFromInputs(line, wrapper);
+      });
+      row.appendChild(input);
+
+      if (field.suffix) {
+        const suffix = document.createElement("div");
+        suffix.textContent = field.suffix;
+        suffix.style.fontSize = "11px";
+        suffix.style.color = "#888";
+        suffix.style.marginTop = "2px";
+        row.appendChild(suffix);
+      }
+
+      wrapper.appendChild(row);
+    });
+
+    // アフィン適用ボタンを追加
+    const applyButton = document.createElement("button");
+    applyButton.type = "button";
+    applyButton.textContent = "適用";
+    applyButton.style.cssText = `
+      width: 100%;
+      padding: 8px;
+      margin-top: 6px;
+      border-radius: 4px;
+      border: 1px solid #2f80ed;
+      background: #2f80ed;
+      color: #fff;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.2s;
+    `;
+    applyButton.addEventListener("mouseover", () => {
+      applyButton.style.background = "#1a6bd8";
+    });
+    applyButton.addEventListener("mouseout", () => {
+      applyButton.style.background = "#2f80ed";
+    });
+    applyButton.addEventListener("click", () => {
+      this.applyAffineToGeometry(line);
+    });
+    wrapper.appendChild(applyButton);
+
+    container.appendChild(wrapper);
+  }
+
+  renderLineStyleControls(container, line) {
+    const style = window.SvgUtils.getElementStyle(line);
+
+    const wrapper = document.createElement("div");
+    wrapper.style.display = "flex";
+    wrapper.style.flexDirection = "column";
+    wrapper.style.gap = "8px";
+    wrapper.style.marginTop = "10px";
+
+    const colorRow = document.createElement("div");
+    colorRow.style.display = "flex";
+    colorRow.style.flexDirection = "column";
+
+    const colorLabel = document.createElement("label");
+    colorLabel.textContent = "線色";
+    colorLabel.style.fontSize = "12px";
+    colorLabel.style.color = "#555";
+    colorLabel.style.marginBottom = "2px";
+    colorRow.appendChild(colorLabel);
+
+    const colorInput = document.createElement("input");
+    colorInput.type = "color";
+    colorInput.value = this.normalizeColorForInput(style.stroke);
+    colorInput.style.width = "60px";
+    colorInput.style.height = "34px";
+    colorInput.style.padding = "0";
+    colorInput.style.border = "none";
+    colorInput.addEventListener("change", (event) => {
+      line.setAttribute("stroke", event.target.value);
+      this.saveState();
+      this.refreshSelectionVisuals(line);
+    });
+    colorRow.appendChild(colorInput);
+    wrapper.appendChild(colorRow);
+
+    const widthRow = document.createElement("div");
+    widthRow.style.display = "flex";
+    widthRow.style.flexDirection = "column";
+
+    const widthLabel = document.createElement("label");
+    widthLabel.textContent = "線幅";
+    widthLabel.style.fontSize = "12px";
+    widthLabel.style.color = "#555";
+    widthLabel.style.marginBottom = "2px";
+    widthRow.appendChild(widthLabel);
+
+    const widthInput = document.createElement("input");
+    widthInput.type = "number";
+    widthInput.value = style.strokeWidth;
+    widthInput.min = "0.5";
+    widthInput.step = "0.5";
+    widthInput.style.cssText = `
+      width: 100%;
+      padding: 6px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      font-size: 12px;
+    `;
+    widthInput.addEventListener("change", (event) => {
+      const width = parseFloat(event.target.value);
+      line.setAttribute("stroke-width", Number.isFinite(width) ? width : 1);
+      this.saveState();
+      this.refreshSelectionVisuals(line);
+    });
+    widthRow.appendChild(widthInput);
+    wrapper.appendChild(widthRow);
+
+    const dashRow = document.createElement("div");
+    dashRow.style.display = "flex";
+    dashRow.style.flexDirection = "column";
+
+    const dashLabel = document.createElement("label");
+    dashLabel.textContent = "線スタイル";
+    dashLabel.style.fontSize = "12px";
+    dashLabel.style.color = "#555";
+    dashLabel.style.marginBottom = "2px";
+    dashRow.appendChild(dashLabel);
+
+    const select = document.createElement("select");
+    select.style.cssText = `
+      width: 100%;
+      padding: 6px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      font-size: 12px;
+    `;
+    const dashOptions = [
+      { value: "solid", label: "実線" },
+      { value: "dashed", label: "破線" },
+      { value: "dotted", label: "点線" },
+    ];
+    const currentStyle = this.getStrokeStyleKey(line);
+    dashOptions.forEach((opt) => {
+      const option = document.createElement("option");
+      option.value = opt.value;
+      option.textContent = opt.label;
+      if (opt.value === currentStyle) {
+        option.selected = true;
+      }
+      select.appendChild(option);
+    });
+    select.addEventListener("change", (event) => {
+      this.applyStrokeStyle(line, event.target.value);
+      this.saveState();
+      this.requestToolPanelRefresh();
+    });
+    dashRow.appendChild(select);
+    wrapper.appendChild(dashRow);
+
+    container.appendChild(wrapper);
+  }
+
+  updateLineGeometryFromInputs(line, wrapper) {
+    const styleKey = wrapper.dataset.geometryStyle || this.getDefaultGeometryStyle();
+    const styleDef = this.geometryStyles[styleKey];
+    if (!styleDef) {
+      return;
+    }
+
+    const values = {};
+    wrapper.querySelectorAll("[data-param-id]").forEach((input) => {
+      const id = input.dataset.paramId;
+      const parsed = parseFloat(input.value);
+      values[id] = Number.isFinite(parsed) ? parsed : 0;
+    });
+
+    styleDef.applyValues(line, values);
+    this.saveState();
+    this.refreshSelectionVisuals(line);
+    this.requestToolPanelRefresh();
+  }
+
+  updateAffineFromInputs(line, wrapper) {
+    if (!line || !wrapper) {
+      return;
+    }
+
+    const values = {};
+    wrapper.querySelectorAll("[data-affine-id]").forEach((input) => {
+      const id = input.dataset.affineId;
+      let parsed = parseFloat(input.value);
+      if (!Number.isFinite(parsed)) {
+        parsed = id && id.startsWith("scale") ? 1 : 0;
+      }
+      values[id] = parsed;
+    });
+
+    this.applyAffineValues(line, values);
+    this.saveState();
+    this.refreshSelectionVisuals(line);
+    this.updateAffineInputs(wrapper, line);
+  }
+
+  updateAffineInputs(wrapper, line) {
+    if (!wrapper || !line) {
+      return;
+    }
+
+    const latest = this.getAffineValues(line);
+    wrapper.querySelectorAll("[data-affine-id]").forEach((input) => {
+      const id = input.dataset.affineId;
+      if (id && latest[id] !== undefined) {
+        input.value = latest[id];
+      }
+    });
+  }
+
+  getAffineValues(line) {
+    if (!window.DOMMatrix || !line) {
+      return {
+        translateX: 0,
+        translateY: 0,
+        rotation: 0,
+        scaleX: 1,
+        scaleY: 1,
+      };
+    }
+
+    let matrix;
+    try {
+      const transform = line.getAttribute("transform");
+      matrix = transform ? new DOMMatrix(transform) : new DOMMatrix();
+    } catch (error) {
+      matrix = new DOMMatrix();
+    }
+
+    const anchor = this.getLineLocalCenter(line);
+    const anchorShift = this.getAnchorTranslation(matrix, anchor);
+
+    const translateX = matrix.e - anchorShift.x;
+    const translateY = matrix.f - anchorShift.y;
+    const scaleX = Math.sqrt(matrix.a * matrix.a + matrix.b * matrix.b) || 0;
+    let rotation = Math.atan2(matrix.b, matrix.a) * (180 / Math.PI);
+    let scaleY;
+    if (scaleX !== 0) {
+      const determinant = matrix.a * matrix.d - matrix.b * matrix.c;
+      scaleY = determinant / scaleX;
+    }
+
+    if (!Number.isFinite(scaleY)) {
+      const alt = Math.sqrt(matrix.c * matrix.c + matrix.d * matrix.d);
+      scaleY = alt || 0;
+      const determinant = matrix.a * matrix.d - matrix.b * matrix.c;
+      if (determinant < 0) {
+        scaleY *= -1;
+      }
+    }
+
+    return {
+      translateX: this.roundValue(translateX),
+      translateY: this.roundValue(translateY),
+      rotation: this.roundValue(rotation),
+      scaleX: this.roundValue(scaleX || 1, 4),
+      scaleY: this.roundValue(scaleY || 1, 4),
+    };
+  }
+
+  applyAffineValues(line, values) {
+    if (!line) {
+      return;
+    }
+
+    const current = this.getAffineValues(line);
+    const nextValues = {
+      ...current,
+      ...values,
+    };
+
+    const translateX = Number.isFinite(nextValues.translateX)
+      ? nextValues.translateX
+      : 0;
+    const translateY = Number.isFinite(nextValues.translateY)
+      ? nextValues.translateY
+      : 0;
+    const rotation = Number.isFinite(nextValues.rotation)
+      ? nextValues.rotation
+      : 0;
+    let scaleX = Number.isFinite(nextValues.scaleX) ? nextValues.scaleX : 1;
+    let scaleY = Number.isFinite(nextValues.scaleY) ? nextValues.scaleY : 1;
+
+    if (this.isAlmostZero(scaleX)) {
+      scaleX = scaleX < 0 ? -0.0001 : 0.0001;
+    }
+    if (this.isAlmostZero(scaleY)) {
+      scaleY = scaleY < 0 ? -0.0001 : 0.0001;
+    }
+
+    const angleRad = (rotation * Math.PI) / 180;
+    const cos = Math.cos(angleRad);
+    const sin = Math.sin(angleRad);
+    const a = cos * scaleX;
+    const b = sin * scaleX;
+    const c = -sin * scaleY;
+    const d = cos * scaleY;
+
+    const anchor = this.getLineLocalCenter(line);
+    const anchorShift = this.getAnchorTranslation({ a, b, c, d }, anchor);
+    const e = anchorShift.x + translateX;
+    const f = anchorShift.y + translateY;
+
+    if (this.isIdentityMatrix({ a, b, c, d, e, f })) {
+      line.removeAttribute("transform");
+    } else {
+      line.setAttribute(
+        "transform",
+        `matrix(${a}, ${b}, ${c}, ${d}, ${e}, ${f})`
+      );
+    }
+  }
+
+  applyAffineToGeometry(line) {
+    if (!line || !window.DOMPoint) {
+      return;
+    }
+
+    const transformAttr = line.getAttribute("transform");
+    if (!transformAttr) {
+      // transformがなければ何もしない
+      return;
+    }
+
+    const x1 = this.toNumber(line.getAttribute("x1"));
+    const y1 = this.toNumber(line.getAttribute("y1"));
+    const x2 = this.toNumber(line.getAttribute("x2"));
+    const y2 = this.toNumber(line.getAttribute("y2"));
+
+    // 現在のtransform行列を取得
+    let matrix;
+    try {
+      matrix = new DOMMatrix(transformAttr);
+    } catch (error) {
+      console.error("Failed to parse transform:", error);
+      return;
+    }
+
+    // 始点と終点に変換を適用
+    const p1 = new DOMPoint(x1, y1).matrixTransform(matrix);
+    const p2 = new DOMPoint(x2, y2).matrixTransform(matrix);
+
+    // 座標を更新
+    line.setAttribute("x1", p1.x);
+    line.setAttribute("y1", p1.y);
+    line.setAttribute("x2", p2.x);
+    line.setAttribute("y2", p2.y);
+
+    // transformをクリア
+    line.removeAttribute("transform");
+
+    // 状態を保存
+    this.saveState();
+
+    // 選択ビジュアルを更新
+    this.refreshSelectionVisuals(line);
+
+    // UIを更新
+    this.requestToolPanelRefresh();
+  }
+
+  getLineLocalCenter(line) {
+    if (!line) {
+      return null;
+    }
+
+    const x1 = this.toNumber(line.getAttribute("x1"));
+    const y1 = this.toNumber(line.getAttribute("y1"));
+    const x2 = this.toNumber(line.getAttribute("x2"));
+    const y2 = this.toNumber(line.getAttribute("y2"));
+
+    if (
+      !Number.isFinite(x1) ||
+      !Number.isFinite(y1) ||
+      !Number.isFinite(x2) ||
+      !Number.isFinite(y2)
+    ) {
+      return null;
+    }
+
+    return {
+      x: (x1 + x2) / 2,
+      y: (y1 + y2) / 2,
+    };
+  }
+
+  getAnchorTranslation(matrix, anchor) {
+    if (!matrix || !anchor) {
+      return { x: 0, y: 0 };
+    }
+
+    const a = Number.isFinite(matrix.a) ? matrix.a : 1;
+    const b = Number.isFinite(matrix.b) ? matrix.b : 0;
+    const c = Number.isFinite(matrix.c) ? matrix.c : 0;
+    const d = Number.isFinite(matrix.d) ? matrix.d : 1;
+
+    if (!Number.isFinite(anchor.x) || !Number.isFinite(anchor.y)) {
+      return { x: 0, y: 0 };
+    }
+
+    const anchorX = anchor.x;
+    const anchorY = anchor.y;
+    const shiftedX = anchorX - (a * anchorX + c * anchorY);
+    const shiftedY = anchorY - (b * anchorX + d * anchorY);
+    return {
+      x: shiftedX,
+      y: shiftedY,
+    };
   }
 
   getLineElements() {
@@ -982,6 +1449,20 @@ class LineTool extends BaseTool {
     return Math.abs(value) <= epsilon;
   }
 
+  isIdentityMatrix(matrix) {
+    if (!matrix) {
+      return true;
+    }
+
+    return (
+      this.isAlmostZero((matrix.a ?? 0) - 1) &&
+      this.isAlmostZero(matrix.b ?? 0) &&
+      this.isAlmostZero(matrix.c ?? 0) &&
+      this.isAlmostZero((matrix.d ?? 0) - 1) &&
+      this.isAlmostZero(matrix.e ?? 0) &&
+      this.isAlmostZero(matrix.f ?? 0)
+    );
+  }
 }
 
 window.LineTool = LineTool;
