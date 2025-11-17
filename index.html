@@ -41,6 +41,27 @@
         overflow: hidden;
       }
 
+      .vertical-resizer {
+        flex: 0 0 8px;
+        width: 8px;
+        background: #d4d4d4;
+        border-left: 1px solid #c3c3c3;
+        border-right: 1px solid #c3c3c3;
+        cursor: col-resize;
+        transition: background 0.2s ease;
+        align-self: stretch;
+      }
+
+      .vertical-resizer:hover,
+      .vertical-resizer.active {
+        background: #bcbcbc;
+      }
+
+      body.resizing-columns {
+        user-select: none;
+        cursor: col-resize;
+      }
+
       .toolbar {
         flex: 1;
         display: flex;
@@ -308,7 +329,7 @@
     </div>
 
     <div class="content">
-      <aside class="left-panel">
+      <aside class="left-panel" id="left-panel" data-min-width="180">
         <div class="toolbar panel-group" data-panel-group="left">
           <div
             class="panel-section"
@@ -332,13 +353,25 @@
         </div>
       </aside>
 
+      <div
+        class="vertical-resizer"
+        data-target="left-panel"
+        data-direction="right"
+      ></div>
+
       <div class="canvas-wrapper">
         <div class="canvas-container">
           <svg id="canvas" width="800" height="600"></svg>
         </div>
       </div>
 
-      <aside class="right-panel">
+      <div
+        class="vertical-resizer"
+        data-target="right-panel"
+        data-direction="left"
+      ></div>
+
+      <aside class="right-panel" id="right-panel" data-min-width="220">
         <div class="panel-group" data-panel-group="right">
           <div
             class="panel-section"
@@ -406,6 +439,7 @@
     <script src="src/ui/FileManager.js"></script>
     <script src="src/ui/ZoomPanManager.js"></script>
     <script src="src/ui/ToolPropertiesPanel.js"></script>
+    <script src="src/ui/HorizontalPaneResizer.js"></script>
     <script src="src/ui/PanelLayoutManager.js"></script>
 
     <!-- アプリケーション -->
