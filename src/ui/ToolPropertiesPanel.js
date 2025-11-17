@@ -604,7 +604,7 @@ class ToolPropertiesPanel {
     }
 
     // セクションを作成
-    const section = this.createSection("アフィン変換レイヤー");
+    const section = this.createSection("追加のアフィン変換レイヤー");
     section.style.cssText = `
       background: #1a1a1a;
       color: #fff;

@@ -524,7 +524,7 @@ class PolylineTool extends BaseTool {
     wrapper.dataset.affineWrapper = "true";
 
     const title = document.createElement("div");
-    title.textContent = "アフィン変換";
+    title.textContent = "ベースアフィン変換";
     title.style.fontSize = "12px";
     title.style.color = "#555";
     title.style.marginBottom = "2px";

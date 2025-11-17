@@ -428,6 +428,7 @@ class SelectTool extends BaseTool {
       // キャンバスクリック時は複数選択でなければ選択解除し、矩形選択を開始
       if (!isMultiSelect && window.selectedObjects.length > 0) {
         this.deselectObject();
+        return;
       }
 
       if (window.selectedObjects.length === 0) {

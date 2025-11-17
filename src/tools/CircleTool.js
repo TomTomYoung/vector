@@ -429,7 +429,7 @@ class CircleTool extends BaseTool {
     wrapper.style.marginTop = "10px";
 
     const title = document.createElement("div");
-    title.textContent = "アフィン変換";
+    title.textContent = "ベースアフィン変換";
     title.style.fontSize = "12px";
     title.style.color = "#555";
     wrapper.appendChild(title);
