@@ -14,6 +14,7 @@ class PolylineTool extends BaseTool {
     super(canvas, toolManager);
     this.points = [];
     this.currentPolyline = null;
+    this.drawingObject = null;
     this.previewLine = null;
     this.isDrawing = false;
     this.autoSelectAfterDraw = true;
@@ -87,6 +88,10 @@ class PolylineTool extends BaseTool {
     this.finishPolyline();
     this.disconnectSelectedPolylineObserver();
     this.updatePanel();
+  }
+
+  getSnapAnchor() {
+    return this.points.at(-1) || null;
   }
 
   handleMouseDown(event) {
@@ -169,7 +174,10 @@ class PolylineTool extends BaseTool {
       fill: "none",
       opacity: this.currentStyle.opacity,
     });
+    this.applyDefaultAttributes(this.currentPolyline);
+    this.currentPolyline.setAttribute("fill", "none");
     this.currentPolyline.setAttribute("data-polyline-tool", "true");
+    this.drawingObject = this.currentPolyline;
     this.canvas.appendChild(this.currentPolyline);
   }
 
@@ -228,6 +236,7 @@ class PolylineTool extends BaseTool {
 
     this.points = [];
     this.currentPolyline = null;
+    this.drawingObject = null;
     this.isDrawing = false;
 
     if (finishedPolyline && this.autoSelectAfterDraw) {
@@ -263,6 +272,7 @@ class PolylineTool extends BaseTool {
       }
       this.points = [];
       this.currentPolyline = null;
+      this.drawingObject = null;
       this.isDrawing = false;
       this.updatePanel();
       return;

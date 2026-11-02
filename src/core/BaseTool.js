@@ -52,8 +52,6 @@ class BaseTool {
   // ツール無効化
   deactivate() {
     this.isActive = false;
-    this.isDrawing = false;
-    this.drawingObject = null;
     console.log(`${this.getTitle()} deactivated`);
   }
 
@@ -79,7 +77,7 @@ class BaseTool {
 
     // スナップマネージャーが有効な場合はスナップ処理
     if (enableSnap && window.snapManager) {
-      return window.snapManager.snapPoint(point, this.drawingObject);
+      return window.snapManager.snapPoint(point, this.drawingObject, this.getSnapAnchor());
     }
 
     // グリッドスナップ
@@ -88,6 +86,10 @@ class BaseTool {
     }
 
     return point;
+  }
+
+  getSnapAnchor() {
+    return null;
   }
 
   // 現在のスタイルを取得（ToolPropertiesPanel から）
@@ -135,10 +137,7 @@ class BaseTool {
   }
 
   handleMouseUp(event) {
-    if (!this.isActive) return;
-
-    this.isDrawing = false;
-    this.drawingObject = null;
+    // Multi-click tools keep their construction until they explicitly finish or cancel.
   }
 
   handleMouseLeave(event) {

@@ -600,6 +600,7 @@ class ToolPropertiesPanel {
         // data属性に保存
         const serialized = JSON.stringify(manager.serialize());
         element.setAttribute('data-transform-layers', serialized);
+        window.saveState();
       });
     }
 

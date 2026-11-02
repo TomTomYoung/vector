@@ -110,27 +110,19 @@ class ZoomPanManager {
       const mouseX = event.clientX - rect.left;
       const mouseY = event.clientY - rect.top;
 
-      // ズーム前のマウス位置（キャンバス座標系）
-      const beforeX = (mouseX - this.panX) / this.zoom;
-      const beforeY = (mouseY - this.panY) / this.zoom;
-
-      // ズーム変更
-      const delta = event.deltaY > 0 ? 0.9 : 1.1;
-      this.zoom *= delta;
-      this.zoom = Math.max(0.1, Math.min(10, this.zoom));
-
-      // ズーム後のマウス位置を維持するようにパンを調整
-      const afterX = (mouseX - this.panX) / this.zoom;
-      const afterY = (mouseY - this.panY) / this.zoom;
-      this.panX += (afterX - beforeX) * this.zoom;
-      this.panY += (afterY - beforeY) * this.zoom;
-
+      const previous = this.zoom;
+      this.zoom = Math.max(0.1, Math.min(10, previous * (event.deltaY > 0 ? 0.9 : 1.1)));
+      // The bounding rect already contains the pan offset.
+      this.panX += mouseX * (1 - this.zoom / previous);
+      this.panY += mouseY * (1 - this.zoom / previous);
       this.updateTransform();
     }
   }
 
   handleKeyDown(event) {
-    if (event.code === "Space" && !event.repeat) {
+    if (event.code === "Space" && !event.repeat && !ToolManager.isEditingField(event.target)) {
+      event.preventDefault();
+      this.previousCursor = this.canvas.style.cursor;
       this.spacePressed = true;
       this.canvas.style.cursor = "grab";
     }
@@ -140,10 +132,7 @@ class ZoomPanManager {
     if (event.code === "Space") {
       this.spacePressed = false;
       this.isPanning = false;
-      if (window.toolManager && window.toolManager.currentTool) {
-        this.canvas.style.cursor =
-          window.toolManager.currentTool.canvas.style.cursor || "default";
-      }
+      this.canvas.style.cursor = this.previousCursor || "";
     }
   }
 
@@ -171,9 +160,8 @@ class ZoomPanManager {
       this.isPanning = false;
       if (this.spacePressed) {
         this.canvas.style.cursor = "grab";
-      } else if (window.toolManager && window.toolManager.currentTool) {
-        this.canvas.style.cursor =
-          window.toolManager.currentTool.canvas.style.cursor || "default";
+      } else {
+        this.canvas.style.cursor = this.previousCursor || "";
       }
     }
   }

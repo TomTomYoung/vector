@@ -69,6 +69,7 @@ class RectangleTool extends BaseTool {
   }
 
   deactivate() {
+    this.cancel();
     super.deactivate();
     this.selectionInteractionInProgress = false;
     this.disconnectSelectedRectangleObserver();
@@ -211,6 +212,7 @@ class RectangleTool extends BaseTool {
     this.requestToolPanelRefresh();
     this.updatePanel();
 
+    if (finishedRectangle) this.saveState();
     return finishedRectangle;
   }
 

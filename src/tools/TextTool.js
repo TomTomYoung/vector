@@ -60,7 +60,7 @@ class TextTool extends BaseTool {
     const text = window.SvgUtils.createElement("text", {
       x: point.x,
       y: point.y,
-      fill: document.getElementById("fill-color")?.value || "#000000",
+      fill: this.currentStyle.fill === "none" ? this.currentStyle.stroke : this.currentStyle.fill,
       "font-family": "Arial",
       "font-size": "16px",
       "data-layer": window.currentLayerId,

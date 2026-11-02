@@ -183,6 +183,7 @@ class AlignmentPanel {
     }
 
     // コントロールポイントを更新
+    window.selectTool.selectedObject = window.selectedObject;
     if (window.selectedObject && window.selectTool) {
       window.selectTool.addControlPoints();
     }
@@ -352,7 +353,7 @@ class AlignmentPanel {
       group.appendChild(obj);
 
       // 選択表示を解除
-      obj.removeAttribute("stroke-dasharray");
+      obj.removeAttribute("data-vector-selected");
     });
 
     // グループをキャンバスに追加
@@ -363,7 +364,8 @@ class AlignmentPanel {
     window.selectedObject = group;
 
     // グループを選択状態にする
-    group.setAttribute("stroke-dasharray", "5 5");
+    window.selectTool.selectedObject = group;
+    group.setAttribute("data-vector-selected", "");
 
     // コントロールポイントを更新
     if (window.selectTool) {
@@ -385,7 +387,7 @@ class AlignmentPanel {
     const layerId = group.getAttribute("data-layer") || window.currentLayerId;
 
     // グループ内の要素をキャンバスに移動
-    const childNodes = Array.from(group.childNodes);
+    const childNodes = Array.from(group.children);
     window.selectedObjects = [];
 
     childNodes.forEach((node) => {
@@ -400,7 +402,7 @@ class AlignmentPanel {
 
       // 新しい選択対象として追加
       window.selectedObjects.push(node);
-      node.setAttribute("stroke-dasharray", "5 5");
+      node.setAttribute("data-vector-selected", "");
     });
 
     // 空になったグループを削除
@@ -413,6 +415,7 @@ class AlignmentPanel {
         : null;
 
     // コントロールポイントを更新
+    window.selectTool.selectedObject = window.selectedObject;
     if (window.selectedObject && window.selectTool) {
       window.selectTool.addControlPoints();
     }

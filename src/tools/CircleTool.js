@@ -77,6 +77,7 @@ class CircleTool extends BaseTool {
   }
 
   deactivate() {
+    this.cancel();
     super.deactivate();
     this.selectionInteractionInProgress = false;
     this.disconnectSelectedCircleObserver();
@@ -200,6 +201,7 @@ class CircleTool extends BaseTool {
     this.requestToolPanelRefresh();
     this.updatePanel();
 
+    if (finishedCircle) this.saveState();
     return finishedCircle;
   }
 

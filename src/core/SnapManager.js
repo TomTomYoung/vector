@@ -119,9 +119,11 @@ class SnapManager {
 
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
+    checkbox.id = "snap-" + type;
     checkbox.checked = checked;
     checkbox.addEventListener("change", (e) => {
       this.snapEnabled[type] = e.target.checked;
+      if (type === "grid") GridManager.setGridSnap(e.target.checked);
     });
 
     container.appendChild(checkbox);
@@ -131,7 +133,7 @@ class SnapManager {
   }
 
   // スナップ処理のメインメソッド
-  snapPoint(point, excludeElement = null) {
+  snapPoint(point, excludeElement = null, anchor = null) {
     if (!point) return point;
 
     let snappedPoint = { ...point };
@@ -181,7 +183,7 @@ class SnapManager {
     }
 
     // グリッドスナップ
-    if (this.snapEnabled.grid && window.snapToGrid) {
+    if (window.snapToGrid) {
       const gridSnap = this.snapToGrid(point, minDistance);
       if (gridSnap) {
         snappedPoint = gridSnap.point;
@@ -190,13 +192,11 @@ class SnapManager {
       }
     }
 
-    // 接線スナップ
-    if (this.snapEnabled.tangent) {
-      const tangentSnap = this.snapToTangent(point, minDistance, excludeElement);
-      if (tangentSnap) {
-        snappedPoint = tangentSnap.point;
-        snapType = "tangent";
-        minDistance = tangentSnap.distance;
+    if (anchor && (this.snapEnabled.perpendicular || this.snapEnabled.tangent)) {
+      const snap = this.snapFromAnchor(anchor, point, minDistance, excludeElement);
+      if (snap) {
+        snappedPoint = snap.point;
+        snapType = snap.type;
       }
     }
 
@@ -557,80 +557,46 @@ class SnapManager {
     }
   }
 
-  // 接線スナップ（円への接線）
-  snapToTangent(point, tolerance, excludeElement) {
-    const elements = Array.from(this.canvas.children).filter(
-      (el) =>
-        el !== excludeElement &&
-        !el.classList.contains("control-handle") &&
-        !el.classList.contains("rotate-handle") &&
-        !el.classList.contains("rotate-line") &&
-        !el.classList.contains("translate-handle") &&
-        !el.classList.contains("snap-indicator")
-    );
-
-    let closestPoint = null;
-    let minDist = tolerance;
-
-    // 円要素に対する接線点を探す
-    for (const el of elements) {
-      if (el.tagName === "circle") {
-        const cx = parseFloat(el.getAttribute("cx"));
-        const cy = parseFloat(el.getAttribute("cy"));
-        const r = parseFloat(el.getAttribute("r"));
-        const center = { x: cx, y: cy };
-
-        // マウス位置から円の中心への方向
-        const dx = point.x - cx;
-        const dy = point.y - cy;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-
-        if (dist > r) {
-          // 外部の点から円への接線点を計算
-          // 接線点は円周上で、接線が点と中心を結ぶ線に垂直
-          const angle = Math.atan2(dy, dx);
-          const tangentAngle = Math.asin(r / dist);
-
-          // 2つの接線点がある
-          const angle1 = angle + tangentAngle;
-          const angle2 = angle - tangentAngle;
-
-          const tp1 = {
-            x: cx + r * Math.cos(angle1),
-            y: cy + r * Math.sin(angle1),
-          };
-          const tp2 = {
-            x: cx + r * Math.cos(angle2),
-            y: cy + r * Math.sin(angle2),
-          };
-
-          const dist1 = window.GeometryUtils.distance(point, tp1);
-          const dist2 = window.GeometryUtils.distance(point, tp2);
-
-          if (dist1 < minDist) {
-            minDist = dist1;
-            closestPoint = tp1;
-          }
-          if (dist2 < minDist) {
-            minDist = dist2;
-            closestPoint = tp2;
-          }
-        } else {
-          // 円の内部にいる場合は最近点（円周上）
-          const nearestOnCircle = {
-            x: cx + (r * dx) / dist,
-            y: cy + (r * dy) / dist,
-          };
-          const distToNearest = window.GeometryUtils.distance(point, nearestOnCircle);
-          if (distToNearest < minDist) {
-            minDist = distToNearest;
-            closestPoint = nearestOnCircle;
-          }
+  // Construct from the fixed start of the segment. The pointer only chooses
+  // the nearest candidate. Tangency is preserved under affine transforms.
+  snapFromAnchor(anchor, pointer, tolerance, exclude) {
+    let closest = null;
+    const accept = (point, type) => {
+      const d = window.GeometryUtils.distance(pointer, point);
+      if (d < tolerance) {
+        tolerance = d;
+        closest = {point, type};
+      }
+    };
+    const canvasMatrix = this.canvas.getScreenCTM();
+    const origin = new DOMPoint(anchor.x, anchor.y);
+    for (const el of this.canvas.querySelectorAll("line, polyline, path, circle")) {
+      if (el === exclude || el.closest(DrawingDocument.helpers + ", defs") || !el.getClientRects().length) continue;
+      const matrix = canvasMatrix.inverse().multiply(el.getScreenCTM());
+      if (el.tagName === "circle" && this.snapEnabled.tangent) {
+        if (Math.abs(matrix.a * matrix.d - matrix.b * matrix.c) < Number.EPSILON) continue;
+        const local = origin.matrixTransform(matrix.inverse());
+        const cx = el.cx.baseVal.value, cy = el.cy.baseVal.value, r = el.r.baseVal.value;
+        const dx = local.x - cx, dy = local.y - cy;
+        const length = Math.hypot(dx, dy);
+        if (r <= 0 || length <= r) continue;
+        const angle = Math.atan2(dy, dx), delta = Math.acos(r / length);
+        for (const a of [angle - delta, angle + delta]) {
+          accept(new DOMPoint(cx + r*Math.cos(a), cy + r*Math.sin(a)).matrixTransform(matrix), "tangent");
+        }
+      } else if (this.snapEnabled.perpendicular) {
+        const points = window.VectorUtils.linearEditing.localPoints(el).map(p =>
+          new DOMPoint(p.x, p.y).matrixTransform(matrix));
+        for (let i = 1; i < points.length; i++) {
+          const a = points[i-1], b = points[i];
+          const dx = b.x-a.x, dy = b.y-a.y, length2 = dx*dx + dy*dy;
+          if (!length2) continue;
+          const t = ((anchor.x-a.x)*dx + (anchor.y-a.y)*dy) / length2;
+          if (t >= 0 && t <= 1) accept({x:a.x+t*dx, y:a.y+t*dy}, "perpendicular");
         }
       }
     }
-
-    return closestPoint ? { point: closestPoint, distance: minDist } : null;
+    return closest;
   }
 }
 

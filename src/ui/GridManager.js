@@ -83,7 +83,14 @@ class GridManager {
 
   // スナップ機能の切り替え
   toggleSnap() {
-    window.snapToGrid = !window.snapToGrid;
+    GridManager.setGridSnap(!window.snapToGrid);
+  }
+
+  static setGridSnap(enabled) {
+    window.snapToGrid = enabled;
+    const checkbox = document.getElementById("snap-grid");
+    if (checkbox) checkbox.checked = enabled;
+    if (window.snapManager) window.snapManager.snapEnabled.grid = enabled;
     document.getElementById("snap-btn").style.backgroundColor =
       window.snapToGrid ? "#ddd" : "";
   }

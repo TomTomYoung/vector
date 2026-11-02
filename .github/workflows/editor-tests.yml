@@ -1,0 +1,47 @@
+name: Vector editor regression tests
+on:
+  push:
+    branches: [master]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  editor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - name: Geometry
+        run: node --test tests/linearEditing.test.mjs
+      - name: Browser interactions
+        shell: bash
+        run: |
+          python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/vector-server.log 2>&1 &
+          trap 'kill $!' EXIT
+          curl --silent --fail --retry 8 --retry-connrefused http://127.0.0.1:8765/tests/editor.html >/dev/null
+          google-chrome --headless --disable-gpu --no-sandbox --disable-dev-shm-usage \
+            --virtual-time-budget=10000 --dump-dom http://127.0.0.1:8765/tests/editor.html > /tmp/vector-results.html
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          class Result(HTMLParser):
+              status = None
+              active = False
+              def handle_starttag(self, tag, attrs):
+                  attrs = dict(attrs)
+                  if tag == "pre" and attrs.get("id") == "result":
+                      self.status = attrs.get("data-status")
+                      self.active = True
+              def handle_endtag(self, tag):
+                  if tag == "pre":
+                      self.active = False
+              def handle_data(self, data):
+                  if self.active:
+                      print(data)
+          result = Result()
+          result.feed(Path("/tmp/vector-results.html").read_text())
+          raise SystemExit(result.status != "passed")
+          PY

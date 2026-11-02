@@ -23,12 +23,14 @@ import * as geometry from './geometry.js';
 import * as coordinates from './coordinates.js';
 import * as svg from './svg.js';
 import * as style from './style.js';
+import * as linearEditing from './linearEditing.js';
 import * as bezier from './bezier.js';
 import { TransformLayer, TransformManager } from './transformManager.js';
 
 // グローバルオブジェクトとして公開
 window.VectorUtils = {
   geometry,
+  linearEditing,
   coordinates,
   svg,
   style,

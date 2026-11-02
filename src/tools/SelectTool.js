@@ -164,7 +164,7 @@ class SelectTool extends BaseTool {
     if (!hasSelection) return;
     // 全ての選択されたオブジェクトから点線を削除
     selections.forEach((obj) =>
-      obj.removeAttribute("stroke-dasharray")
+      obj.removeAttribute("data-vector-selected")
     );
     this.removeControlPoints();
     this.selectedObject = null;
@@ -243,6 +243,10 @@ class SelectTool extends BaseTool {
     // クリップボードからオブジェクトをペースト
     window.clipboard.forEach((obj) => {
       const clone = obj.cloneNode(true);
+      for (const node of [clone, ...clone.querySelectorAll("*")]) {
+        for (const attr of ["data-vector-selected", "data-vector-highlight", "data-vector-indice", "data-rectangle-id",
+          "data-line-id", "data-circle-id", "data-path-id", "data-polyline-id", "data-polygon-id"]) node.removeAttribute(attr);
+      }
 
       // 少しずらして配置（10px右下）
       const currentTransform = clone.getAttribute("transform") || "";
@@ -286,14 +290,7 @@ class SelectTool extends BaseTool {
   // 全てのオブジェクトを選択
   selectAll() {
     // キャンバス内の全ての図形要素を取得
-    const allObjects = Array.from(this.canvas.children).filter(
-      (el) =>
-        !el.classList.contains("control-handle") &&
-        !el.classList.contains("rotate-handle") &&
-        !el.classList.contains("rotate-line") &&
-        !el.classList.contains("translate-handle") &&
-        el.tagName !== "defs"
-    );
+    const allObjects = Array.from(this.canvas.children).filter((el) => this.canSelect(el));
 
     if (allObjects.length === 0) return;
 
@@ -413,6 +410,7 @@ class SelectTool extends BaseTool {
     // 図形本体クリックならドラッグ開始
     if (event.target !== this.canvas) {
       this.selectObject(event.target, isMultiSelect);
+      if (!window.selectedObjects.includes(event.target)) return;
       this.isDragging = true;
 
       // 複数選択の場合は各オブジェクトの初期状態を保存
@@ -469,6 +467,7 @@ class SelectTool extends BaseTool {
       return;
     }
 
+    if (this.isDragging || this.isRotating || this.isResizing) this.saveState();
     this.isDragging = this.isResizing = this.isRotating = false; // isRotizing → isRotating
     this.resizeHandle = null;
     this.multiInitialMatrices = [];
@@ -486,35 +485,26 @@ class SelectTool extends BaseTool {
     }
   }
 
-  selectObject(el, addToSelection = false) {
-    // コントロールポイントやキャンバス自体は選択対象外
-    if (
-      !el ||
-      el === this.canvas ||
-      el.classList.contains("control-handle") ||
-      el.classList.contains("rotate-handle") ||
-      el.classList.contains("rotate-line") ||
-      el.classList.contains("translate-handle")
-    ) {
-      return;
+  canSelect(el) {
+    if (!el || el === this.canvas || !el.getBBox ||
+        el.closest(DrawingDocument.helpers + ", defs, metadata, symbol, clipPath, mask, pattern, marker")) return false;
+    for (let node = el; node && node !== this.canvas; node = node.parentElement) {
+      const id = Number(node.getAttribute("data-layer"));
+      const layer = window.layers.find((item) => item.id === id);
+      if (layer && (layer.locked || !layer.visible)) return false;
     }
+    return true;
+  }
 
-    // レイヤーがロックされているかチェック
-    const layerId = parseInt(el.getAttribute("data-layer"));
-    if (layerId) {
-      const layer = window.layers.find((l) => l.id === layerId);
-      if (layer && layer.locked) {
-        console.log(`レイヤー "${layer.name}" はロックされています`);
-        return;
-      }
-    }
+  selectObject(el, addToSelection = false) {
+    if (!this.canSelect(el)) return;
 
     if (addToSelection) {
       // 追加選択モード
       const index = window.selectedObjects.indexOf(el);
       if (index >= 0) {
         // 既に選択されている場合は選択解除
-        el.removeAttribute("stroke-dasharray");
+        el.removeAttribute("data-vector-selected");
         window.selectedObjects.splice(index, 1);
         if (window.selectedObjects.length === 0) {
           this.selectedObject = null;
@@ -527,7 +517,7 @@ class SelectTool extends BaseTool {
         }
       } else {
         // 新しく追加
-        el.setAttribute("stroke-dasharray", "5 5");
+        el.setAttribute("data-vector-selected", "");
       window.selectedObjects.push(el);
       this.selectedObject = el;
       window.selectedObject = el;
@@ -537,12 +527,12 @@ class SelectTool extends BaseTool {
       // 単一選択モード（既存の選択をクリア）
       if (this.selectedObject) {
         window.selectedObjects.forEach((obj) =>
-          obj.removeAttribute("stroke-dasharray")
+          obj.removeAttribute("data-vector-selected")
         );
         this.removeControlPoints();
       }
       this.selectedObject = el;
-      el.setAttribute("stroke-dasharray", "5 5");
+      el.setAttribute("data-vector-selected", "");
       window.selectedObject = el;
       window.selectedObjects = [el];
 
@@ -625,42 +615,7 @@ class SelectTool extends BaseTool {
 
   // SVGPoint を取得
   getSVGPoint(event) {
-    const zoomManager = window.zoomPanManager;
-
-    if (zoomManager) {
-      const rect = this.canvas.getBoundingClientRect();
-      const transform =
-        typeof zoomManager.getTransform === "function"
-          ? zoomManager.getTransform()
-          : {
-              zoom: zoomManager.zoom || 1,
-            };
-
-      const zoom = transform && Number.isFinite(transform.zoom)
-        ? transform.zoom || 1
-        : 1;
-
-      return {
-        x: (event.clientX - rect.left) / zoom,
-        y: (event.clientY - rect.top) / zoom,
-      };
-    }
-
-    const pt = this.canvas.createSVGPoint();
-    pt.x = event.clientX;
-    pt.y = event.clientY;
-    const ctm = this.canvas.getScreenCTM();
-
-    if (ctm && typeof ctm.inverse === "function") {
-      const transformed = pt.matrixTransform(ctm.inverse());
-      return { x: transformed.x, y: transformed.y };
-    }
-
-    const rect = this.canvas.getBoundingClientRect();
-    return {
-      x: event.clientX - rect.left,
-      y: event.clientY - rect.top,
-    };
+    return this.toolManager.getMousePosition(event);
   }
 
   // ローカル座標→グローバル座標
@@ -847,26 +802,7 @@ class SelectTool extends BaseTool {
     }
 
     const objects = Array.from(this.canvas.children).filter((el) => {
-      if (
-        !el ||
-        el.classList.contains("control-handle") ||
-        el.classList.contains("rotate-handle") ||
-        el.classList.contains("rotate-line") ||
-        el.classList.contains("translate-handle") ||
-        el.classList.contains("marquee-selection") ||
-        el.tagName === "defs"
-      ) {
-        return false;
-      }
-
-      const layerId = parseInt(el.getAttribute("data-layer"));
-      if (layerId) {
-        const layers = Array.isArray(window.layers) ? window.layers : [];
-        const layer = layers.find((l) => l.id === layerId);
-        if (layer && layer.locked) {
-          return false;
-        }
-      }
+      if (!this.canSelect(el)) return false;
 
       const bbox = this.getBoundingBox(el);
       if (!bbox) return false;
@@ -887,12 +823,12 @@ class SelectTool extends BaseTool {
       ? window.selectedObjects
       : [];
     previousSelection.forEach((obj) =>
-      obj.removeAttribute("stroke-dasharray")
+      obj.removeAttribute("data-vector-selected")
     );
 
     window.selectedObjects = [];
     objects.forEach((obj) => {
-      obj.setAttribute("stroke-dasharray", "5 5");
+      obj.setAttribute("data-vector-selected", "");
       window.selectedObjects.push(obj);
     });
 

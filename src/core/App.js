@@ -12,17 +12,7 @@ class App {
       snapToGrid: false,
       gridSize: 20,
       orthoMode: false, // 直交モード
-      layers: [
-        {
-          id: 1,
-          name: "レイヤー 1",
-          visible: true,
-          locked: false,
-          color: "#000000",
-          lineStyle: "solid",
-          lineWidth: "2",
-        },
-      ],
+      layers: [DrawingDocument.defaultLayer(1)],
       currentLayerId: 1,
       undoStack: [],
       redoStack: [],
@@ -43,11 +33,11 @@ class App {
     window.addEventListener("resize", this.adjustCanvasSize);
 
     // キーボードイベントの設定
-    this.setupKeyboardEvents();
 
     // ツールマネージャーの初期化
     this.toolManager = new ToolManager(canvas);
     window.toolManager = this.toolManager;
+    this.setupKeyboardEvents();
 
     // UIコンポーネントの初期化 - レイヤーパネルを最初に初期化
     this.layerPanel = new LayerPanel();
@@ -158,80 +148,23 @@ class App {
   // キーボードイベントの設定
   setupKeyboardEvents() {
     document.addEventListener("keydown", (event) => {
-      // テキスト入力中は無視
-      if (
-        event.target.tagName === "INPUT" ||
-        event.target.tagName === "TEXTAREA" ||
-        event.target.isContentEditable
-      ) {
-        return;
-      }
-
-      // Delete or Backspace キーで削除
-      if (event.key === "Delete" || event.key === "Backspace") {
+      if (event.defaultPrevented || ToolManager.isEditingField(event.target)) return;
+      const command = event.ctrlKey || event.metaKey;
+      const key = event.key.toLowerCase();
+      const actions = {
+        z: event.shiftKey ? window.redo : window.undo,
+        y: window.redo,
+        c: () => window.selectTool.copySelectedObjects(),
+        v: () => window.selectTool.pasteObjects(),
+        x: () => window.selectTool.cutSelectedObjects(),
+        a: () => window.selectTool.selectAll(),
+      };
+      let action = command && !event.altKey && Object.hasOwn(actions, key) ? actions[key] : null;
+      if (key === "delete" || key === "backspace") action = () => window.selectTool.deleteSelectedObjects();
+      if (key === "f8") action = window.toggleOrtho;
+      if (action) {
         event.preventDefault();
-        if (window.selectTool) {
-          window.selectTool.deleteSelectedObjects();
-        }
-      }
-
-      // Ctrl+Z / Cmd+Z で元に戻す
-      if ((event.ctrlKey || event.metaKey) && event.key === "z") {
-        event.preventDefault();
-        if (window.undo) {
-          window.undo();
-        }
-      }
-
-      // Ctrl+Y / Cmd+Shift+Z でやり直し
-      if (
-        ((event.ctrlKey || event.metaKey) && event.key === "y") ||
-        ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key === "z")
-      ) {
-        event.preventDefault();
-        if (window.redo) {
-          window.redo();
-        }
-      }
-
-      // Ctrl+C / Cmd+C でコピー
-      if ((event.ctrlKey || event.metaKey) && event.key === "c") {
-        event.preventDefault();
-        if (window.selectTool) {
-          window.selectTool.copySelectedObjects();
-        }
-      }
-
-      // Ctrl+V / Cmd+V でペースト
-      if ((event.ctrlKey || event.metaKey) && event.key === "v") {
-        event.preventDefault();
-        if (window.selectTool) {
-          window.selectTool.pasteObjects();
-        }
-      }
-
-      // Ctrl+X / Cmd+X でカット
-      if ((event.ctrlKey || event.metaKey) && event.key === "x") {
-        event.preventDefault();
-        if (window.selectTool) {
-          window.selectTool.cutSelectedObjects();
-        }
-      }
-
-      // Ctrl+A / Cmd+A で全選択
-      if ((event.ctrlKey || event.metaKey) && event.key === "a") {
-        event.preventDefault();
-        if (window.selectTool) {
-          window.selectTool.selectAll();
-        }
-      }
-
-      // F8キーで直交モードを切り替え
-      if (event.key === "F8") {
-        event.preventDefault();
-        if (window.toggleOrtho) {
-          window.toggleOrtho();
-        }
+        action();
       }
     });
   }

@@ -68,18 +68,7 @@ class FileManager {
 
   // SVGを保存
   saveSVG() {
-    // 選択状態を解除
-    if (window.selectTool) {
-      window.selectTool.deselectObject();
-    }
-
-    const canvas = document.getElementById("canvas");
-
-    // SVGのクローンを作成
-    const svgCopy = canvas.cloneNode(true);
-
-    // SVGデータをテキストに変換
-    const svgData = new XMLSerializer().serializeToString(svgCopy);
+    const svgData = DrawingDocument.serialize();
 
     // ダウンロード用のリンクを作成
     const blob = new Blob([svgData], { type: "image/svg+xml" });
@@ -106,29 +95,11 @@ class FileManager {
 
       const reader = new FileReader();
       reader.onload = function (e) {
-        const svgContent = e.target.result;
-        const canvas = document.getElementById("canvas");
-
-        // キャンバスをクリア
-        while (canvas.firstChild) {
-          canvas.removeChild(canvas.firstChild);
-        }
-
-        // SVGを解析
-        const parser = new DOMParser();
-        const svgDoc = parser.parseFromString(svgContent, "image/svg+xml");
-
-        // 要素をインポート
-        const svgRoot = svgDoc.documentElement;
-        for (let i = 0; i < svgRoot.children.length; i++) {
-          const node = svgRoot.children[i];
-          const importedNode = document.importNode(node, true);
-          canvas.appendChild(importedNode);
-        }
-
-        // 状態を保存
-        if (window.saveState) {
+        try {
+          DrawingDocument.open(e.target.result);
           window.saveState();
+        } catch (error) {
+          window.alert("SVGを読み込めませんでした。" + error.message);
         }
       };
 
@@ -140,19 +111,13 @@ class FileManager {
 
   // PNGとして出力
   exportPNG() {
-    // 選択状態を解除
-    if (window.selectTool) {
-      window.selectTool.deselectObject();
-    }
-
     const canvas = document.getElementById("canvas");
-
-    // SVGのクローンを作成
-    const svgCopy = canvas.cloneNode(true);
-
-    // SVGの幅と高さを取得
-    const width = parseInt(canvas.getAttribute("width"));
-    const height = parseInt(canvas.getAttribute("height"));
+    const svgCopy = DrawingDocument.capture();
+    const width = Math.round(canvas.width.baseVal.value);
+    const height = Math.round(canvas.height.baseVal.value);
+    if (width <= 0 || height <= 0) return;
+    svgCopy.setAttribute("width", width);
+    svgCopy.setAttribute("height", height);
 
     // SVGデータをテキストに変換
     const svgData = new XMLSerializer().serializeToString(svgCopy);
@@ -193,6 +158,7 @@ class FileManager {
       });
     };
 
+    img.onerror = () => URL.revokeObjectURL(url);
     img.src = url;
   }
 }
