@@ -14,5 +14,5 @@ export function createEditorHost({
   encodePath = pathData, render = (shape, target, options) => renderGeometry(shape, target, options, encodePath),
   editOutline = edit, save = () => window.saveState?.(),
 } = {}) {
-  return {execute, readPoint, snap, readShape, encodePath, render, editOutline, save};
+  return {operations, execute, readPoint, snap, readShape, encodePath, render, editOutline, save};
 }

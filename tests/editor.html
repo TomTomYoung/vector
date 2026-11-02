@@ -224,6 +224,16 @@ await check("Perpendicular and tangent endpoints are computed from the line star
   assert(Math.abs(Math.hypot(radius.x, radius.y) - 20) < 0.001 && Math.abs(dot) < 0.01 && radius.y > 0,
     "tangent constraints: " + JSON.stringify({origin, got, dot}));
 });
+await check("Selected outlines display lengths and signed area in canvas units", async () => {
+  fixture('<polygon id="area" data-polygon-tool="true" transform="translate(80 50) scale(-2 2)" points="0,0 3,0 3,4"/><polyline id="length" data-polyline-tool="true" transform="scale(2)" points="0,0 3,0 3,4"/>');
+  await tick();
+  activate("polygon");
+  w.toolManager.activeTool.selectPolygon(doc.getElementById("area"));
+  assert(doc.body.textContent.includes("周長 24.00　符号付き面積 -24.00"), "transformed triangle");
+  activate("polyline");
+  w.toolManager.activeTool.selectPolyline(doc.getElementById("length"));
+  assert(doc.body.textContent.includes("全長 14.00"), "open polyline length");
+});
 await check("A second editor replaces input, dispatch, arithmetic, tool, renderer and controller at startup", async () => {
   const other = document.createElement("iframe");
   const index = new URL("../index.html", location.href);

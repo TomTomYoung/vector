@@ -50,7 +50,7 @@ class App {
     this.gridManager = new GridManager();
     this.fileManager = new FileManager();
     this.zoomPanManager = new ZoomPanManager();
-    this.snapManager = new SnapManager();
+    this.snapManager = new SnapManager(this.host.operations);
 
     // ツールの登録
     this.registerTools();

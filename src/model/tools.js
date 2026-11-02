@@ -1,10 +1,12 @@
 import {line, rectangle, circle, arc, polygon, path, spline, quadraticBezier, cubicBezier,
   nthBezier, polyline, vertices, text, dimension, select} from "./drawing.js";
 import {trim, extend, split, join} from "./linear.js";
-import {offset, fillet, chamfer} from "./construction.js";
+import {polylineLength, signedArea} from "./measurements.js";
+import {offset, fillet, chamfer, reflectPoint} from "./construction.js";
 
 const defaults = {select, line, rectangle, circle, arc, polygon, path, spline, quadraticBezier,
-  cubicBezier, nthBezier, polyline, vertices, text, dimension, offset, trim, extend, fillet, chamfer, split, join};
+  cubicBezier, nthBezier, polyline, vertices, text, dimension, offset, trim, extend, fillet, chamfer, split, join,
+  reflectPoint, polylineLength, signedArea};
 
 // Optional dispatcher. Every default tool can also be imported and called directly.
 export function createToolset({tools = {}, operations = {}} = {}) {

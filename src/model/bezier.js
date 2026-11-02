@@ -1,3 +1,5 @@
+import {interpolatePoint} from "../utils/geometry.js";
+
 function clonePoint(point) {
   return { x: Number(point.x), y: Number(point.y) };
 }
@@ -7,10 +9,7 @@ export function deCasteljau(points, t) {
   const last = work.length - 1;
   for (let r = 1; r <= last; r += 1) {
     for (let i = 0; i <= last - r; i += 1) {
-      work[i] = {
-        x: (1 - t) * work[i].x + t * work[i + 1].x,
-        y: (1 - t) * work[i].y + t * work[i + 1].y,
-      };
+      work[i] = interpolatePoint(work[i], work[i + 1], t);
     }
   }
   return work[0];

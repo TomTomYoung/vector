@@ -11,7 +11,8 @@
 // - GeometryUtils.midpoint(p1, p2): 中点計算
 
 class SnapManager {
-  constructor() {
+  constructor(operations = {}) {
+    this.geometry = {...window.GeometryUtils, ...operations};
     this.canvas = document.getElementById("canvas");
     this.snapEnabled = {
       endpoint: true,
@@ -228,7 +229,7 @@ class SnapManager {
     for (const el of elements) {
       const endpoints = this.getEndpoints(el);
       for (const ep of endpoints) {
-        const dist = window.GeometryUtils.distance(point, ep);
+        const dist = this.geometry.distance(point, ep);
         if (dist < minDist) {
           minDist = dist;
           closestPoint = ep;
@@ -259,7 +260,7 @@ class SnapManager {
     for (const el of elements) {
       const midpoints = this.getMidpoints(el);
       for (const mp of midpoints) {
-        const dist = window.GeometryUtils.distance(point, mp);
+        const dist = this.geometry.distance(point, mp);
         if (dist < minDist) {
           minDist = dist;
           closestPoint = mp;
@@ -277,7 +278,7 @@ class SnapManager {
     const gridSize = window.gridSize || 20;
     const snappedPoint = window.CoordinatesUtils.snapToGrid(point, gridSize);
 
-    const dist = window.GeometryUtils.distance(point, snappedPoint);
+    const dist = this.geometry.distance(point, snappedPoint);
     if (dist < tolerance) {
       return { point: snappedPoint, distance: dist };
     }
@@ -304,7 +305,7 @@ class SnapManager {
       for (let j = i + 1; j < elements.length; j++) {
         const intersections = this.getIntersections(elements[i], elements[j]);
         for (const ip of intersections) {
-          const dist = window.GeometryUtils.distance(point, ip);
+          const dist = this.geometry.distance(point, ip);
           if (dist < minDist) {
             minDist = dist;
             closestPoint = ip;
@@ -343,7 +344,7 @@ class SnapManager {
 
       const line1 = { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y };
       const line2 = { x1: p3.x, y1: p3.y, x2: p4.x, y2: p4.y };
-      const intersection = window.GeometryUtils.lineIntersection(line1, line2);
+      const intersection = this.geometry.lineIntersection(line1, line2);
       if (intersection) intersections.push(intersection);
     }
 
@@ -376,7 +377,7 @@ class SnapManager {
             x1: points2[j].x, y1: points2[j].y,
             x2: points2[j + 1].x, y2: points2[j + 1].y
           };
-          const intersection = window.GeometryUtils.lineIntersection(line1, line2);
+          const intersection = this.geometry.lineIntersection(line1, line2);
           if (intersection) intersections.push(intersection);
         }
       }
@@ -407,7 +408,7 @@ class SnapManager {
           x1: points2[i].x, y1: points2[i].y,
           x2: points2[i + 1].x, y2: points2[i + 1].y
         };
-        const intersection = window.GeometryUtils.lineIntersection(line1, line2);
+        const intersection = this.geometry.lineIntersection(line1, line2);
         if (intersection) intersections.push(intersection);
       }
     }
@@ -482,7 +483,7 @@ class SnapManager {
         const y1 = parseFloat(element.getAttribute("y1"));
         const x2 = parseFloat(element.getAttribute("x2"));
         const y2 = parseFloat(element.getAttribute("y2"));
-        const mid = window.GeometryUtils.midpoint(
+        const mid = this.geometry.midpoint(
           { x: x1, y: y1 },
           { x: x2, y: y2 }
         );
@@ -562,7 +563,7 @@ class SnapManager {
   snapFromAnchor(anchor, pointer, tolerance, exclude) {
     let closest = null;
     const accept = (point, type) => {
-      const d = window.GeometryUtils.distance(pointer, point);
+      const d = this.geometry.distance(pointer, point);
       if (d < tolerance) {
         tolerance = d;
         closest = {point, type};
@@ -576,23 +577,19 @@ class SnapManager {
       if (el.tagName === "circle" && this.snapEnabled.tangent) {
         if (Math.abs(matrix.a * matrix.d - matrix.b * matrix.c) < Number.EPSILON) continue;
         const local = origin.matrixTransform(matrix.inverse());
-        const cx = el.cx.baseVal.value, cy = el.cy.baseVal.value, r = el.r.baseVal.value;
-        const dx = local.x - cx, dy = local.y - cy;
-        const length = Math.hypot(dx, dy);
-        if (r <= 0 || length <= r) continue;
-        const angle = Math.atan2(dy, dx), delta = Math.acos(r / length);
-        for (const a of [angle - delta, angle + delta]) {
-          accept(new DOMPoint(cx + r*Math.cos(a), cy + r*Math.sin(a)).matrixTransform(matrix), "tangent");
+        const center = {x: el.cx.baseVal.value, y: el.cy.baseVal.value};
+        const contacts = this.geometry.circleTangentPoints(local, center, el.r.baseVal.value);
+        // Starting on the circle would snap to the drawing anchor itself.
+        if (contacts.length < 2) continue;
+        for (const contact of contacts) {
+          accept(new DOMPoint(contact.x, contact.y).matrixTransform(matrix), "tangent");
         }
       } else if (this.snapEnabled.perpendicular) {
         const points = window.VectorUtils.linearEditing.localPoints(el).map(p =>
           new DOMPoint(p.x, p.y).matrixTransform(matrix));
         for (let i = 1; i < points.length; i++) {
-          const a = points[i-1], b = points[i];
-          const dx = b.x-a.x, dy = b.y-a.y, length2 = dx*dx + dy*dy;
-          if (!length2) continue;
-          const t = ((anchor.x-a.x)*dx + (anchor.y-a.y)*dy) / length2;
-          if (t >= 0 && t <= 1) accept({x:a.x+t*dx, y:a.y+t*dy}, "perpendicular");
+          const foot = this.geometry.projectOnLine(anchor, points[i - 1], points[i]);
+          if (foot && foot.t >= 0 && foot.t <= 1) accept(foot.point, "perpendicular");
         }
       }
     }
