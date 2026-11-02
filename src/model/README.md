@@ -54,3 +54,9 @@ window.vectorEditorOptions = {
 - 呼び出し役を一式換えるには `execute(name, input)` を渡します。入力の解釈と出力の型は元のツールに合わせます。新しいホストは直接関数を呼んで独自の型に変換できます。
 - ブラウザでの入力変換は `readPoint`、スナップは `snap`、作図時の履歴保存は `save`、描画は `render(shape, target?, options?)`、曲線の文字列化は `encodePath`、既存輪郭への編集反映は `editOutline` が担当します。通常のエディタで `render` を置き換える場合には、編集対象の要素を返します。
 - マウスやキーの操作手順を換えるには `controllers` に対象ツールのクラスを、画面側のツール管理を換えるには `createManager(canvas, host)` にマネージャーを作る関数を渡します。既存 UI の履歴・パネル・ファイル操作はブラウザ側にあります。
+
+## 平面幾何を単独で使う
+
+`affine.js`・`projective.js` は座標変換、`intersections.js`・`conics.js` は交差・円・楕円、`polygons.js`・`regions.js`・`mesh.js` は輪郭・領域・点群の分割を扱います。距離で折れ線を扱う入口は `polyline.js`、曲線の解析とノット編集は `curveAnalysis.js`・`splines.js`、点群の当てはめは `pointSets.js` です。どれも描画先やブラウザを必要としません。
+
+全ての名前付き機能は `toolNames` から列挙でき、作図エディタの「演算室を開く」から JSON の例を個別に実行できます。領域演算は凸セル群、曲線長は上下限、三角形分割は目的に応じて座標または元の頂点番号を返します。[各機能の入出力・数式・退化条件](../../doc/文章.md#拡張88件)
