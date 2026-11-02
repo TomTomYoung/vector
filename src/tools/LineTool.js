@@ -150,6 +150,11 @@ class LineTool extends BaseTool {
     this.disconnectSelectedLineObserver();
   }
 
+  getSnapAnchor() {
+    if (!this.currentLine) return null;
+    return {x: this.currentLine.x1.baseVal.value, y: this.currentLine.y1.baseVal.value};
+  }
+
   handleMouseDown(event) {
     if (!this.isActive) {
       return;
@@ -161,7 +166,7 @@ class LineTool extends BaseTool {
       return;
     }
 
-    super.handleMouseDown(event);
+    if (!this.currentLine) super.handleMouseDown(event);
 
     if (event.button !== 0) {
       return;
@@ -251,6 +256,7 @@ class LineTool extends BaseTool {
 
     // 線を確定（既にキャンバスに追加されている）
     this.currentLine = null;
+    this.drawingObject = null;
     this.startPoint = null;
     this.isDrawing = false;
 
@@ -302,6 +308,7 @@ class LineTool extends BaseTool {
       }
     );
 
+    this.drawingObject = this.currentLine;
     this.initializeLineMetadata(this.currentLine);
     this.applyLineAppearance(this.currentLine);
     this.canvas.appendChild(this.currentLine);
@@ -334,6 +341,7 @@ class LineTool extends BaseTool {
       this.canvas.removeChild(this.currentLine);
     }
     this.currentLine = null;
+    this.drawingObject = null;
     this.startPoint = null;
     this.isDrawing = false;
   }

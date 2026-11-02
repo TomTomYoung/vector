@@ -77,7 +77,7 @@ class BaseTool {
 
     // スナップマネージャーが有効な場合はスナップ処理
     if (enableSnap && window.snapManager) {
-      return window.snapManager.snapPoint(point, this.drawingObject);
+      return window.snapManager.snapPoint(point, this.drawingObject, this.getSnapAnchor());
     }
 
     // グリッドスナップ
@@ -86,6 +86,10 @@ class BaseTool {
     }
 
     return point;
+  }
+
+  getSnapAnchor() {
+    return null;
   }
 
   // 現在のスタイルを取得（ToolPropertiesPanel から）

@@ -160,6 +160,63 @@ await check("Offset, join, fillet and chamfer complete without changing the refe
     assert(newShape && newShape.getAttribute("stroke") === "#234567" && newShape.getAttribute("stroke-width") === "7",name);
   }
 });
+await check("Save SVG, reopen from the file input, undo the load and export a PNG", async () => {
+  fixture('<circle id="before" cx="40" cy="50" r="20" data-layer="3" stroke-dasharray="8 2"/>');
+  await tick();
+  const anchor = w.HTMLAnchorElement.prototype, input = w.HTMLInputElement.prototype;
+  const oldDownload = anchor.click, oldChoose = input.click;
+  const download = buttonId => new Promise((resolve, reject) => {
+    anchor.click = function () {
+      const name = this.download;
+      w.fetch(this.href).then(r => r.blob()).then(blob => resolve({name, blob}), reject);
+    };
+    doc.getElementById(buttonId).click();
+  });
+  try {
+    w.selectTool.selectObject(doc.getElementById("before"));
+    const svg = await download("save-btn");
+    assert(svg.name === "drawing.svg" && (await svg.blob.text()).includes("data-vector-document"), "SVG download");
+    assert(w.selectedObject?.id === "before", "saving changed selection");
+    fixture('<rect id="after" width="50" height="50"/>');
+    await tick();
+    const read = new Promise(resolve => {
+      input.click = function () {
+        const files = new w.DataTransfer();
+        files.items.add(new w.File([svg.blob], "drawing.svg", {type:"image/svg+xml"}));
+        this.files = files.files;
+        const observer = new w.MutationObserver(() => {
+          if (doc.getElementById("before")) { observer.disconnect(); resolve(); }
+        });
+        observer.observe(canvas, {childList:true});
+        this.dispatchEvent(new w.Event("change"));
+      };
+      doc.getElementById("load-btn").click();
+    });
+    await read; await tick();
+    assert(w.layers.some(layer => layer.id === 3) && doc.getElementById("before").getAttribute("stroke-dasharray")==="8 2", "file round trip");
+    key("z",{ctrlKey:true}); await tick();
+    assert(doc.getElementById("after") && !doc.getElementById("before"), "undo file load");
+    const png = await download("export-png-btn");
+    const bytes = new Uint8Array(await png.blob.arrayBuffer());
+    assert(png.name === "drawing.png" && bytes.slice(0,8).join() === "137,80,78,71,13,10,26,10", "PNG signature");
+  } finally {
+    anchor.click = oldDownload;
+    input.click = oldChoose;
+  }
+});
+await check("Perpendicular and tangent endpoints are computed from the line start", async () => {
+  fixture('<line x1="0" y1="100" x2="200" y2="100" stroke="black"/><circle cx="300" cy="100" r="20" stroke="black"/>');
+  await tick();
+  for (const k of Object.keys(w.snapManager.snapEnabled)) w.snapManager.snapEnabled[k] = false;
+  w.snapManager.snapEnabled.perpendicular = true;
+  activate("line"); mouse("mousedown",40,40); mouse("mousemove",43,102); mouse("mouseup",43,102);
+  let line = [...canvas.querySelectorAll("[data-line-tool]")].at(-1);
+  assert(line.x2.baseVal.value === 40 && line.y2.baseVal.value === 100, "perpendicular foot");
+  w.snapManager.snapEnabled.perpendicular = false; w.snapManager.snapEnabled.tangent = true;
+  mouse("mousedown",340,100); mouse("mousemove",312,118); mouse("mouseup",312,118);
+  line = [...canvas.querySelectorAll("[data-line-tool]")].at(-1);
+  assert(Math.abs(line.x2.baseVal.value-310)<0.01 && Math.abs(line.y2.baseVal.value-100-Math.sqrt(300))<0.01, "tangent point");
+});
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
 </script>
