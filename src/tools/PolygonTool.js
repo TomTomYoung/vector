@@ -378,6 +378,15 @@ class PolygonTool extends BaseTool {
     idLabel.style.marginBottom = "6px";
     container.appendChild(idLabel);
 
+    const points = window.CoordinatesUtils.elementPointsInCanvas(this.canvas, polygon);
+    if (points) {
+      const readout = document.createElement("div");
+      const perimeter = this.run("polylineLength", {points, closed: true});
+      const area = this.run("signedArea", {points});
+      readout.textContent = `周長 ${perimeter.toFixed(2)}　符号付き面積 ${area.toFixed(2)}`;
+      container.appendChild(readout);
+    }
+
     const geometryWrapper = this.renderPointsEditor(polygon);
     container.appendChild(geometryWrapper);
 

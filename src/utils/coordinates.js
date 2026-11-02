@@ -95,6 +95,18 @@ export function svgToScreen(svgElement, svgX, svgY) {
   };
 }
 
+// Measure polygon/polyline vertices in drawing units, independently of zoom and pan.
+export function elementPointsInCanvas(canvas, element) {
+  const canvasMatrix = canvas.getScreenCTM(), elementMatrix = element.getScreenCTM();
+  if (!canvasMatrix || !elementMatrix) return null;
+  const matrix = canvasMatrix.inverse().multiply(elementMatrix);
+  if (![matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f].every(Number.isFinite)) return null;
+  return Array.from(element.points, p => {
+    const {x, y} = p.matrixTransform(matrix);
+    return {x, y};
+  });
+}
+
 /**
  * マウスイベントからSVG座標を取得
  * @param {SVGSVGElement} svgElement - SVG要素

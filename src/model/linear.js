@@ -1,17 +1,15 @@
-import {distance, lineIntersection, crossProduct} from "../utils/geometry.js";
+import {distance, lineIntersection, crossProduct, closestOnSegment, interpolatePoint} from "../utils/geometry.js";
 
 const epsilon = 1e-8;
 
 // A position is a segment index plus a fraction of that segment.
-export function nearestPosition(points, point, measure = distance) {
+export function nearestPosition(points, point, measure = distance, project) {
   let best = {distance: Infinity, position: 0};
   for (let i = 1; i < points.length; i++) {
     const a = points[i - 1], b = points[i];
-    const dx = b.x - a.x, dy = b.y - a.y;
-    const squared = dx * dx + dy * dy;
-    if (!squared) continue;
-    const t = Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / squared));
-    const separation = measure(point, {x: a.x + t * dx, y: a.y + t * dy});
+    if (a.x === b.x && a.y === b.y) continue;
+    const {point: closest, t} = closestOnSegment(point, a, b, project);
+    const separation = measure(point, closest);
     if (separation < best.distance) best = {distance: separation, position: i - 1 + t};
   }
   return best;
@@ -20,8 +18,7 @@ export function nearestPosition(points, point, measure = distance) {
 function at(points, position) {
   const i = Math.floor(position), t = position - i;
   if (!t) return points[i];
-  const a = points[i], b = points[i + 1];
-  return {x: a.x + t * (b.x - a.x), y: a.y + t * (b.y - a.y)};
+  return interpolatePoint(points[i], points[i + 1], t);
 }
 
 function part(points, from, to) {
@@ -37,7 +34,7 @@ export function splitAt(points, position) {
 export function split({points, point, tolerance = Infinity, endMargin = 0}, ops = {}) {
   if (points.length < 2) return [];
   const measure = ops.distance ?? distance;
-  const hit = (ops.nearestPosition ?? nearestPosition)(points, point, measure);
+  const hit = (ops.nearestPosition ?? nearestPosition)(points, point, measure, ops.projectOnLine);
   if (!Number.isFinite(hit.distance) || hit.distance > tolerance) return [];
   const p = at(points, hit.position);
   if (measure(p, points[0]) < endMargin || measure(p, points.at(-1)) < endMargin) return [];
@@ -56,7 +53,7 @@ export function trim({points, boundaries, point}, ops = {}) {
   const measure = ops.distance ?? distance;
   const intersect = ops.lineIntersection ?? lineIntersection;
   const edges = segments(boundaries);
-  const {position} = (ops.nearestPosition ?? nearestPosition)(points, point, measure);
+  const {position} = (ops.nearestPosition ?? nearestPosition)(points, point, measure, ops.projectOnLine);
   let left = 0, right = end;
   for (let i = 1; i <= end; i++) {
     const a = points[i - 1], b = points[i], length = measure(a, b);

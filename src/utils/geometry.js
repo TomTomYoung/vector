@@ -41,6 +41,45 @@
  * - 2025-11-16: 初版作成（SnapManager.jsから抽出）
  */
 
+export function displacement(start, end) {
+  return {x: end.x - start.x, y: end.y - start.y};
+}
+
+export function advancePoint(point, vector, factor) {
+  return {x: point.x + factor * vector.x, y: point.y + factor * vector.y};
+}
+
+export function interpolatePoint(a, b, t) {
+  return {x: (1 - t) * a.x + t * b.x, y: (1 - t) * a.y + t * b.y};
+}
+
+// t is unrestricted on the supporting line. Two coincident points define no line.
+export function projectOnLine(point, start, end) {
+  const axis = displacement(start, end);
+  const lengthSquared = dotProduct(axis, axis);
+  if (lengthSquared === 0) return null;
+  const t = dotProduct(displacement(start, point), axis) / lengthSquared;
+  return {point: advancePoint(start, axis, t), t};
+}
+
+export function closestOnSegment(point, start, end, project = projectOnLine) {
+  const foot = project(point, start, end);
+  if (!foot || foot.t <= 0) return {point: start, t: 0};
+  if (foot.t >= 1) return {point: end, t: 1};
+  return foot;
+}
+
+export function circleTangentPoints(point, center, radius) {
+  const dx = point.x - center.x, dy = point.y - center.y;
+  const length = Math.hypot(dx, dy);
+  if (!(radius > 0) || length < radius) return [];
+  if (length === radius) return [{x: point.x, y: point.y}];
+  const angle = Math.atan2(dy, dx), delta = Math.acos(radius / length);
+  return [angle - delta, angle + delta].map(a => ({
+    x: center.x + radius * Math.cos(a), y: center.y + radius * Math.sin(a),
+  }));
+}
+
 /**
  * 2点間の距離を計算
  * @param {Object} p1 - 点1 {x: number, y: number}
@@ -87,38 +126,8 @@ export function lineIntersection(line1, line2) {
  * @returns {number} 最短距離
  */
 export function pointToLineDistance(point, line) {
-  const { x, y } = point;
-  const { x1, y1, x2, y2 } = line;
-
-  const A = x - x1;
-  const B = y - y1;
-  const C = x2 - x1;
-  const D = y2 - y1;
-
-  const dot = A * C + B * D;
-  const lenSq = C * C + D * D;
-  let param = -1;
-
-  if (lenSq !== 0) param = dot / lenSq;
-
-  let xx, yy;
-  if (param < 0) {
-    // 線分の始点に最も近い
-    xx = x1;
-    yy = y1;
-  } else if (param > 1) {
-    // 線分の終点に最も近い
-    xx = x2;
-    yy = y2;
-  } else {
-    // 線分上の点に最も近い
-    xx = x1 + param * C;
-    yy = y1 + param * D;
-  }
-
-  const dx = x - xx;
-  const dy = y - yy;
-  return Math.sqrt(dx * dx + dy * dy);
+  const start = {x: line.x1, y: line.y1}, end = {x: line.x2, y: line.y2};
+  return distance(point, closestOnSegment(point, start, end).point);
 }
 
 /**

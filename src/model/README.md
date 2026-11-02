@@ -32,6 +32,7 @@ const value = run("diameter", {center: {x: 0, y: 0}, point: {x: 3, y: 4}}); // 1
 `createToolset` は任意です。各ツールを直接 import して `tool(input, operations?)` で呼べます。登録する関数には第3引数に同じ組み合わせの `run(name, input)` が渡ります。たとえば `vertices` はインデックスを座標に戻し、指定された線・多角形・ベジェのツールを呼びます。
 
 - `drawing.js` は線分、矩形、円、円弧、点列、パス、スプライン、ベジェ、テキスト、寸法、選択、頂点インデックスを扱います。ベジェの結果は制御点、円弧の結果は中心・半径・両端点・符号付き回転角です。サンプリングだけを行う場合は `bezier.js` の `sampleBezierPoints` を使えます。
+- `measurements.js` の `polylineLength` は点列の全長または周長、`signedArea` は頂点順を保った符号付き面積を返します。`construction.js` の `reflectPoint` は2点を通る直線に対する鏡像を返します。[数式と入出力](../../doc/文章.md)
 - `construction.js` の `offset` は新しい図形を返します。`chamfer` と `fillet` は元の2線分を置き換える点列と、新しく間をつなぐ図形を返します。
 - `linear.js` の `join` は端点でつながる点列をまとめます。`nearestPosition`、`splitAt`、`extendEnd` は演算の段階で個別に使えます。
 

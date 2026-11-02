@@ -396,6 +396,14 @@ class PolylineTool extends BaseTool {
     idLabel.style.marginBottom = "6px";
     container.appendChild(idLabel);
 
+    const points = window.CoordinatesUtils.elementPointsInCanvas(this.canvas, polyline);
+    if (points) {
+      const readout = document.createElement("div");
+      const length = this.run("polylineLength", {points});
+      readout.textContent = `全長 ${length.toFixed(2)}`;
+      container.appendChild(readout);
+    }
+
     const geometryWrapper = this.renderPointsEditor(polyline);
     container.appendChild(geometryWrapper);
 
