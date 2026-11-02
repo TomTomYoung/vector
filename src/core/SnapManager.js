@@ -104,6 +104,94 @@ class SnapManager {
     );
     checkboxRow.appendChild(perpendicularCheckbox);
 
+    // 接線スナップ
+    const tangentCheckbox = this.createCheckbox(
+      "接線",
+      "tangent",
+      this.snapEnabled.tangent
+    );
+    checkboxRow.appendChild(tangentCheckbox);
+  }
+
+  createCheckbox(label, type, checked) {
+    const container = document.createElement("label");
+    container.style.cursor = "pointer";
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.id = "snap-" + type;
+    checkbox.checked = checked;
+    checkbox.addEventListener("change", (e) => {
+      this.snapEnabled[type] = e.target.checked;
+      if (type === "grid") GridManager.setGridSnap(e.target.checked);
+    });
+
+    container.appendChild(checkbox);
+    container.appendChild(document.createTextNode(label));
+
+    return container;
+  }
+
+  // スナップ処理のメインメソッド
+  snapPoint(point, excludeElement = null, anchor = null) {
+    if (!point) return point;
+
+    let snappedPoint = { ...point };
+    let snapType = null;
+    let minDistance = this.snapTolerance;
+
+    // 端点スナップ
+    if (this.snapEnabled.endpoint) {
+      const endpointSnap = this.snapToEndpoint(
+        point,
+        minDistance,
+        excludeElement
+      );
+      if (endpointSnap) {
+        snappedPoint = endpointSnap.point;
+        snapType = "endpoint";
+        minDistance = endpointSnap.distance;
+      }
+    }
+
+    // 中点スナップ
+    if (this.snapEnabled.midpoint) {
+      const midpointSnap = this.snapToMidpoint(
+        point,
+        minDistance,
+        excludeElement
+      );
+      if (midpointSnap) {
+        snappedPoint = midpointSnap.point;
+        snapType = "midpoint";
+        minDistance = midpointSnap.distance;
+      }
+    }
+
+    // 交点スナップ
+    if (this.snapEnabled.intersection) {
+      const intersectionSnap = this.snapToIntersection(
+        point,
+        minDistance,
+        excludeElement
+      );
+      if (intersectionSnap) {
+        snappedPoint = intersectionSnap.point;
+        snapType = "intersection";
+        minDistance = intersectionSnap.distance;
+      }
+    }
+
+    // グリッドスナップ
+    if (window.snapToGrid) {
+      const gridSnap = this.snapToGrid(point, minDistance);
+      if (gridSnap) {
+        snappedPoint = gridSnap.point;
+        snapType = "grid";
+        minDistance = gridSnap.distance;
+      }
+    }
+
     if (anchor && (this.snapEnabled.perpendicular || this.snapEnabled.tangent)) {
       const snap = this.snapFromAnchor(anchor, point, minDistance, excludeElement);
       if (snap) {
