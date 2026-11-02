@@ -29,7 +29,7 @@ class OffsetTool extends BaseTool {
       instructions.push("対応図形: 線分 / ポリライン / 矩形 / 円");
     } else {
       instructions.push("左クリック: 選択図形の外側/内側をクリックして方向を決定");
-      instructions.push("もう一度選択するまで追加のオフセットを作成");
+      instructions.push("指定した側に複製を作成し、次の図形を選択");
     }
 
     instructions.push("Esc: 選択解除");
@@ -66,17 +66,10 @@ class OffsetTool extends BaseTool {
   handleMouseDown(event) {
     super.handleMouseDown(event);
 
-    if (event.target === this.canvas) {
-      if (this.selectedElement) {
-        this.unhighlightElement(this.selectedElement);
-        this.selectedElement = null;
-        this.updatePanel();
-      }
-      return;
-    }
-
-    // 最初のクリック: オブジェクトを選択
+    // The second click is normally on empty canvas, on the desired side.
     if (!this.selectedElement) {
+      if (!["line", "polyline", "rect", "circle"].includes(event.target.tagName) ||
+          event.target.closest(DrawingDocument.helpers)) return;
       this.selectedElement = event.target;
       this.highlightElement(this.selectedElement);
       this.updatePanel();

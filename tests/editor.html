@@ -16,11 +16,12 @@ w.addEventListener("error", event => errors.push(event.message));
 const tick = () => new Promise(resolve => setTimeout(resolve, 0));
 async function check(name, run) {
   try {
+    errors.length = 0;
     await run();
     if (errors.length) throw Error(errors.splice(0).join("\n"));
     reports.push("PASS " + name);
   } catch (error) {
-    reports.push("FAIL " + name + "\n" + error.stack);
+    reports.push("FAIL " + name + "\n" + error.stack + "\n" + errors.join("\n"));
   }
 }
 function assert(value, message) { if (!value) throw Error(message); }
@@ -111,6 +112,53 @@ await check("Zoomed drawing uses SVG coordinates; focused text field keeps its u
   const event = new w.KeyboardEvent("keydown",{key:"z",ctrlKey:true,bubbles:true,cancelable:true});
   input.dispatchEvent(event);
   assert(!event.defaultPrevented && rect.isConnected,"field shortcut intercepted"); input.remove();
+});
+await check("Straight paths split and extend through transformed boundaries; curved paths are preserved", async () => {
+  w.zoomPanManager.resetZoom();
+  fixture('<path id="p" d="M10 10 h100" transform="translate(20 0)" stroke="black"/><polyline id="edge" points="150,0 150,40" stroke="blue"/>');
+  await tick();
+  const p = doc.getElementById("p"), edge = doc.getElementById("edge");
+  activate("extend"); click(150,20,edge); key("Enter"); click(125,10,p); await tick();
+  assert(Math.abs(p.getTotalLength()-120)<0.01, "extended to boundary");
+  activate("split"); click(70,10,p); await tick();
+  const pieces = canvas.querySelectorAll("path");
+  assert(pieces.length === 2 && Math.abs(pieces[0].getTotalLength()-40)<0.01 &&
+    Math.abs(pieces[1].getTotalLength()-80)<0.01, "local coordinates of split path");
+});
+await check("Freehand input sequences for line, circle, path, all Bezier degrees, text and dimensions", async () => {
+  fixture(); await tick();
+  for (const k of Object.keys(w.snapManager.snapEnabled)) w.snapManager.snapEnabled[k] = false;
+  activate("line"); mouse("mousedown",10,20); mouse("mousemove",90,20); mouse("mouseup",90,20);
+  assert(canvas.querySelector("line[data-line-tool]")?.x2.baseVal.value === 90,"line");
+  activate("circle"); mouse("mousedown",140,120); mouse("mousemove",160,120); mouse("mouseup",160,120);
+  assert(canvas.querySelector("circle[data-circle-tool]")?.r.baseVal.value === 20,"circle");
+  activate("path"); click(10,150); click(90,150); key("Enter");
+  assert(canvas.querySelector("path[data-path-tool]")?.getTotalLength() > 79,"path");
+  for (const [name,count,attr] of [["quadraticBezier",3,"quadratic"],["cubicBezier",4,"cubic"],["nthBezier",5,"nth"]]) {
+    activate(name);
+    for (let i=0; i<count; i++) click(210+i*25,160+(i%2)*45);
+    assert(canvas.querySelector("[data-"+attr+"-bezier-tool]"),name);
+  }
+  const prompt = w.prompt;
+  try { w.prompt = () => "確認"; activate("text"); click(250,350); }
+  finally { w.prompt = prompt; }
+  assert(canvas.querySelector("text[data-text-tool]")?.textContent === "確認","text");
+  activate("dimension"); click(100,350); click(180,350);
+  assert([...canvas.querySelectorAll("text")].some(x=>x.textContent==="80.0"),"linear dimension");
+});
+await check("Offset, join, fillet and chamfer complete without changing the reference color to a highlight", async () => {
+  const lines = '<line id="h" x1="30" y1="50" x2="100" y2="50" stroke="#234567" stroke-width="7"/><line id="v" x1="100" y1="50" x2="100" y2="100" stroke="#234567" stroke-width="7"/>';
+  for (const name of ["offset","join","fillet","chamfer"]) {
+    fixture(lines); await tick();
+    const h = doc.getElementById("h"), v = doc.getElementById("v");
+    activate(name); click(60,50,h);
+    if (name === "offset") click(60,75);
+    else click(100,80,v);
+    if (name === "join") key("Enter");
+    const tag = {offset:"line", join:"polyline", fillet:"path", chamfer:"line"}[name];
+    const newShape = [...canvas.querySelectorAll(tag)].find(el => el !== h && el !== v);
+    assert(newShape && newShape.getAttribute("stroke") === "#234567" && newShape.getAttribute("stroke-width") === "7",name);
+  }
 });
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";

@@ -43,18 +43,24 @@ export function localPoints(el) {
   return [];
 }
 
+function transformPoint(matrix, point) {
+  const {a, b, c, d, e, f} = matrix;
+  return {x: a * point.x + c * point.y + e, y: b * point.x + d * point.y + f};
+}
+
 function outline(el, canvas) {
   const local = localPoints(el);
   if (local.length < 2) return null;
   const matrix = canvas.getScreenCTM().inverse().multiply(el.getScreenCTM());
+  if (Math.abs(matrix.a * matrix.d - matrix.b * matrix.c) < Number.EPSILON) return null;
   const inverse = matrix.inverse();
   if (![inverse.a, inverse.b, inverse.c, inverse.d, inverse.e, inverse.f].every(Number.isFinite)) return null;
-  const points = local.map(p => matrix.transformPoint(p));
+  const points = local.map(p => transformPoint(matrix, p));
   return {points, inverse};
 }
 
 function writePoints(el, points, inverse) {
-  const local = points.map(p => inverse.transformPoint(p));
+  const local = points.map(p => transformPoint(inverse, p));
   if (el.tagName === "line") {
     local.forEach((p, i) => {
       el.setAttribute("x" + (i + 1), p.x);
