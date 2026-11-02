@@ -1,5 +1,8 @@
 name: Vector editor regression tests
-on: [push, pull_request]
+on:
+  push:
+    branches: [master]
+  pull_request:
 permissions:
   contents: read
 jobs:
@@ -7,9 +10,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
       - name: Geometry
-        run: node --experimental-default-type=module --test tests/linearEditing.test.mjs
+        run: node --test tests/linearEditing.test.mjs
       - name: Browser interactions
         shell: bash
         run: |
