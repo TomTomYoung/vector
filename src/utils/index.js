@@ -19,6 +19,7 @@
  * - 2025-11-16: 初版作成
  */
 
+import {createEditorHost} from "../adapters/editorHost.js";
 import * as geometry from './geometry.js';
 import * as coordinates from './coordinates.js';
 import * as svg from './svg.js';
@@ -29,6 +30,7 @@ import { TransformLayer, TransformManager } from './transformManager.js';
 
 // グローバルオブジェクトとして公開
 window.VectorUtils = {
+  createEditorHost,
   geometry,
   linearEditing,
   coordinates,

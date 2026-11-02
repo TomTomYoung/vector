@@ -186,74 +186,9 @@ class ArcTool extends BaseTool {
     this.updatePanel();
   }
 
-  calculateArc(p1, p2, p3) {
-    // 3点から円弧を計算
-    // 円の中心を求める
-    const center = this.calculateCircleCenter(p1, p2, p3);
-    if (!center) return null;
-
-    // GeometryUtils.distance を使用
-    const radius = window.GeometryUtils.distance(center, p1);
-
-    // 各点の角度を計算
-    const angle1 = Math.atan2(p1.y - center.y, p1.x - center.x);
-    const angle2 = Math.atan2(p2.y - center.y, p2.x - center.x);
-    const angle3 = Math.atan2(p3.y - center.y, p3.x - center.x);
-
-    // 円弧の方向を判定
-    const largeArc = this.isLargeArc(angle1, angle2, angle3) ? 1 : 0;
-    const sweep = this.getSweepFlag(angle1, angle2, angle3) ? 1 : 0;
-
-    // SVG pathコマンドを生成
-    const path = `M ${p1.x} ${p1.y} A ${radius} ${radius} 0 ${largeArc} ${sweep} ${p3.x} ${p3.y}`;
-
-    return { path, center, radius };
-  }
-
-  calculateCircleCenter(p1, p2, p3) {
-    // 3点から円の中心を計算
-    const ax = p1.x;
-    const ay = p1.y;
-    const bx = p2.x;
-    const by = p2.y;
-    const cx = p3.x;
-    const cy = p3.y;
-
-    const d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
-    if (Math.abs(d) < 0.0001) return null; // 3点が一直線上
-
-    const ux =
-      ((ax * ax + ay * ay) * (by - cy) +
-        (bx * bx + by * by) * (cy - ay) +
-        (cx * cx + cy * cy) * (ay - by)) /
-      d;
-    const uy =
-      ((ax * ax + ay * ay) * (cx - bx) +
-        (bx * bx + by * by) * (ax - cx) +
-        (cx * cx + cy * cy) * (bx - ax)) /
-      d;
-
-    return { x: ux, y: uy };
-  }
-
-  isLargeArc(a1, a2, a3) {
-    // 円弧が180度以上かどうか（GeometryUtils.normalizeAngle を使用）
-    const diff = window.GeometryUtils.normalizeAngle(a3 - a1);
-    return Math.abs(diff) > Math.PI;
-  }
-
-  getSweepFlag(a1, a2, a3) {
-    // 時計回りか反時計回りか
-    const cross =
-      (a2 - a1) * Math.sin(a3 - a2) - (a3 - a2) * Math.sin(a2 - a1);
-    return cross > 0;
-  }
-
-  handleKeyDown(event) {
-    // Escapeキーでキャンセル
-    if (event.key === "Escape") {
-      this.cancelArc();
-    }
+  calculateArc(start, through, end) {
+    const arc = this.run("arc", {start, through, end});
+    return arc && {path: this.toolManager.host.encodePath(arc)};
   }
 
   handleKeyDown(event) {

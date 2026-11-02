@@ -121,11 +121,7 @@ class CircleTool extends BaseTool {
       return;
     }
 
-    const radius = window.GeometryUtils.distance(
-      this.startPoint,
-      this.currentPoint
-    );
-    this.drawingObject.setAttribute("r", Math.max(0, radius));
+    this.draw("circle", {center: this.startPoint, point: this.currentPoint}, this.drawingObject);
   }
 
   handleMouseUp(event) {
@@ -184,17 +180,17 @@ class CircleTool extends BaseTool {
 
     if (finishedCircle && this.autoSelectAfterDraw) {
       if (
-        window.toolManager &&
-        typeof window.toolManager.activateTemporaryTool === "function"
+        this.toolManager &&
+        typeof this.toolManager.activateTemporaryTool === "function"
       ) {
-        window.toolManager.activateTemporaryTool("select", {
+        this.toolManager.activateTemporaryTool("select", {
           restoreTriggers: ["deselect", "cancel"],
         });
       }
 
       this.selectCircle(finishedCircle);
-      if (window.selectTool) {
-        window.selectTool.selectObject(finishedCircle, false);
+      if (this.selectTool) {
+        this.selectTool.selectObject(finishedCircle, false);
       }
     }
 
@@ -944,11 +940,11 @@ class CircleTool extends BaseTool {
       return;
     }
 
-    if (window.selectTool) {
-      if (typeof window.selectTool.refreshHandles === "function") {
-        window.selectTool.refreshHandles();
-      } else if (typeof window.selectTool.addControlPoints === "function") {
-        window.selectTool.addControlPoints();
+    if (this.selectTool) {
+      if (typeof this.selectTool.refreshHandles === "function") {
+        this.selectTool.refreshHandles();
+      } else if (typeof this.selectTool.addControlPoints === "function") {
+        this.selectTool.addControlPoints();
       }
     }
 
@@ -1061,10 +1057,10 @@ class CircleTool extends BaseTool {
       this.selectionInteractionInProgress = false;
       this.disconnectSelectedCircleObserver();
       if (
-        window.selectTool &&
-        typeof window.selectTool.deselectObject === "function"
+        this.selectTool &&
+        typeof this.selectTool.deselectObject === "function"
       ) {
-        window.selectTool.deselectObject();
+        this.selectTool.deselectObject();
       }
       this.requestToolPanelRefresh();
       return;
@@ -1074,8 +1070,8 @@ class CircleTool extends BaseTool {
     this.selectedCircleId = circleId;
     this.selectionInteractionInProgress = false;
 
-    if (window.selectTool && typeof window.selectTool.selectObject === "function") {
-      window.selectTool.selectObject(circle, false);
+    if (this.selectTool && typeof this.selectTool.selectObject === "function") {
+      this.selectTool.selectObject(circle, false);
     }
 
     this.observeSelectedCircle(circle);
@@ -1223,13 +1219,13 @@ class CircleTool extends BaseTool {
   }
 
   delegateSelectionEvent(methodName, event) {
-    if (!window.selectTool) {
+    if (!this.selectTool) {
       return false;
     }
 
-    const handler = window.selectTool[methodName];
+    const handler = this.selectTool[methodName];
     if (typeof handler === "function") {
-      handler.call(window.selectTool, event);
+      handler.call(this.selectTool, event);
       return true;
     }
 

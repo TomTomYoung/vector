@@ -191,8 +191,7 @@ class PolygonTool extends BaseTool {
   updatePolygonPath() {
     if (!this.drawingObject || this.polygonPoints.length === 0) return;
 
-    const pointsStr = this.polygonPoints.map((p) => `${p.x},${p.y}`).join(" ");
-    this.drawingObject.setAttribute("points", pointsStr);
+    this.draw("polygon", {points: this.polygonPoints}, this.drawingObject);
   }
 
   updateTemporaryLine(start, end) {
@@ -215,8 +214,8 @@ class PolygonTool extends BaseTool {
       this.tempLine = null;
     }
 
-    if (window.selectTool) {
-      window.selectTool.selectObject(this.drawingObject);
+    if (this.selectTool) {
+      this.selectTool.selectObject(this.drawingObject);
     }
 
     this.isDrawing = false;
@@ -231,17 +230,17 @@ class PolygonTool extends BaseTool {
       this.initializePolygonMetadata(createdObject);
       if (this.autoSelectAfterDraw) {
         if (
-          window.toolManager &&
-          typeof window.toolManager.activateTemporaryTool === "function"
+          this.toolManager &&
+          typeof this.toolManager.activateTemporaryTool === "function"
         ) {
-          window.toolManager.activateTemporaryTool("select", {
+          this.toolManager.activateTemporaryTool("select", {
             restoreTriggers: ["deselect", "cancel"],
           });
         }
 
         this.selectPolygon(createdObject);
-        if (window.selectTool) {
-          window.selectTool.selectObject(createdObject);
+        if (this.selectTool) {
+          this.selectTool.selectObject(createdObject);
         }
       }
     }
@@ -1010,11 +1009,11 @@ class PolygonTool extends BaseTool {
       return;
     }
 
-    if (window.selectTool) {
-      if (typeof window.selectTool.refreshHandles === "function") {
-        window.selectTool.refreshHandles();
-      } else if (typeof window.selectTool.addControlPoints === "function") {
-        window.selectTool.addControlPoints();
+    if (this.selectTool) {
+      if (typeof this.selectTool.refreshHandles === "function") {
+        this.selectTool.refreshHandles();
+      } else if (typeof this.selectTool.addControlPoints === "function") {
+        this.selectTool.addControlPoints();
       }
     }
 
@@ -1097,10 +1096,10 @@ class PolygonTool extends BaseTool {
       this.selectionInteractionInProgress = false;
       this.disconnectSelectedPolygonObserver();
       if (
-        window.selectTool &&
-        typeof window.selectTool.deselectObject === "function"
+        this.selectTool &&
+        typeof this.selectTool.deselectObject === "function"
       ) {
-        window.selectTool.deselectObject();
+        this.selectTool.deselectObject();
       }
       this.requestToolPanelRefresh();
       return;
@@ -1110,8 +1109,8 @@ class PolygonTool extends BaseTool {
     this.selectedPolygonId = polygonId;
     this.selectionInteractionInProgress = false;
 
-    if (window.selectTool && typeof window.selectTool.selectObject === "function") {
-      window.selectTool.selectObject(polygon, false);
+    if (this.selectTool && typeof this.selectTool.selectObject === "function") {
+      this.selectTool.selectObject(polygon, false);
     }
 
     this.observeSelectedPolygon(polygon);
@@ -1285,13 +1284,13 @@ class PolygonTool extends BaseTool {
   }
 
   delegateSelectionEvent(methodName, event) {
-    if (!window.selectTool) {
+    if (!this.selectTool) {
       return false;
     }
 
-    const handler = window.selectTool[methodName];
+    const handler = this.selectTool[methodName];
     if (typeof handler === "function") {
-      handler.call(window.selectTool, event);
+      handler.call(this.selectTool, event);
       return true;
     }
 

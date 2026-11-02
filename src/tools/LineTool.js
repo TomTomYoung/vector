@@ -250,8 +250,8 @@ class LineTool extends BaseTool {
     // 状態を保存
     this.saveState();
 
-    if (this.autoSelectAfterDraw && finishedLine && window.selectTool) {
-      window.selectTool.selectObject(finishedLine);
+    if (this.autoSelectAfterDraw && finishedLine && this.selectTool) {
+      this.selectTool.selectObject(finishedLine);
     }
 
     // 線を確定（既にキャンバスに追加されている）
@@ -268,17 +268,17 @@ class LineTool extends BaseTool {
       }
     }
 
-    if (this.autoSelectAfterDraw && finishedLine && window.selectTool) {
+    if (this.autoSelectAfterDraw && finishedLine && this.selectTool) {
       if (
-        window.toolManager &&
-        typeof window.toolManager.activateTemporaryTool === "function"
+        this.toolManager &&
+        typeof this.toolManager.activateTemporaryTool === "function"
       ) {
-        window.toolManager.activateTemporaryTool("select", {
+        this.toolManager.activateTemporaryTool("select", {
           restoreTriggers: ["deselect", "cancel"],
         });
       }
 
-      window.selectTool.selectObject(finishedLine);
+      this.selectTool.selectObject(finishedLine);
     }
   }
 
@@ -317,15 +317,7 @@ class LineTool extends BaseTool {
   updateCurrentLineEnd(point) {
     if (!this.currentLine || !this.startPoint) return;
 
-    let endPoint = point;
-
-    // 直交モード: CoordinatesUtils.snapToOrtho を使用
-    if (window.orthoMode) {
-      endPoint = window.CoordinatesUtils.snapToOrtho(this.startPoint, point);
-    }
-
-    this.currentLine.setAttribute("x2", endPoint.x);
-    this.currentLine.setAttribute("y2", endPoint.y);
+    this.draw("line", {start: this.startPoint, end: point, ortho: window.orthoMode}, this.currentLine);
   }
 
   onCommonPropertiesChanged(properties) {
@@ -1061,10 +1053,10 @@ class LineTool extends BaseTool {
       this.selectionInteractionInProgress = false;
       this.disconnectSelectedLineObserver();
       if (
-        window.selectTool &&
-        typeof window.selectTool.deselectObject === "function"
+        this.selectTool &&
+        typeof this.selectTool.deselectObject === "function"
       ) {
-        window.selectTool.deselectObject();
+        this.selectTool.deselectObject();
       }
       this.requestToolPanelRefresh();
       return;
@@ -1074,8 +1066,8 @@ class LineTool extends BaseTool {
     this.selectedLineId = lineId;
     this.selectionInteractionInProgress = false;
 
-    if (window.selectTool && typeof window.selectTool.selectObject === "function") {
-      window.selectTool.selectObject(line, false);
+    if (this.selectTool && typeof this.selectTool.selectObject === "function") {
+      this.selectTool.selectObject(line, false);
     }
 
     this.observeSelectedLine(line);
@@ -1239,11 +1231,11 @@ class LineTool extends BaseTool {
       return;
     }
 
-    if (window.selectTool) {
-      if (typeof window.selectTool.refreshHandles === "function") {
-        window.selectTool.refreshHandles();
-      } else if (typeof window.selectTool.addControlPoints === "function") {
-        window.selectTool.addControlPoints();
+    if (this.selectTool) {
+      if (typeof this.selectTool.refreshHandles === "function") {
+        this.selectTool.refreshHandles();
+      } else if (typeof this.selectTool.addControlPoints === "function") {
+        this.selectTool.addControlPoints();
       }
     }
 
@@ -1431,13 +1423,13 @@ class LineTool extends BaseTool {
   }
 
   delegateSelectionEvent(methodName, event) {
-    if (!window.selectTool) {
+    if (!this.selectTool) {
       return false;
     }
 
-    const handler = window.selectTool[methodName];
+    const handler = this.selectTool[methodName];
     if (typeof handler === "function") {
-      handler.call(window.selectTool, event);
+      handler.call(this.selectTool, event);
       return true;
     }
 

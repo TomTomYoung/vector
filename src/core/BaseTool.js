@@ -21,6 +21,39 @@ class BaseTool {
     this.drawingObject = null;
   }
 
+  get selectTool() {
+    return this.toolManager.tools.select;
+  }
+
+  run(name, input) {
+    return this.toolManager.host.execute(name, input);
+  }
+
+  draw(name, input, target, options) {
+    return this.toolManager.host.render(this.run(name, input), target, options);
+  }
+
+  editOutline(name, element, edges, point) {
+    const host = this.toolManager.host;
+    return host.editOutline(name, element, this.canvas, edges, point, host.execute, () => this.saveState());
+  }
+
+  editCorner(name, lines, params) {
+    const {outline, writePoints} = window.VectorUtils.linearEditing;
+    const shapes = lines.map(line => outline(line, this.canvas));
+    if (shapes.length !== 2 || shapes.some(shape => !shape)) return;
+    const edit = this.run(name, {...params, first: shapes[0].points, second: shapes[1].points});
+    if (!edit) return;
+    const bridge = this.toolManager.host.render(edit.bridge);
+    window.SvgUtils.setAttributes(bridge, {
+      stroke: lines[0].getAttribute("stroke"), "stroke-width": lines[0].getAttribute("stroke-width"),
+      fill: "none", "data-layer": window.currentLayerId,
+    });
+    this.saveState();
+    edit.segments.forEach((points, i) => writePoints(lines[i], points, shapes[i].inverse));
+    this.canvas.appendChild(bridge);
+  }
+
   // ツール名（オーバーライド用）
   getTitle() {
     return "基本ツール";

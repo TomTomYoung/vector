@@ -55,25 +55,18 @@ class TextTool extends BaseTool {
 
   // テキスト要素を作成（SvgUtils.createElement を使用）
   createTextElement(point, content) {
-    if (!content || content.trim() === "") return;
-
-    const text = window.SvgUtils.createElement("text", {
-      x: point.x,
-      y: point.y,
+    const text = this.draw("text", {point, content});
+    if (!text) return;
+    window.SvgUtils.setAttributes(text, {
       fill: this.currentStyle.fill === "none" ? this.currentStyle.stroke : this.currentStyle.fill,
-      "font-family": "Arial",
-      "font-size": "16px",
-      "data-layer": window.currentLayerId,
-      "data-text-tool": "true"
+      "font-family": "Arial", "font-size": "16px", "data-layer": window.currentLayerId, "data-text-tool": "true"
     });
-
-    text.textContent = content;
 
     this.canvas.appendChild(text);
 
     // 作成したオブジェクトを選択状態にする
-    if (window.selectTool) {
-      window.selectTool.selectObject(text);
+    if (this.selectTool) {
+      this.selectTool.selectObject(text);
     }
 
     return text;

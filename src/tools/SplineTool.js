@@ -160,34 +160,7 @@ class SplineTool extends BaseTool {
   }
 
   generateSplinePath(points) {
-    if (points.length < 2) return null;
-
-    if (points.length === 2) {
-      // 2点の場合は直線
-      return `M ${points[0].x} ${points[0].y} L ${points[1].x} ${points[1].y}`;
-    }
-
-    // Catmull-Rom スプライン
-    let path = `M ${points[0].x} ${points[0].y}`;
-
-    for (let i = 0; i < points.length - 1; i++) {
-      const p0 = i > 0 ? points[i - 1] : points[i];
-      const p1 = points[i];
-      const p2 = points[i + 1];
-      const p3 = i < points.length - 2 ? points[i + 2] : points[i + 1];
-
-      // Catmull-Rom スプラインの制御点を計算
-      const tension = 0.5; // 張力（0.5が標準的）
-
-      const cp1x = p1.x + (p2.x - p0.x) * tension / 6;
-      const cp1y = p1.y + (p2.y - p0.y) * tension / 6;
-      const cp2x = p2.x - (p3.x - p1.x) * tension / 6;
-      const cp2y = p2.y - (p3.y - p1.y) * tension / 6;
-
-      path += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y}`;
-    }
-
-    return path;
+    return this.toolManager.host.encodePath(this.run("spline", {points}));
   }
 
   handleKeyDown(event) {

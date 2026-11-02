@@ -221,31 +221,7 @@ class PathTool extends BaseTool {
   updatePathData() {
     if (!this.currentPath || this.pathPoints.length === 0) return;
 
-    let d = `M ${this.pathPoints[0].x} ${this.pathPoints[0].y}`;
-
-    if (this.pathMode === "line") {
-      for (let i = 1; i < this.pathPoints.length; i++) {
-        d += ` L ${this.pathPoints[i].x} ${this.pathPoints[i].y}`;
-      }
-    } else {
-      for (let i = 1; i < this.pathPoints.length; i++) {
-        if (i % 3 === 1) {
-          const cp1 = this.pathPoints[i];
-
-          if (i + 2 < this.pathPoints.length) {
-            const cp2 = this.pathPoints[i + 1];
-            const endPoint = this.pathPoints[i + 2];
-            d += ` C ${cp1.x} ${cp1.y}, ${cp2.x} ${cp2.y}, ${endPoint.x} ${endPoint.y}`;
-          } else {
-            d += ` L ${this.pathPoints[i].x} ${this.pathPoints[i].y}`;
-          }
-        } else if (i % 3 === 2 && i + 1 >= this.pathPoints.length) {
-          d += ` L ${this.pathPoints[i].x} ${this.pathPoints[i].y}`;
-        }
-      }
-    }
-
-    this.currentPath.setAttribute("d", d);
+    this.draw("path", {points: this.pathPoints, mode: this.pathMode}, this.currentPath);
     this.currentPath.dataset.pathMode = this.pathMode;
   }
 
@@ -275,8 +251,8 @@ class PathTool extends BaseTool {
     this.currentPath = null;
     this.pathPoints = [];
 
-    if (window.selectTool) {
-      window.selectTool.selectObject(createdPath);
+    if (this.selectTool) {
+      this.selectTool.selectObject(createdPath);
     }
 
     if (this.autoSelectAfterDraw) {
@@ -816,10 +792,10 @@ class PathTool extends BaseTool {
       this.selectionInteractionInProgress = false;
       this.disconnectSelectedPathObserver();
       if (
-        window.selectTool &&
-        typeof window.selectTool.deselectObject === "function"
+        this.selectTool &&
+        typeof this.selectTool.deselectObject === "function"
       ) {
-        window.selectTool.deselectObject();
+        this.selectTool.deselectObject();
       }
       this.requestToolPanelRefresh();
       return;
@@ -829,8 +805,8 @@ class PathTool extends BaseTool {
     this.selectedPathId = pathId;
     this.selectionInteractionInProgress = false;
 
-    if (window.selectTool && typeof window.selectTool.selectObject === "function") {
-      window.selectTool.selectObject(path, false);
+    if (this.selectTool && typeof this.selectTool.selectObject === "function") {
+      this.selectTool.selectObject(path, false);
     }
 
     this.observeSelectedPath(path);
@@ -968,11 +944,11 @@ class PathTool extends BaseTool {
       return;
     }
 
-    if (window.selectTool) {
-      if (typeof window.selectTool.refreshHandles === "function") {
-        window.selectTool.refreshHandles();
-      } else if (typeof window.selectTool.addControlPoints === "function") {
-        window.selectTool.addControlPoints();
+    if (this.selectTool) {
+      if (typeof this.selectTool.refreshHandles === "function") {
+        this.selectTool.refreshHandles();
+      } else if (typeof this.selectTool.addControlPoints === "function") {
+        this.selectTool.addControlPoints();
       }
     }
 
@@ -1069,13 +1045,13 @@ class PathTool extends BaseTool {
   }
 
   delegateSelectionEvent(methodName, event) {
-    if (!window.selectTool) {
+    if (!this.selectTool) {
       return false;
     }
 
-    const handler = window.selectTool[methodName];
+    const handler = this.selectTool[methodName];
     if (typeof handler === "function") {
-      handler.call(window.selectTool, event);
+      handler.call(this.selectTool, event);
       return true;
     }
 

@@ -771,90 +771,9 @@ class VerticesTool extends BaseTool {
       return null;
     }
 
-    const points = indice.points
-      .map((idx) => this.verticesObject.vectors[idx])
-      .filter((pt) => pt);
-
-    if (points.length === 0) {
-      return null;
-    }
-
-    let element = null;
-
-    switch (indice.method) {
-      case "line": {
-        if (points.length < 2) {
-          return null;
-        }
-        const [p1, p2] = points;
-        element = window.SvgUtils.createLine(p1.x, p1.y, p2.x, p2.y);
-        break;
-      }
-      case "polyline": {
-        if (points.length < 2) {
-          return null;
-        }
-        const polyPoints = [...points];
-        if (indice.params?.closed && points.length > 0) {
-          polyPoints.push(points[0]);
-        }
-        element = window.SvgUtils.createElement("polyline", {
-          points: polyPoints.map((p) => `${p.x},${p.y}`).join(" "),
-        });
-        break;
-      }
-      case "polygon": {
-        if (points.length < 3) {
-          return null;
-        }
-        element = window.SvgUtils.createElement("polygon", {
-          points: points.map((p) => `${p.x},${p.y}`).join(" "),
-        });
-        break;
-      }
-      case "quadraticBezier":
-      case "cubicBezier": {
-        const required = indice.method === "quadraticBezier" ? 3 : 4;
-        if (points.length < required) {
-          return null;
-        }
-        const bezierPoints = points.slice(0, required);
-        const bezier = window.VectorUtils?.bezier;
-        if (!bezier) {
-          return null;
-        }
-        const pathData = bezier.buildPathData(indice.method, bezierPoints, {});
-        if (!pathData) {
-          return null;
-        }
-        element = window.SvgUtils.createElement("path", { d: pathData });
-        break;
-      }
-      case "bezierN": {
-        const bezier = window.VectorUtils?.bezier;
-        if (!bezier) {
-          return null;
-        }
-        const params = indice.params || {};
-        const degree = Math.max(2, Math.round(params.degree || points.length - 1));
-        const required = degree + 1;
-        if (points.length < required) {
-          return null;
-        }
-        const bezierPoints = points.slice(0, required);
-        const pathData = bezier.buildPathData("bezierN", bezierPoints, {
-          degree,
-          sampleCount: Math.max(10, Math.round(params.sampleCount || 80)),
-        });
-        if (!pathData) {
-          return null;
-        }
-        element = window.SvgUtils.createElement("path", { d: pathData });
-        break;
-      }
-      default:
-        return null;
-    }
+    const element = this.draw("vertices", {
+      vectors: this.verticesObject.vectors, indices: indice.points, method: indice.method, params: indice.params,
+    }, null, indice.params);
 
     if (element) {
       this.applyDefaultAttributes(element);

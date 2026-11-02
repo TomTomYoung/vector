@@ -499,48 +499,20 @@ class SelectTool extends BaseTool {
   selectObject(el, addToSelection = false) {
     if (!this.canSelect(el)) return;
 
-    if (addToSelection) {
-      // 追加選択モード
-      const index = window.selectedObjects.indexOf(el);
-      if (index >= 0) {
-        // 既に選択されている場合は選択解除
-        el.removeAttribute("data-vector-selected");
-        window.selectedObjects.splice(index, 1);
-        if (window.selectedObjects.length === 0) {
-          this.selectedObject = null;
-          window.selectedObject = null;
-          this.removeControlPoints();
-        } else {
-          this.selectedObject = window.selectedObjects[0];
-          window.selectedObject = this.selectedObject;
-          this.addControlPoints();
-        }
-      } else {
-        // 新しく追加
-        el.setAttribute("data-vector-selected", "");
-      window.selectedObjects.push(el);
-      this.selectedObject = el;
-      window.selectedObject = el;
-      this.addControlPoints();
-    }
-    } else {
-      // 単一選択モード（既存の選択をクリア）
-      if (this.selectedObject) {
-        window.selectedObjects.forEach((obj) =>
-          obj.removeAttribute("data-vector-selected")
-        );
-        this.removeControlPoints();
-      }
-      this.selectedObject = el;
-      el.setAttribute("data-vector-selected", "");
-      window.selectedObject = el;
-      window.selectedObjects = [el];
-
-      this.addControlPoints();
-
-      // 右ペインのツールプロパティパネルを更新
-      this.updatePanel();
-    }
+    const previous = window.selectedObjects;
+    const candidates = previous.includes(el) ? previous : [...previous, el];
+    const ids = this.run("select", {
+      selected: previous.map((_, i) => i), target: candidates.indexOf(el), toggle: addToSelection,
+    });
+    const next = ids.map(i => candidates[i]);
+    previous.forEach(obj => obj.removeAttribute("data-vector-selected"));
+    this.removeControlPoints();
+    next.forEach(obj => obj.setAttribute("data-vector-selected", ""));
+    window.selectedObjects = next;
+    this.selectedObject = next.includes(el) ? el : next[0] ?? null;
+    window.selectedObject = this.selectedObject;
+    if (this.selectedObject) this.addControlPoints();
+    if (!addToSelection) this.updatePanel();
   }
 
   // 移動処理
@@ -801,19 +773,9 @@ class SelectTool extends BaseTool {
       return;
     }
 
-    const objects = Array.from(this.canvas.children).filter((el) => {
-      if (!this.canSelect(el)) return false;
-
-      const bbox = this.getBoundingBox(el);
-      if (!bbox) return false;
-
-      const withinX =
-        bbox.x >= rect.x && bbox.x + bbox.width <= rect.x + rect.width;
-      const withinY =
-        bbox.y >= rect.y && bbox.y + bbox.height <= rect.y + rect.height;
-
-      return withinX && withinY;
-    });
+    const candidates = Array.from(this.canvas.children).filter(el => this.canSelect(el));
+    const boxes = candidates.map((el, id) => ({id, box: this.getBoundingBox(el)}));
+    const objects = this.run("select", {bounds: rect, candidates: boxes}).map(id => candidates[id]);
 
     if (objects.length === 0) {
       return;

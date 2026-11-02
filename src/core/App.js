@@ -2,7 +2,11 @@
 // アプリケーションの初期化とコンポーネント間の連携を担当
 
 class App {
-  constructor() {
+  constructor({host,
+    createManager = (canvas, host) => new ToolManager(canvas, host), controllers = {}, ...stages} = {}) {
+    this.host = host ?? window.VectorUtils.createEditorHost(stages);
+    this.createManager = createManager;
+    this.controllers = controllers;
     this.globalVariables = {
       svgNS: "http://www.w3.org/2000/svg",
       selectedObject: null,
@@ -35,7 +39,7 @@ class App {
     // キーボードイベントの設定
 
     // ツールマネージャーの初期化
-    this.toolManager = new ToolManager(canvas);
+    this.toolManager = this.createManager(canvas, this.host);
     window.toolManager = this.toolManager;
     this.setupKeyboardEvents();
 
@@ -75,74 +79,37 @@ class App {
   registerTools() {
     const canvas = document.getElementById("canvas");
 
-    // 各ツールのインスタンス化と登録
-    const selectTool = new SelectTool(canvas, this.toolManager);
-    this.toolManager.registerTool("select", selectTool);
-    window.selectTool = selectTool;
-
-    const lineTool = new LineTool(canvas, this.toolManager);
-    this.toolManager.registerTool("line", lineTool);
-
-    const rectangleTool = new RectangleTool(canvas, this.toolManager);
-    this.toolManager.registerTool("rectangle", rectangleTool);
-
-    const circleTool = new CircleTool(canvas, this.toolManager);
-    this.toolManager.registerTool("circle", circleTool);
-
-    const arcTool = new ArcTool(canvas, this.toolManager);
-    this.toolManager.registerTool("arc", arcTool);
-
-    const polygonTool = new PolygonTool(canvas, this.toolManager);
-    this.toolManager.registerTool("polygon", polygonTool);
-
-    const pathTool = new PathTool(canvas, this.toolManager);
-    this.toolManager.registerTool("path", pathTool);
-
-    const splineTool = new SplineTool(canvas, this.toolManager);
-    this.toolManager.registerTool("spline", splineTool);
-
-    const quadraticBezierTool = new QuadraticBezierTool(canvas, this.toolManager);
-    this.toolManager.registerTool("quadraticBezier", quadraticBezierTool);
-
-    const cubicBezierTool = new CubicBezierTool(canvas, this.toolManager);
-    this.toolManager.registerTool("cubicBezier", cubicBezierTool);
-
-    const nthBezierTool = new NthBezierTool(canvas, this.toolManager);
-    this.toolManager.registerTool("nthBezier", nthBezierTool);
-
-    const polylineTool = new PolylineTool(canvas, this.toolManager);
-    this.toolManager.registerTool("polyline", polylineTool);
-
-    const verticesTool = new VerticesTool(canvas, this.toolManager);
-    this.toolManager.registerTool("vertices", verticesTool);
-    window.verticesTool = verticesTool;
-
-    const textTool = new TextTool(canvas, this.toolManager);
-    this.toolManager.registerTool("text", textTool);
-
-    const dimensionTool = new DimensionTool(canvas, this.toolManager);
-    this.toolManager.registerTool("dimension", dimensionTool);
-
-    const offsetTool = new OffsetTool(canvas, this.toolManager);
-    this.toolManager.registerTool("offset", offsetTool);
-
-    const trimTool = new TrimTool(canvas, this.toolManager);
-    this.toolManager.registerTool("trim", trimTool);
-
-    const extendTool = new ExtendTool(canvas, this.toolManager);
-    this.toolManager.registerTool("extend", extendTool);
-
-    const filletTool = new FilletTool(canvas, this.toolManager);
-    this.toolManager.registerTool("fillet", filletTool);
-
-    const chamferTool = new ChamferTool(canvas, this.toolManager);
-    this.toolManager.registerTool("chamfer", chamferTool);
-
-    const splitTool = new SplitTool(canvas, this.toolManager);
-    this.toolManager.registerTool("split", splitTool);
-
-    const joinTool = new JoinTool(canvas, this.toolManager);
-    this.toolManager.registerTool("join", joinTool);
+    const controllers = {
+      select: SelectTool,
+      line: LineTool,
+      rectangle: RectangleTool,
+      circle: CircleTool,
+      arc: ArcTool,
+      polygon: PolygonTool,
+      path: PathTool,
+      spline: SplineTool,
+      quadraticBezier: QuadraticBezierTool,
+      cubicBezier: CubicBezierTool,
+      nthBezier: NthBezierTool,
+      polyline: PolylineTool,
+      vertices: VerticesTool,
+      text: TextTool,
+      dimension: DimensionTool,
+      offset: OffsetTool,
+      trim: TrimTool,
+      extend: ExtendTool,
+      fillet: FilletTool,
+      chamfer: ChamferTool,
+      split: SplitTool,
+      join: JoinTool,
+      ...this.controllers,
+    };
+    for (const [name, Controller] of Object.entries(controllers)) {
+      const controller = new Controller(canvas, this.toolManager);
+      this.toolManager.registerTool(name, controller);
+      if (name === "select") window.selectTool = controller;
+      if (name === "vertices") window.verticesTool = controller;
+    }
   }
 
   // キーボードイベントの設定

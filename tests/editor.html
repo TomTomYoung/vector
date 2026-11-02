@@ -224,6 +224,54 @@ await check("Perpendicular and tangent endpoints are computed from the line star
   assert(Math.abs(Math.hypot(radius.x, radius.y) - 20) < 0.001 && Math.abs(dot) < 0.01 && radius.y > 0,
     "tangent constraints: " + JSON.stringify({origin, got, dot}));
 });
+await check("A second editor replaces input, dispatch, arithmetic, tool, renderer and controller at startup", async () => {
+  const other = document.createElement("iframe");
+  const index = new URL("../index.html", location.href);
+  const original = await (await fetch(index)).text();
+  const config = `
+    window.calls = [];
+    const defaultHost = window.VectorUtils.createEditorHost();
+    const replacement = window.VectorUtils.createEditorHost({
+      operations: {distance: () => 13},
+      tools: {circle(input, ops) {
+        calls.push("tool");
+        return {kind:"circle", center:input.center, radius:ops.distance(input.center, input.point) + 1};
+      }},
+    });
+    window.vectorEditorOptions = {
+      readPoint: () => ({x:37,y:41}),
+      execute(name,input) { calls.push(name); return replacement.execute(name,input); },
+      render(shape,target,options) {
+        calls.push("render");
+        const element = defaultHost.render(shape,target,options);
+        element.setAttribute("data-custom-render", "1"); return element;
+      },
+      controllers: {circle: class extends CircleTool { getTitle() { return "Custom circle"; } }},
+      createManager(canvas, host) { calls.push("manager"); return new ToolManager(canvas, host); },
+    };
+  `;
+  // Place configuration after the module loader is ready, before the app's DOMContentLoaded callback.
+  const setup = '<script>document.addEventListener("DOMContentLoaded", () => {' + config + '});<\/script>';
+  const loaded = new Promise(resolve => other.addEventListener("load", resolve, {once:true}));
+  other.srcdoc = original.replace("<head>", '<head><base href="' + index + '">')
+    .replace('<script src="src/main.js">', setup + '<script src="src/main.js">');
+  document.body.appendChild(other);
+  try {
+    await loaded;
+    const app = other.contentWindow, d = app.document, board = d.getElementById("canvas");
+    const button = d.getElementById("circle-tool");
+    assert(button.textContent === "Custom circle", "controller registration");
+    button.click();
+    for (const type of ["mousedown","mousemove","mouseup"]) {
+      board.dispatchEvent(new app.MouseEvent(type, {bubbles:true, button:0, clientX:2,clientY:3}));
+    }
+    const shape = board.querySelector("circle[data-custom-render]");
+    assert(shape && shape.cx.baseVal.value === 37 && shape.cy.baseVal.value === 41 && shape.r.baseVal.value === 14,
+      "custom input, operation, tool and output reached the actual drawing");
+    assert(["manager","circle","tool","render"].every(stage => app.calls.includes(stage)), "dispatch stages");
+    assert(doc.querySelector("#circle-tool").textContent !== "Custom circle", "editors share no overrides");
+  } finally { other.remove(); }
+});
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
 </script>

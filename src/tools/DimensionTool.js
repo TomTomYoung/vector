@@ -203,8 +203,7 @@ class DimensionTool extends BaseTool {
   createLinearDimension() {
     this.saveState();
 
-    const p1 = this.points[0];
-    const p2 = this.points[1];
+    const {start: p1, end: p2, angle, middle, length} = this.run("dimension", {points: this.points});
 
     // グループ要素作成（SvgUtils.createElement を使用）
     const group = window.SvgUtils.createElement("g", {
@@ -222,7 +221,6 @@ class DimensionTool extends BaseTool {
 
     // 矢印
     const arrowSize = 8;
-    const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
 
     // 始点の矢印
     const arrow1 = this.createArrow(p1, angle, arrowSize);
@@ -232,21 +230,16 @@ class DimensionTool extends BaseTool {
     const arrow2 = this.createArrow(p2, angle + Math.PI, arrowSize);
     group.appendChild(arrow2);
 
-    // 寸法値（GeometryUtils.distance を使用）
-    const distance = window.GeometryUtils.distance(p1, p2);
-    const midX = (p1.x + p2.x) / 2;
-    const midY = (p1.y + p2.y) / 2;
-
     // テキスト要素作成（SvgUtils.createElement を使用）
     const text = window.SvgUtils.createElement("text", {
-      x: midX,
-      y: midY - 5,
+      x: middle.x,
+      y: middle.y - 5,
       fill: "#ff0000",
       "font-size": "14",
       "font-family": "Arial",
       "text-anchor": "middle"
     });
-    text.textContent = distance.toFixed(1);
+    text.textContent = length.toFixed(1);
     group.appendChild(text);
 
     this.canvas.appendChild(group);
@@ -260,9 +253,8 @@ class DimensionTool extends BaseTool {
   createAngularDimension() {
     this.saveState();
 
-    const p1 = this.points[0]; // 第1辺の始点
-    const p2 = this.points[1]; // 頂点
-    const p3 = this.points[2]; // 第2辺の終点
+    const {vertex: p2, startAngle, endAngle, turn: angleDiff} =
+      this.run("dimension", {points: this.points, mode: "angular"});
 
     // グループ要素作成（SvgUtils.createElement を使用）
     const group = window.SvgUtils.createElement("g", {
@@ -271,24 +263,12 @@ class DimensionTool extends BaseTool {
     });
     group.classList.add("dimension");
 
-    // 2つの辺の角度を計算
-    const angle1 = Math.atan2(p1.y - p2.y, p1.x - p2.x);
-    const angle2 = Math.atan2(p3.y - p2.y, p3.x - p2.x);
-    let angleDiff = angle2 - angle1;
-
-    // 角度を0-360度に正規化
-    while (angleDiff < 0) angleDiff += 2 * Math.PI;
-    while (angleDiff > 2 * Math.PI) angleDiff -= 2 * Math.PI;
-
     const angleDeg = (angleDiff * 180) / Math.PI;
 
     // 円弧の半径
     const arcRadius = 30;
 
     // 円弧を描画（SvgUtils.createElement を使用）
-    const startAngle = angle1;
-    const endAngle = angle2;
-
     const x1 = p2.x + arcRadius * Math.cos(startAngle);
     const y1 = p2.y + arcRadius * Math.sin(startAngle);
     const x2 = p2.x + arcRadius * Math.cos(endAngle);
@@ -306,7 +286,7 @@ class DimensionTool extends BaseTool {
     group.appendChild(arc);
 
     // 角度テキスト（SvgUtils.createElement を使用）
-    const textAngle = angle1 + angleDiff / 2;
+    const textAngle = startAngle + angleDiff / 2;
     const textRadius = arcRadius + 15;
     const textX = p2.x + textRadius * Math.cos(textAngle);
     const textY = p2.y + textRadius * Math.sin(textAngle);

@@ -95,14 +95,12 @@ class BezierToolBase extends BaseTool {
   }
 
   buildPathData(points, allowPartial = false) {
-    const bezier = window.VectorUtils?.bezier;
-    if (!bezier) {
-      return '';
-    }
-    if (!allowPartial && points.length < this.getRequiredPoints()) {
-      return '';
-    }
-    return bezier.buildPathData(this.method, points, this.getBezierParams());
+    if (!allowPartial && points.length < this.getRequiredPoints()) return "";
+    const name = this.method === "bezierN" ? "nthBezier" : this.method;
+    const params = this.getBezierParams();
+    const degree = allowPartial && params.degree ? Math.min(params.degree, points.length - 1) : params.degree;
+    const shape = this.run(name, {points, degree});
+    return this.toolManager.host.encodePath(shape, params);
   }
 
   updatePreview(pointerPoint = null) {
