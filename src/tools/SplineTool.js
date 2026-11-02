@@ -87,45 +87,20 @@ class SplineTool extends BaseTool {
   }
 
   updatePreview(previewPoint) {
-    if (this.currentSpline) {
-      this.canvas.removeChild(this.currentSpline);
-    }
-
-    const allPoints = [...this.points, previewPoint];
-    if (allPoints.length < 2) return;
-
-    const pathData = this.generateSplinePath(allPoints);
-    if (!pathData) return;
-
-    // プレビュー用パス作成（SvgUtils.createElement を使用）
-    this.currentSpline = window.SvgUtils.createElement("path", {
-      d: pathData,
-      stroke: this.currentStyle.stroke,
-      "stroke-width": this.currentStyle.strokeWidth,
-      fill: "none",
-      opacity: this.currentStyle.opacity,
-      "stroke-dasharray": "3,3"
-    });
-    this.canvas.appendChild(this.currentSpline);
+    this.drawSpline([...this.points, previewPoint], true);
   }
 
   updateSpline() {
-    if (this.currentSpline) {
-      this.canvas.removeChild(this.currentSpline);
-    }
+    this.drawSpline(this.points, false);
+  }
 
-    if (this.points.length < 2) return;
-
-    const pathData = this.generateSplinePath(this.points);
-    if (!pathData) return;
-
-    // スプラインパス作成（SvgUtils.createElement を使用）
-    this.currentSpline = window.SvgUtils.createElement("path", {
-      d: pathData,
-      stroke: this.currentStyle.stroke,
-      "stroke-width": this.currentStyle.strokeWidth,
-      fill: "none",
-      opacity: this.currentStyle.opacity
+  drawSpline(points, preview) {
+    this.currentSpline?.remove();
+    this.currentSpline = this.draw("spline", {points});
+    if (!this.currentSpline) return;
+    window.SvgUtils.setAttributes(this.currentSpline, {
+      stroke: this.currentStyle.stroke, "stroke-width": this.currentStyle.strokeWidth,
+      fill: "none", opacity: this.currentStyle.opacity, "stroke-dasharray": preview ? "3,3" : null,
     });
     this.canvas.appendChild(this.currentSpline);
   }
@@ -157,10 +132,6 @@ class SplineTool extends BaseTool {
     this.isDrawing = false;
 
     this.updatePanel();
-  }
-
-  generateSplinePath(points) {
-    return this.toolManager.host.encodePath(this.run("spline", {points}));
   }
 
   handleKeyDown(event) {

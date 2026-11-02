@@ -201,15 +201,7 @@ class PolylineTool extends BaseTool {
 
     const lastPoint = this.points[this.points.length - 1];
 
-    let endPoint = previewPoint;
-    if (window.orthoMode) {
-      endPoint = window.CoordinatesUtils.snapToOrtho(lastPoint, previewPoint);
-    }
-
-    this.previewLine.setAttribute("x1", lastPoint.x);
-    this.previewLine.setAttribute("y1", lastPoint.y);
-    this.previewLine.setAttribute("x2", endPoint.x);
-    this.previewLine.setAttribute("y2", endPoint.y);
+    this.draw("line", {start: lastPoint, end: previewPoint, ortho: window.orthoMode}, this.previewLine);
   }
 
   finishPolyline() {

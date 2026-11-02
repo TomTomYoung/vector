@@ -63,9 +63,7 @@ class App {
     this.toolManager.activateTool("select");
 
     // 初期状態を保存
-    if (window.saveState) {
-      window.saveState();
-    }
+    this.host.save();
   }
 
   // キャンバスサイズの調整

@@ -99,26 +99,16 @@ class BaseTool {
 
   // 共通の状態保存
   saveState() {
-    if (window.saveState) {
-      window.saveState();
-    }
+    this.toolManager.host.save();
   }
 
   // マウス位置をSVG座標で取得（スナップ対応）
   getMousePosition(event, enableSnap = true) {
     const point = this.toolManager.getMousePosition(event);
 
-    // スナップマネージャーが有効な場合はスナップ処理
-    if (enableSnap && window.snapManager) {
-      return window.snapManager.snapPoint(point, this.drawingObject, this.getSnapAnchor());
-    }
-
-    // グリッドスナップ
-    if (window.snapToGrid) {
-      return this.toolManager.snapToGrid(point);
-    }
-
-    return point;
+    return this.toolManager.host.snap(point, {
+      geometry: enableSnap, exclude: this.drawingObject, anchor: this.getSnapAnchor(), manager: this.toolManager,
+    });
   }
 
   getSnapAnchor() {
@@ -161,12 +151,7 @@ class BaseTool {
     if (!this.isActive) return;
 
     // マウス位置を更新
-    this.currentPoint = this.toolManager.getMousePosition(event);
-
-    // スナップ有効時はグリッドに合わせる
-    if (window.snapToGrid) {
-      this.currentPoint = this.toolManager.snapToGrid(this.currentPoint);
-    }
+    this.currentPoint = this.getMousePosition(event, false);
   }
 
   handleMouseUp(event) {

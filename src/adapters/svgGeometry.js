@@ -25,7 +25,7 @@ export function pathData(shape, options = {}) {
   return commands.join(" ");
 }
 
-export function renderGeometry(shape, element = null, options = {}) {
+export function renderGeometry(shape, element = null, options = {}, encodePath = pathData) {
   if (!shape) return null;
   let tag = shape.kind, attrs;
   switch (shape.kind) {
@@ -51,7 +51,7 @@ export function renderGeometry(shape, element = null, options = {}) {
     case "bezier":
     case "arc":
       tag = "path";
-      attrs = {d: pathData(shape, options)};
+      attrs = {d: encodePath(shape, options)};
       break;
     default:
       throw new TypeError("Unsupported geometry: " + shape.kind);

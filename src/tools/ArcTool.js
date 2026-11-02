@@ -100,11 +100,7 @@ class ArcTool extends BaseTool {
     const point = this.getMousePosition(event);
 
     if (this.points.length === 1) {
-      // 始点から現在位置までの円をプレビュー（GeometryUtils.distance を使用）
-      const radius = window.GeometryUtils.distance(this.points[0], point);
-      if (this.previewCircle) {
-        this.previewCircle.setAttribute("r", radius);
-      }
+      if (this.previewCircle) this.draw("circle", {center: this.points[0], point}, this.previewCircle);
     } else if (this.points.length === 2) {
       // 3点から円弧を計算してプレビュー
       this.updateArcPreview(point);
@@ -135,16 +131,9 @@ class ArcTool extends BaseTool {
       this.currentArc = null;
     }
 
-    const arcData = this.calculateArc(
-      this.points[0],
-      this.points[1],
-      endPoint
-    );
-    if (!arcData) return;
-
-    // SvgUtils.createElement を使用
-    this.currentArc = window.SvgUtils.createElement("path", {
-      d: arcData.path,
+    this.currentArc = this.draw("arc", {start: this.points[0], through: this.points[1], end: endPoint});
+    if (!this.currentArc) return;
+    window.SvgUtils.setAttributes(this.currentArc, {
       stroke: this.currentStyle.stroke,
       "stroke-width": this.currentStyle.strokeWidth,
       fill: "none",
@@ -156,12 +145,9 @@ class ArcTool extends BaseTool {
   finishArc() {
     if (this.points.length !== 3) return;
 
-    const arcData = this.calculateArc(
-      this.points[0],
-      this.points[1],
-      this.points[2]
-    );
-    if (!arcData) {
+    const [start, through, end] = this.points;
+    const arc = this.draw("arc", {start, through, end});
+    if (!arc) {
       this.cancelArc();
       return;
     }
@@ -170,7 +156,6 @@ class ArcTool extends BaseTool {
     this.saveState();
 
     this.currentArc?.remove();
-    const arc = window.SvgUtils.createElement("path", {d: arcData.path});
     this.applyDefaultAttributes(arc);
     arc.setAttribute("fill", "none");
     arc.setAttribute("data-arc-tool", "true");
@@ -184,11 +169,6 @@ class ArcTool extends BaseTool {
     }
 
     this.updatePanel();
-  }
-
-  calculateArc(start, through, end) {
-    const arc = this.run("arc", {start, through, end});
-    return arc && {path: this.toolManager.host.encodePath(arc)};
   }
 
   handleKeyDown(event) {

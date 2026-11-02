@@ -51,5 +51,5 @@ window.vectorEditorOptions = {
 
 - 演算1個は `operations`、ツール1個は `tools` の同名関数で交換します。
 - 呼び出し役を一式換えるには `execute(name, input)` を渡します。入力の解釈と出力の型は元のツールに合わせます。新しいホストは直接関数を呼んで独自の型に変換できます。
-- ブラウザでの入力変換は `readPoint`、描画は `render(shape, target?, options?)`、曲線の文字列化は `encodePath`、既存輪郭への編集反映は `editOutline` が担当します。通常のエディタで `render` を置き換える場合には、編集対象の要素を返します。
+- ブラウザでの入力変換は `readPoint`、スナップは `snap`、作図時の履歴保存は `save`、描画は `render(shape, target?, options?)`、曲線の文字列化は `encodePath`、既存輪郭への編集反映は `editOutline` が担当します。通常のエディタで `render` を置き換える場合には、編集対象の要素を返します。
 - マウスやキーの操作手順を換えるには `controllers` に対象ツールのクラスを、画面側のツール管理を換えるには `createManager(canvas, host)` にマネージャーを作る関数を渡します。既存 UI の履歴・パネル・ファイル操作はブラウザ側にあります。

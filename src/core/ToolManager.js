@@ -195,7 +195,8 @@ class ToolManager {
   }
 
   getMousePosition(event) {
-    return this.host.readPoint(this.canvas, event);
+    const {x, y} = this.host.readPoint(this.canvas, event);
+    return {x, y};
   }
 
   // グリッドへのスナップ

@@ -231,6 +231,9 @@ await check("A second editor replaces input, dispatch, arithmetic, tool, rendere
   const config = `
     window.calls = [];
     const defaultHost = window.VectorUtils.createEditorHost();
+    const renderer = window.VectorUtils.createEditorHost({
+      encodePath(shape, options) { calls.push("curve"); return defaultHost.encodePath(shape, options); },
+    });
     const replacement = window.VectorUtils.createEditorHost({
       operations: {distance: () => 13},
       tools: {circle(input, ops) {
@@ -239,11 +242,14 @@ await check("A second editor replaces input, dispatch, arithmetic, tool, rendere
       }},
     });
     window.vectorEditorOptions = {
-      readPoint: () => ({x:37,y:41}),
+      readPoint: () => new DOMPoint(37,41),
+      snap(point) { calls.push("snap"); return point; },
+      save() { calls.push("save"); },
       execute(name,input) { calls.push(name); return replacement.execute(name,input); },
       render(shape,target,options) {
         calls.push("render");
-        const element = defaultHost.render(shape,target,options);
+        const element = renderer.render(shape,target,options);
+        if (!element) return null;
         element.setAttribute("data-custom-render", "1"); return element;
       },
       controllers: {circle: class extends CircleTool { getTitle() { return "Custom circle"; } }},
@@ -268,7 +274,10 @@ await check("A second editor replaces input, dispatch, arithmetic, tool, rendere
     const shape = board.querySelector("circle[data-custom-render]");
     assert(shape && shape.cx.baseVal.value === 37 && shape.cy.baseVal.value === 41 && shape.r.baseVal.value === 14,
       "custom input, operation, tool and output reached the actual drawing");
-    assert(["manager","circle","tool","render"].every(stage => app.calls.includes(stage)), "dispatch stages");
+    d.getElementById("quadraticBezier-tool").click();
+    for (let i = 0; i < 3; i++) board.dispatchEvent(new app.MouseEvent("mousedown", {bubbles:true, button:0}));
+    assert(board.querySelector("path[data-quadratic-bezier-tool][data-custom-render]"), "custom curve renderer");
+    assert(["manager","circle","tool","snap","save","render","curve"].every(stage => app.calls.includes(stage)), "dispatch stages");
     assert(doc.querySelector("#circle-tool").textContent !== "Custom circle", "editors share no overrides");
   } finally { other.remove(); }
 });

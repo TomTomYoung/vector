@@ -159,28 +159,15 @@ class JoinTool extends BaseTool {
       return;
     }
 
+    const first = this.selectedElements[0];
+    const polyline = this.draw("polyline", {points: orderedPoints});
+    window.SvgUtils.setAttributes(polyline, {
+      stroke: first.getAttribute("stroke"), "stroke-width": first.getAttribute("stroke-width"),
+      fill: "none", "data-layer": first.getAttribute("data-layer"),
+    });
+
     this.saveState();
-
-    // 元の要素の属性を取得（最初の要素から）
-    const firstElement = this.selectedElements[0];
-    const stroke = firstElement.getAttribute("stroke");
-    const strokeWidth = firstElement.getAttribute("stroke-width");
-    const layerId = firstElement.getAttribute("data-layer");
-
-    // 元の要素を削除
-    this.selectedElements.forEach((el) => {
-      el.parentNode.removeChild(el);
-    });
-
-    // 新しいポリラインを作成（SvgUtils.createElement を使用）
-    const polyline = window.SvgUtils.createElement("polyline", {
-      points: orderedPoints.map((p) => `${p.x},${p.y}`).join(" "),
-      stroke: stroke,
-      "stroke-width": strokeWidth,
-      fill: "none",
-      "data-layer": layerId
-    });
-
+    this.selectedElements.forEach(el => el.remove());
     this.canvas.appendChild(polyline);
     this.clearSelection();
     this.updatePanel();
