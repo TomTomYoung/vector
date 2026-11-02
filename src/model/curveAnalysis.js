@@ -18,7 +18,10 @@ export function splitBezier({points, t}, ops = {}) {
 
 export function subBezier({points, from, to}, ops = {}) {
   if (!points.length || !validT(from) || !validT(to)) return null;
-  if (from === to) return points.map(() => deCasteljau(points, from));
+  if (from === to) {
+    const point = deCasteljau(points, from);
+    return points.map(() => ({...point}));
+  }
   const lo = Math.min(from, to), hi = Math.max(from, to);
   const split = ops.splitBezier ?? splitBezier;
   const left = split({points, t: hi}, ops).left;

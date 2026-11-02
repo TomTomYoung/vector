@@ -269,3 +269,20 @@ test("Delaunay triangles cover the hull, use original unique sites and have empt
   }
   assert.deepEqual(run("delaunayTriangles", {points: [o, p(1, 1), p(3, 3), o]}), []);
 });
+
+test("orientation and incircle leaves can be reused and replaced in hull and mesh calls", async () => {
+  const {orientation, insideCircle} = await import("../src/model/predicates.js");
+  const points = [o, p(6,0), p(3,4), p(0,3)];
+  assert.equal(orientation(...points.slice(0,3)), 24);
+  assert.equal(insideCircle(o, p(4,0), p(0,4), p(1,1)), true);
+  assert.equal(insideCircle(o, p(4,0), p(0,4), p(4,4)), false);
+  let turns = 0, circles = 0;
+  const replace = createToolset({operations: {
+    orientation(...args) { turns++; return orientation(...args); },
+    insideCircle(...args) { circles++; return insideCircle(...args); },
+  }});
+  assert.deepEqual(replace("convexHull",{points}),run("convexHull",{points}));
+  assert.ok(turns > 0);
+  assert.deepEqual(replace("delaunayTriangles",{points}),run("delaunayTriangles",{points}));
+  assert.ok(circles > 0);
+});

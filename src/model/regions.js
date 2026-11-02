@@ -21,7 +21,10 @@ function subtractCells(subject, cutters, clip) {
   for (const sides of cutters) {
     const result = [];
     for (const cell of cells) {
-      if (!intersectionOfCell(cell, sides, clip).length) {result.push(cell); continue;}
+      if (!intersectionOfCell(cell, sides, clip).length) {
+        result.push(cell);
+        continue;
+      }
       let inside = cell;
       for (const side of sides) {
         const outside = clip(inside, p => -side(p));

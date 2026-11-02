@@ -1,19 +1,5 @@
-import {crossProduct, displacement} from "../utils/geometry.js";
-
+import {orientation, insideCircle} from "./predicates.js";
 import {convexHull} from "./polygons.js";
-
-const orientation = (a, b, c) => crossProduct(displacement(a, b), displacement(a, c));
-
-// Positive for a point strictly inside a counterclockwise triangle's circumcircle.
-function insideCircle(a, b, c, p) {
-  const u = displacement(p, a), v = displacement(p, b), w = displacement(p, c);
-  const length2 = v => v.x * v.x + v.y * v.y;
-  const uu = length2(u), vv = length2(v), ww = length2(w);
-  const det = uu * crossProduct(v, w) + vv * crossProduct(w, u) + ww * crossProduct(u, v);
-  const magnitude = (a, b) => Math.abs(a.x * b.y) + Math.abs(a.y * b.x);
-  const error = 16 * Number.EPSILON * (uu * magnitude(v, w) + vv * magnitude(w, u) + ww * magnitude(u, v));
-  return det > error;
-}
 
 // Seed with the convex hull, then insert remaining vertices and flip non-Delaunay edges.
 // No synthetic enclosing triangle: skinny input triangles have unbounded circumradii.
@@ -26,7 +12,7 @@ export function delaunayTriangles({points}, ops = {}) {
     if (!unique.has(key)) unique.set(key, i);
   }
   const indices = [...unique.values()];
-  const hull = (ops.convexHull ?? convexHull)({points: indices.map(i => points[i])}).map(p => unique.get(p.x + "," + p.y));
+  const hull = (ops.convexHull ?? convexHull)({points: indices.map(i => points[i])}, ops).map(p => unique.get(p.x + "," + p.y));
   if (hull.length < 3) return [];
   let triangles = [];
   function add(a, b, c) {
@@ -55,7 +41,10 @@ export function delaunayTriangles({points}, ops = {}) {
       for (let j = 0; j < 3; j++) {
         const a = tri[j], b = tri[(j + 1) % 3], c = tri[(j + 2) % 3], key = Math.min(a, b) + "," + Math.max(a, b);
         const neighbor = edges.get(key);
-        if (!neighbor) {edges.set(key, {index: i, opposite: c}); continue;}
+        if (!neighbor) {
+          edges.set(key, {index: i, opposite: c});
+          continue;
+        }
         const d = neighbor.opposite;
         if (orient(points[c], points[d], points[b]) <= 0 || orient(points[d], points[c], points[a]) <= 0 ||
           !inCircle(points[a], points[b], points[c], points[d])) continue;

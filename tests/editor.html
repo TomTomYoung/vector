@@ -314,17 +314,25 @@ await check("Workbench selects real examples, reports invalid JSON and runs the 
     get("run").click();
     get("stop").click();
     assert(status.textContent.includes("中止") && get("stop").disabled, "worker cancelled");
-    const done = new Promise(resolve => {
+    function completed() { return new Promise(resolve => {
       const observer = new MutationObserver(() => {
         if (status.textContent === "計算中…") return;
         observer.disconnect();
         resolve();
       });
       observer.observe(status, {childList:true});
-    });
+    }); }
+    const done = completed();
     get("run").click();
     await done;
     assert(status.textContent === "完了" && JSON.parse(get("output").textContent).length > 0, "region difference returned");
+    select.value = "translationMatrix";
+    select.dispatchEvent(new Event("change"));
+    input.value = '{"dx":1}';
+    const missingValue = completed();
+    get("run").click();
+    await missingValue;
+    assert(status.textContent.includes("必須項目") && !get("output").textContent, "missing matrix coefficient reported");
   } finally { other.remove(); }
 });
 result.textContent = reports.join("\n");

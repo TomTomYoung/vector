@@ -42,7 +42,7 @@ function execute() {
     current.onmessage = ({data}) => {
       if (worker !== current) return;
       if (data.error) finish("入力を確認してください。 " + data.error);
-      else finish("完了", JSON.stringify(data.value, null, 2));
+      else finish("完了", data.json);
     };
     current.onerror = event => { if (worker === current) finish("演算を実行できません。 " + event.message); };
     status.textContent = "計算中…";

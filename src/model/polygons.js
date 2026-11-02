@@ -1,10 +1,10 @@
+import {orientation} from "./predicates.js";
 import {clipCell} from "./clipCell.js";
 import {displacement, crossProduct} from "../utils/geometry.js";
 import {signedArea} from "./measurements.js";
 import {segmentContact} from "./intersections.js";
 
 const same = (a, b) => a.x === b.x && a.y === b.y;
-const turn = (a, b, c) => crossProduct(displacement(a, b), displacement(a, c));
 const between = (a, b, p) => p.x >= Math.min(a.x, b.x) && p.x <= Math.max(a.x, b.x) &&
   p.y >= Math.min(a.y, b.y) && p.y <= Math.max(a.y, b.y);
 
@@ -46,7 +46,8 @@ export function polygonCentroid({points}) {
   return sum === 0 ? null : {x: o.x + x / (3 * sum), y: o.y + y / (3 * sum)};
 }
 
-export function classifyPointInPolygon({point, points, rule = "evenOdd"}) {
+export function classifyPointInPolygon({point, points, rule = "evenOdd"}, ops = {}) {
+  const turn = ops.orientation ?? orientation;
   if (rule !== "evenOdd" && rule !== "nonzero") throw new RangeError("Unknown fill rule");
   let winding = 0;
   for (let i = 0; i < points.length; i++) {
@@ -58,7 +59,8 @@ export function classifyPointInPolygon({point, points, rule = "evenOdd"}) {
   return (rule === "evenOdd" ? winding % 2 !== 0 : winding !== 0) ? "inside" : "outside";
 }
 
-export function convexHull({points}) {
+export function convexHull({points}, ops = {}) {
+  const turn = ops.orientation ?? orientation;
   const sorted = [...points].sort((a, b) => a.x - b.x || a.y - b.y).filter((p, i, arr) => !i || !same(p, arr[i - 1]));
   if (sorted.length <= 2) return sorted;
   function chain(sequence) {
@@ -91,6 +93,7 @@ export function isSimplePolygon({points}, ops = {}) {
 }
 
 export function isConvexPolygon({points}, ops = {}) {
+  const turn = ops.orientation ?? orientation;
   const ring = openRing(points);
   if (!(ops.isSimplePolygon ?? isSimplePolygon)({points: ring}, ops)) return false;
   const sign = Math.sign(signedArea({points: ring}));
@@ -98,6 +101,7 @@ export function isConvexPolygon({points}, ops = {}) {
 }
 
 export function triangulatePolygon({points}, ops = {}) {
+  const turn = ops.orientation ?? orientation;
   const ring = openRing(points);
   if (!(ops.isSimplePolygon ?? isSimplePolygon)({points: ring}, ops)) return null;
   const sign = Math.sign(signedArea({points: ring})), triangles = [];
@@ -120,6 +124,7 @@ export function triangulatePolygon({points}, ops = {}) {
 }
 
 export function intersectConvexPolygons({first, second}, ops = {}) {
+  const turn = ops.orientation ?? orientation;
   const valid = ops.isConvexPolygon ?? isConvexPolygon;
   if (!valid({points: first}, ops) || !valid({points: second}, ops)) return null;
   let output = openRing(first);
