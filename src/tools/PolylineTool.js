@@ -184,8 +184,7 @@ class PolylineTool extends BaseTool {
   updatePolyline() {
     if (!this.currentPolyline) return;
 
-    const pointsStr = this.points.map((p) => `${p.x},${p.y}`).join(" ");
-    this.currentPolyline.setAttribute("points", pointsStr);
+    this.draw("polyline", {points: this.points}, this.currentPolyline);
   }
 
   updatePreview(previewPoint) {
@@ -202,15 +201,7 @@ class PolylineTool extends BaseTool {
 
     const lastPoint = this.points[this.points.length - 1];
 
-    let endPoint = previewPoint;
-    if (window.orthoMode) {
-      endPoint = window.CoordinatesUtils.snapToOrtho(lastPoint, previewPoint);
-    }
-
-    this.previewLine.setAttribute("x1", lastPoint.x);
-    this.previewLine.setAttribute("y1", lastPoint.y);
-    this.previewLine.setAttribute("x2", endPoint.x);
-    this.previewLine.setAttribute("y2", endPoint.y);
+    this.draw("line", {start: lastPoint, end: previewPoint, ortho: window.orthoMode}, this.previewLine);
   }
 
   finishPolyline() {
@@ -241,17 +232,17 @@ class PolylineTool extends BaseTool {
 
     if (finishedPolyline && this.autoSelectAfterDraw) {
       if (
-        window.toolManager &&
-        typeof window.toolManager.activateTemporaryTool === "function"
+        this.toolManager &&
+        typeof this.toolManager.activateTemporaryTool === "function"
       ) {
-        window.toolManager.activateTemporaryTool("select", {
+        this.toolManager.activateTemporaryTool("select", {
           restoreTriggers: ["deselect", "cancel"],
         });
       }
 
       this.selectPolyline(finishedPolyline);
-      if (window.selectTool) {
-        window.selectTool.selectObject(finishedPolyline);
+      if (this.selectTool) {
+        this.selectTool.selectObject(finishedPolyline);
       }
     }
 
@@ -973,11 +964,11 @@ class PolylineTool extends BaseTool {
       return;
     }
 
-    if (window.selectTool) {
-      if (typeof window.selectTool.refreshHandles === "function") {
-        window.selectTool.refreshHandles();
-      } else if (typeof window.selectTool.addControlPoints === "function") {
-        window.selectTool.addControlPoints();
+    if (this.selectTool) {
+      if (typeof this.selectTool.refreshHandles === "function") {
+        this.selectTool.refreshHandles();
+      } else if (typeof this.selectTool.addControlPoints === "function") {
+        this.selectTool.addControlPoints();
       }
     }
 
@@ -1053,10 +1044,10 @@ class PolylineTool extends BaseTool {
       this.selectionInteractionInProgress = false;
       this.disconnectSelectedPolylineObserver();
       if (
-        window.selectTool &&
-        typeof window.selectTool.deselectObject === "function"
+        this.selectTool &&
+        typeof this.selectTool.deselectObject === "function"
       ) {
-        window.selectTool.deselectObject();
+        this.selectTool.deselectObject();
       }
       this.requestToolPanelRefresh();
       return;
@@ -1066,8 +1057,8 @@ class PolylineTool extends BaseTool {
     this.selectedPolylineId = polylineId;
     this.selectionInteractionInProgress = false;
 
-    if (window.selectTool && typeof window.selectTool.selectObject === "function") {
-      window.selectTool.selectObject(polyline, false);
+    if (this.selectTool && typeof this.selectTool.selectObject === "function") {
+      this.selectTool.selectObject(polyline, false);
     }
 
     this.observeSelectedPolyline(polyline);
@@ -1244,13 +1235,13 @@ class PolylineTool extends BaseTool {
   }
 
   delegateSelectionEvent(methodName, event) {
-    if (!window.selectTool) {
+    if (!this.selectTool) {
       return false;
     }
 
-    const handler = window.selectTool[methodName];
+    const handler = this.selectTool[methodName];
     if (typeof handler === "function") {
-      handler.call(window.selectTool, event);
+      handler.call(this.selectTool, event);
       return true;
     }
 

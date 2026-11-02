@@ -11,24 +11,8 @@
  */
 
 import { createElement } from './svg.js';
-
-function clonePoint(point) {
-  return { x: Number(point.x), y: Number(point.y) };
-}
-
-function deCasteljau(points, t) {
-  let work = points.map(clonePoint);
-  const last = work.length - 1;
-  for (let r = 1; r <= last; r += 1) {
-    for (let i = 0; i <= last - r; i += 1) {
-      work[i] = {
-        x: (1 - t) * work[i].x + t * work[i + 1].x,
-        y: (1 - t) * work[i].y + t * work[i + 1].y,
-      };
-    }
-  }
-  return work[0];
-}
+import { sampleBezierPoints } from '../model/bezier.js';
+export { sampleBezierPoints };
 
 function toMoveLinePath(points) {
   if (!points || points.length === 0) {
@@ -55,24 +39,6 @@ export function cubicPath(points) {
   }
   const [p0, p1, p2, p3] = points;
   return `M ${p0.x} ${p0.y} C ${p1.x} ${p1.y} ${p2.x} ${p2.y} ${p3.x} ${p3.y}`;
-}
-
-export function sampleBezierPoints(points, sampleCount = 60, degreeOverride) {
-  if (!points || points.length < 2) {
-    return [];
-  }
-  const degree = degreeOverride ?? points.length - 1;
-  if (degree < 1) {
-    return [];
-  }
-  const controlPoints = points.slice(0, degree + 1).map(clonePoint);
-  const steps = Math.max(2, Math.floor(sampleCount));
-  const result = [];
-  for (let i = 0; i <= steps; i += 1) {
-    const t = i / steps;
-    result.push(deCasteljau(controlPoints, t));
-  }
-  return result;
 }
 
 export function bezierNPath(points, options = {}) {

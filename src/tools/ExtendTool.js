@@ -141,7 +141,7 @@ class ExtendTool extends BaseTool {
   }
 
   extendElement(element) {
-    window.VectorUtils.linearEditing.extend(element, this.canvas, this.boundaryEdges);
+    this.editOutline("extend", element, this.boundaryEdges);
   }
 
   handleKeyDown(event) {

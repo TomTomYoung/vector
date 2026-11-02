@@ -94,15 +94,12 @@ class BezierToolBase extends BaseTool {
     }
   }
 
-  buildPathData(points, allowPartial = false) {
-    const bezier = window.VectorUtils?.bezier;
-    if (!bezier) {
-      return '';
-    }
-    if (!allowPartial && points.length < this.getRequiredPoints()) {
-      return '';
-    }
-    return bezier.buildPathData(this.method, points, this.getBezierParams());
+  drawCurve(points, allowPartial = false) {
+    if (!allowPartial && points.length < this.getRequiredPoints()) return null;
+    const name = this.method === "bezierN" ? "nthBezier" : this.method;
+    const params = this.getBezierParams();
+    const degree = allowPartial && params.degree ? Math.min(params.degree, points.length - 1) : params.degree;
+    return this.draw(name, {points, degree}, null, params);
   }
 
   updatePreview(pointerPoint = null) {
@@ -119,13 +116,9 @@ class BezierToolBase extends BaseTool {
       return;
     }
 
-    const pathData = this.buildPathData(targetPoints, true);
-    if (!pathData) {
-      return;
-    }
-
-    this.previewElement = window.SvgUtils.createElement('path', {
-      d: pathData,
+    this.previewElement = this.drawCurve(targetPoints, true);
+    if (!this.previewElement) return;
+    window.SvgUtils.setAttributes(this.previewElement, {
       stroke: this.currentStyle.stroke,
       'stroke-width': this.currentStyle.strokeWidth,
       fill: 'none',
@@ -136,13 +129,12 @@ class BezierToolBase extends BaseTool {
   }
 
   commitCurve() {
-    const pathData = this.buildPathData(this.points);
-    if (!pathData) {
+    const element = this.drawCurve(this.points);
+    if (!element) {
       this.resetDrawing();
       return;
     }
 
-    const element = window.SvgUtils.createElement('path', { d: pathData });
     this.applyDefaultAttributes(element);
     if (this.toolAttribute) {
       element.setAttribute(this.toolAttribute, 'true');

@@ -231,3 +231,24 @@ export function pointSide(point, line) {
   const { x1, y1, x2, y2 } = line;
   return (x2 - x1) * (point.y - y1) - (y2 - y1) * (point.x - x1);
 }
+
+/**
+ * 座標を直交（水平・垂直）にスナップ
+ * 開始点から現在点への方向が水平か垂直かを判定し、
+ * より近い方向に拘束する
+ * @param {Object} startPoint - 開始点 {x, y}
+ * @param {Object} currentPoint - 現在点 {x, y}
+ * @returns {Object} 直交スナップされた座標 {x, y}
+ */
+export function snapToOrtho(startPoint, currentPoint) {
+  const dx = Math.abs(currentPoint.x - startPoint.x);
+  const dy = Math.abs(currentPoint.y - startPoint.y);
+
+  if (dx > dy) {
+    // 水平方向に拘束
+    return { x: currentPoint.x, y: startPoint.y };
+  } else {
+    // 垂直方向に拘束
+    return { x: startPoint.x, y: currentPoint.y };
+  }
+}

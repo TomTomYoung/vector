@@ -8,7 +8,8 @@
 // - CoordinatesUtils.snapToGrid(point, gridSize): グリッドスナップ
 
 class ToolManager {
-  constructor(canvas) {
+  constructor(canvas, host = window.VectorUtils.createEditorHost()) {
+    this.host = host;
     this.canvas = canvas;
     this.svgNS = "http://www.w3.org/2000/svg";
     this.tools = {};
@@ -194,7 +195,8 @@ class ToolManager {
   }
 
   getMousePosition(event) {
-    return window.CoordinatesUtils.getMousePositionInSVG(this.canvas, event);
+    const {x, y} = this.host.readPoint(this.canvas, event);
+    return {x, y};
   }
 
   // グリッドへのスナップ

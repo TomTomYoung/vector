@@ -145,7 +145,7 @@ class TrimTool extends BaseTool {
   }
 
   trimElement(element, clickPoint) {
-    window.VectorUtils.linearEditing.trim(element, this.canvas, this.cuttingEdges, clickPoint);
+    this.editOutline("trim", element, this.cuttingEdges, clickPoint);
   }
 
   handleKeyDown(event) {

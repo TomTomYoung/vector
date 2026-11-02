@@ -15,7 +15,7 @@ jobs:
         with:
           node-version: 24
       - name: Geometry
-        run: node --test tests/linearEditing.test.mjs
+        run: node --test tests/*.test.mjs
       - name: Browser interactions
         shell: bash
         run: |

@@ -83,7 +83,7 @@ class SplitTool extends BaseTool {
 
     const clickPoint = this.getMousePosition(event);
 
-    window.VectorUtils.linearEditing.split(event.target, this.canvas, clickPoint);
+    this.editOutline("split", event.target, [], clickPoint);
     this.updatePanel();
   }
 }

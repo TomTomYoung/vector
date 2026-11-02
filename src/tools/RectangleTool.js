@@ -158,18 +158,7 @@ class RectangleTool extends BaseTool {
       return;
     }
 
-    const width = currentPoint.x - this.startPoint.x;
-    const height = currentPoint.y - this.startPoint.y;
-
-    const x = width < 0 ? currentPoint.x : this.startPoint.x;
-    const y = height < 0 ? currentPoint.y : this.startPoint.y;
-    const w = Math.abs(width);
-    const h = Math.abs(height);
-
-    this.drawingObject.setAttribute("x", x);
-    this.drawingObject.setAttribute("y", y);
-    this.drawingObject.setAttribute("width", w);
-    this.drawingObject.setAttribute("height", h);
+    this.draw("rectangle", {start: this.startPoint, end: currentPoint}, this.drawingObject);
   }
 
   finishRectangle() {
@@ -195,17 +184,17 @@ class RectangleTool extends BaseTool {
 
     if (finishedRectangle && this.autoSelectAfterDraw) {
       if (
-        window.toolManager &&
-        typeof window.toolManager.activateTemporaryTool === "function"
+        this.toolManager &&
+        typeof this.toolManager.activateTemporaryTool === "function"
       ) {
-        window.toolManager.activateTemporaryTool("select", {
+        this.toolManager.activateTemporaryTool("select", {
           restoreTriggers: ["deselect", "cancel"],
         });
       }
 
       this.selectRectangle(finishedRectangle);
-      if (window.selectTool) {
-        window.selectTool.selectObject(finishedRectangle, false);
+      if (this.selectTool) {
+        this.selectTool.selectObject(finishedRectangle, false);
       }
     }
 
@@ -975,11 +964,11 @@ class RectangleTool extends BaseTool {
       return;
     }
 
-    if (window.selectTool) {
-      if (typeof window.selectTool.refreshHandles === "function") {
-        window.selectTool.refreshHandles();
-      } else if (typeof window.selectTool.addControlPoints === "function") {
-        window.selectTool.addControlPoints();
+    if (this.selectTool) {
+      if (typeof this.selectTool.refreshHandles === "function") {
+        this.selectTool.refreshHandles();
+      } else if (typeof this.selectTool.addControlPoints === "function") {
+        this.selectTool.addControlPoints();
       }
     }
 
@@ -1092,10 +1081,10 @@ class RectangleTool extends BaseTool {
       this.selectionInteractionInProgress = false;
       this.disconnectSelectedRectangleObserver();
       if (
-        window.selectTool &&
-        typeof window.selectTool.deselectObject === "function"
+        this.selectTool &&
+        typeof this.selectTool.deselectObject === "function"
       ) {
-        window.selectTool.deselectObject();
+        this.selectTool.deselectObject();
       }
       this.requestToolPanelRefresh();
       return;
@@ -1105,8 +1094,8 @@ class RectangleTool extends BaseTool {
     this.selectedRectangleId = rectangleId;
     this.selectionInteractionInProgress = false;
 
-    if (window.selectTool && typeof window.selectTool.selectObject === "function") {
-      window.selectTool.selectObject(rectangle, false);
+    if (this.selectTool && typeof this.selectTool.selectObject === "function") {
+      this.selectTool.selectObject(rectangle, false);
     }
 
     this.observeSelectedRectangle(rectangle);
@@ -1255,13 +1244,13 @@ class RectangleTool extends BaseTool {
   }
 
   delegateSelectionEvent(methodName, event) {
-    if (!window.selectTool) {
+    if (!this.selectTool) {
       return false;
     }
 
-    const handler = window.selectTool[methodName];
+    const handler = this.selectTool[methodName];
     if (typeof handler === "function") {
-      handler.call(window.selectTool, event);
+      handler.call(this.selectTool, event);
       return true;
     }
 

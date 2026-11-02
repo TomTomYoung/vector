@@ -87,45 +87,20 @@ class SplineTool extends BaseTool {
   }
 
   updatePreview(previewPoint) {
-    if (this.currentSpline) {
-      this.canvas.removeChild(this.currentSpline);
-    }
-
-    const allPoints = [...this.points, previewPoint];
-    if (allPoints.length < 2) return;
-
-    const pathData = this.generateSplinePath(allPoints);
-    if (!pathData) return;
-
-    // プレビュー用パス作成（SvgUtils.createElement を使用）
-    this.currentSpline = window.SvgUtils.createElement("path", {
-      d: pathData,
-      stroke: this.currentStyle.stroke,
-      "stroke-width": this.currentStyle.strokeWidth,
-      fill: "none",
-      opacity: this.currentStyle.opacity,
-      "stroke-dasharray": "3,3"
-    });
-    this.canvas.appendChild(this.currentSpline);
+    this.drawSpline([...this.points, previewPoint], true);
   }
 
   updateSpline() {
-    if (this.currentSpline) {
-      this.canvas.removeChild(this.currentSpline);
-    }
+    this.drawSpline(this.points, false);
+  }
 
-    if (this.points.length < 2) return;
-
-    const pathData = this.generateSplinePath(this.points);
-    if (!pathData) return;
-
-    // スプラインパス作成（SvgUtils.createElement を使用）
-    this.currentSpline = window.SvgUtils.createElement("path", {
-      d: pathData,
-      stroke: this.currentStyle.stroke,
-      "stroke-width": this.currentStyle.strokeWidth,
-      fill: "none",
-      opacity: this.currentStyle.opacity
+  drawSpline(points, preview) {
+    this.currentSpline?.remove();
+    this.currentSpline = this.draw("spline", {points});
+    if (!this.currentSpline) return;
+    window.SvgUtils.setAttributes(this.currentSpline, {
+      stroke: this.currentStyle.stroke, "stroke-width": this.currentStyle.strokeWidth,
+      fill: "none", opacity: this.currentStyle.opacity, "stroke-dasharray": preview ? "3,3" : null,
     });
     this.canvas.appendChild(this.currentSpline);
   }
@@ -157,37 +132,6 @@ class SplineTool extends BaseTool {
     this.isDrawing = false;
 
     this.updatePanel();
-  }
-
-  generateSplinePath(points) {
-    if (points.length < 2) return null;
-
-    if (points.length === 2) {
-      // 2点の場合は直線
-      return `M ${points[0].x} ${points[0].y} L ${points[1].x} ${points[1].y}`;
-    }
-
-    // Catmull-Rom スプライン
-    let path = `M ${points[0].x} ${points[0].y}`;
-
-    for (let i = 0; i < points.length - 1; i++) {
-      const p0 = i > 0 ? points[i - 1] : points[i];
-      const p1 = points[i];
-      const p2 = points[i + 1];
-      const p3 = i < points.length - 2 ? points[i + 2] : points[i + 1];
-
-      // Catmull-Rom スプラインの制御点を計算
-      const tension = 0.5; // 張力（0.5が標準的）
-
-      const cp1x = p1.x + (p2.x - p0.x) * tension / 6;
-      const cp1y = p1.y + (p2.y - p0.y) * tension / 6;
-      const cp2x = p2.x - (p3.x - p1.x) * tension / 6;
-      const cp2y = p2.y - (p3.y - p1.y) * tension / 6;
-
-      path += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y}`;
-    }
-
-    return path;
   }
 
   handleKeyDown(event) {

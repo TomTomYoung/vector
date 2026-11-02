@@ -149,122 +149,28 @@ class JoinTool extends BaseTool {
     }
 
     // 全ての要素を点の配列に変換
-    const segments = this.selectedElements.map((el) => this.elementToPoints(el));
+    const segments = this.selectedElements.map(el => window.VectorUtils.linearEditing.outline(el, this.canvas)?.points ?? []);
 
     // 連結された線を見つけて順序付け
-    const orderedPoints = this.orderSegments(segments);
+    const orderedPoints = this.run("join", {segments});
 
     if (orderedPoints.length === 0) {
       console.log("選択した線は連結されていません");
       return;
     }
 
+    const first = this.selectedElements[0];
+    const polyline = this.draw("polyline", {points: orderedPoints});
+    window.SvgUtils.setAttributes(polyline, {
+      stroke: first.getAttribute("stroke"), "stroke-width": first.getAttribute("stroke-width"),
+      fill: "none", "data-layer": first.getAttribute("data-layer"),
+    });
+
     this.saveState();
-
-    // 元の要素の属性を取得（最初の要素から）
-    const firstElement = this.selectedElements[0];
-    const stroke = firstElement.getAttribute("stroke");
-    const strokeWidth = firstElement.getAttribute("stroke-width");
-    const layerId = firstElement.getAttribute("data-layer");
-
-    // 元の要素を削除
-    this.selectedElements.forEach((el) => {
-      el.parentNode.removeChild(el);
-    });
-
-    // 新しいポリラインを作成（SvgUtils.createElement を使用）
-    const polyline = window.SvgUtils.createElement("polyline", {
-      points: orderedPoints.map((p) => `${p.x},${p.y}`).join(" "),
-      stroke: stroke,
-      "stroke-width": strokeWidth,
-      fill: "none",
-      "data-layer": layerId
-    });
-
+    this.selectedElements.forEach(el => el.remove());
     this.canvas.appendChild(polyline);
     this.clearSelection();
     this.updatePanel();
-  }
-
-  elementToPoints(element) {
-    if (element.tagName === "line") {
-      return [
-        {
-          x: parseFloat(element.getAttribute("x1")),
-          y: parseFloat(element.getAttribute("y1")),
-        },
-        {
-          x: parseFloat(element.getAttribute("x2")),
-          y: parseFloat(element.getAttribute("y2")),
-        },
-      ];
-    } else if (element.tagName === "polyline") {
-      const pointsStr = element.getAttribute("points").trim();
-      return pointsStr.split(/\s+/).map((p) => {
-        const [x, y] = p.split(",");
-        return { x: parseFloat(x), y: parseFloat(y) };
-      });
-    }
-    return [];
-  }
-
-  orderSegments(segments) {
-    if (segments.length === 0) return [];
-
-    const tolerance = 0.1; // 端点が一致するための許容誤差
-
-    // 最初のセグメントから始める
-    let orderedPoints = [...segments[0]];
-    let usedIndices = [0];
-    let changed = true;
-
-    while (changed && usedIndices.length < segments.length) {
-      changed = false;
-
-      for (let i = 0; i < segments.length; i++) {
-        if (usedIndices.includes(i)) continue;
-
-        const segment = segments[i];
-        const firstPoint = orderedPoints[0];
-        const lastPoint = orderedPoints[orderedPoints.length - 1];
-
-        // セグメントの始点が現在の終点と一致するか（GeometryUtils.distance を使用）
-        if (window.GeometryUtils.distance(lastPoint, segment[0]) < tolerance) {
-          orderedPoints.push(...segment.slice(1));
-          usedIndices.push(i);
-          changed = true;
-          break;
-        }
-        // セグメントの終点が現在の終点と一致するか
-        else if (window.GeometryUtils.distance(lastPoint, segment[segment.length - 1]) < tolerance) {
-          orderedPoints.push(...segment.slice(0, -1).reverse());
-          usedIndices.push(i);
-          changed = true;
-          break;
-        }
-        // セグメントの終点が現在の始点と一致するか
-        else if (window.GeometryUtils.distance(firstPoint, segment[segment.length - 1]) < tolerance) {
-          orderedPoints.unshift(...segment.slice(0, -1));
-          usedIndices.push(i);
-          changed = true;
-          break;
-        }
-        // セグメントの始点が現在の始点と一致するか
-        else if (window.GeometryUtils.distance(firstPoint, segment[0]) < tolerance) {
-          orderedPoints.unshift(...segment.slice(1).reverse());
-          usedIndices.push(i);
-          changed = true;
-          break;
-        }
-      }
-    }
-
-    // 全てのセグメントを使用できなかった場合は失敗
-    if (usedIndices.length < segments.length) {
-      return [];
-    }
-
-    return orderedPoints;
   }
 
   handleKeyDown(event) {
