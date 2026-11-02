@@ -119,9 +119,11 @@ class SnapManager {
 
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
+    checkbox.id = "snap-" + type;
     checkbox.checked = checked;
     checkbox.addEventListener("change", (e) => {
       this.snapEnabled[type] = e.target.checked;
+      if (type === "grid") GridManager.setGridSnap(e.target.checked);
     });
 
     container.appendChild(checkbox);
@@ -181,7 +183,7 @@ class SnapManager {
     }
 
     // グリッドスナップ
-    if (this.snapEnabled.grid && window.snapToGrid) {
+    if (window.snapToGrid) {
       const gridSnap = this.snapToGrid(point, minDistance);
       if (gridSnap) {
         snappedPoint = gridSnap.point;

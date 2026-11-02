@@ -169,6 +169,8 @@ class PolylineTool extends BaseTool {
       fill: "none",
       opacity: this.currentStyle.opacity,
     });
+    this.applyDefaultAttributes(this.currentPolyline);
+    this.currentPolyline.setAttribute("fill", "none");
     this.currentPolyline.setAttribute("data-polyline-tool", "true");
     this.canvas.appendChild(this.currentPolyline);
   }

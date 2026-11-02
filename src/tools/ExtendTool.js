@@ -21,7 +21,7 @@ class ExtendTool extends BaseTool {
 
   getInstructions() {
     if (this.mode === "select") {
-      const base = ["左クリック: 境界となる線・ポリライン・パスを選択"];
+      const base = ["左クリック: 境界となる線・ポリライン・直線だけの開いたパスを選択"];
       if (this.boundaryEdges.length > 0) {
         base.push("Enter: 選択した境界で延長モードに切り替え");
         base.push("再クリック: 境界選択を解除");
@@ -112,20 +112,10 @@ class ExtendTool extends BaseTool {
   }
 
   addBoundaryEdge(element) {
-    if (
-      element.tagName !== "line" &&
-      element.tagName !== "polyline" &&
-      element.tagName !== "path"
-    ) {
-      return;
-    }
+    if (window.VectorUtils.linearEditing.localPoints(element).length < 2) return;
 
     this.boundaryEdges.push(element);
-    element.setAttribute("data-boundary-edge", "true");
-    const originalStroke = element.getAttribute("stroke") || "#000000";
-    element.setAttribute("data-original-stroke", originalStroke);
-    element.setAttribute("stroke", "#00ff00");
-    element.setAttribute("stroke-width", "2");
+    element.setAttribute("data-vector-highlight", "extend");
 
     this.updatePanel();
   }
@@ -136,18 +126,13 @@ class ExtendTool extends BaseTool {
       this.boundaryEdges.splice(index, 1);
     }
 
-    if (element.hasAttribute("data-boundary-edge")) {
-      const originalStroke = element.getAttribute("data-original-stroke");
-      element.setAttribute("stroke", originalStroke);
-      element.removeAttribute("data-boundary-edge");
-      element.removeAttribute("data-original-stroke");
-    }
+    element.removeAttribute("data-vector-highlight");
 
     this.updatePanel();
   }
 
   clearBoundaryEdges() {
-    this.boundaryEdges.forEach((edge) => {
+    [...this.boundaryEdges].forEach((edge) => {
       this.removeBoundaryEdge(edge);
     });
     this.boundaryEdges = [];
@@ -156,116 +141,7 @@ class ExtendTool extends BaseTool {
   }
 
   extendElement(element) {
-    if (this.boundaryEdges.length === 0) return;
-    if (this.boundaryEdges.includes(element)) return; // 境界辺自体は延長しない
-
-    if (element.tagName === "line") {
-      this.extendLine(element);
-    }
-  }
-
-  extendLine(line) {
-    const x1 = parseFloat(line.getAttribute("x1"));
-    const y1 = parseFloat(line.getAttribute("y1"));
-    const x2 = parseFloat(line.getAttribute("x2"));
-    const y2 = parseFloat(line.getAttribute("y2"));
-
-    // 線分の方向ベクトル（GeometryUtils.vectorLength を使用）
-    const dx = x2 - x1;
-    const dy = y2 - y1;
-    const len = window.GeometryUtils.vectorLength({ x: dx, y: dy });
-    const dirX = dx / len;
-    const dirY = dy / len;
-
-    // 両端を無限に延長した場合の境界辺との交点を探す
-    let bestStart = null;
-    let bestEnd = null;
-    let minDistStart = Infinity;
-    let minDistEnd = Infinity;
-
-    this.boundaryEdges.forEach((edge) => {
-      if (edge.tagName === "line") {
-        const ex1 = parseFloat(edge.getAttribute("x1"));
-        const ey1 = parseFloat(edge.getAttribute("y1"));
-        const ex2 = parseFloat(edge.getAttribute("x2"));
-        const ey2 = parseFloat(edge.getAttribute("y2"));
-
-        // 無限延長線との交点を計算
-        const intersection = this.lineLineIntersectionInfinite(
-          { x: x1, y: y1 },
-          { x: x2, y: y2 },
-          { x: ex1, y: ey1 },
-          { x: ex2, y: ey2 }
-        );
-
-        if (intersection) {
-          // 交点が線分のどちら側にあるか判定
-          const toIntersection = {
-            x: intersection.x - x1,
-            y: intersection.y - y1,
-          };
-          const dot = toIntersection.x * dirX + toIntersection.y * dirY;
-
-          if (dot < 0) {
-            // 始点側（GeometryUtils.distance を使用）
-            const dist = window.GeometryUtils.distance(intersection, { x: x1, y: y1 });
-            if (dist < minDistStart) {
-              minDistStart = dist;
-              bestStart = intersection;
-            }
-          } else if (dot > len) {
-            // 終点側（GeometryUtils.distance を使用）
-            const dist = window.GeometryUtils.distance(intersection, { x: x2, y: y2 });
-            if (dist < minDistEnd) {
-              minDistEnd = dist;
-              bestEnd = intersection;
-            }
-          }
-        }
-      }
-    });
-
-    // 延長を適用
-    if (bestStart || bestEnd) {
-      this.saveState();
-
-      if (bestStart) {
-        line.setAttribute("x1", bestStart.x);
-        line.setAttribute("y1", bestStart.y);
-      }
-      if (bestEnd) {
-        line.setAttribute("x2", bestEnd.x);
-        line.setAttribute("y2", bestEnd.y);
-      }
-    }
-  }
-
-  // 2直線の交点を計算（無限延長）
-  lineLineIntersectionInfinite(p1, p2, p3, p4) {
-    const x1 = p1.x,
-      y1 = p1.y;
-    const x2 = p2.x,
-      y2 = p2.y;
-    const x3 = p3.x,
-      y3 = p3.y;
-    const x4 = p4.x,
-      y4 = p4.y;
-
-    const denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
-    if (Math.abs(denom) < 0.0001) return null; // 平行
-
-    const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom;
-    const u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / denom;
-
-    // 境界辺は線分範囲内、延長する線は無限延長
-    if (u >= 0 && u <= 1) {
-      return {
-        x: x1 + t * (x2 - x1),
-        y: y1 + t * (y2 - y1),
-      };
-    }
-
-    return null;
+    window.VectorUtils.linearEditing.extend(element, this.canvas, this.boundaryEdges);
   }
 
   handleKeyDown(event) {

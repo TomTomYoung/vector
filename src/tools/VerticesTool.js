@@ -43,6 +43,33 @@ class VerticesTool extends BaseTool {
     this.createIndice({ method: "polyline" });
   }
 
+  static isValidModel(model) {
+    if (!model || !Array.isArray(model.vectors) || !Array.isArray(model.indices)) return false;
+    const ids = new Set();
+    return model.vectors.every(p => Number.isFinite(p?.x) && Number.isFinite(p?.y)) &&
+      model.indices.every(item => {
+        if (!Number.isSafeInteger(item?.id) || item.id < 1 || ids.has(item.id) ||
+            !Array.isArray(item.points) || !item.points.every(i => Number.isInteger(i) && i >= 0 && i < model.vectors.length)) return false;
+        ids.add(item.id);
+        return ["line", "polyline", "polygon", "quadraticBezier", "cubicBezier", "bezierN"].includes(item.method);
+      });
+  }
+
+  restoreModel(model) {
+    this.verticesObject = model || {vectors: [], indices: []};
+    if (!this.verticesObject.indices.length) {
+      this.verticesObject.indices.push({id: 1, label: "Indice 1", method: "polyline", points: [], params: {closed: false}});
+    }
+    this.nextIndiceId = this.verticesObject.indices.reduce((max, item) => Math.max(max, item.id), 0) + 1;
+    this.selectedIndiceId = this.verticesObject.indices[0].id;
+    this.isDraggingHandle = false;
+    this.draggingHandleIndex = null;
+    this.handleElements = this.verticesObject.vectors.map((point, index) => this.createHandleElement(point, index));
+    this.handleLayer.replaceChildren(...this.handleElements);
+    this.geometryElements = Array.from(this.canvas.querySelectorAll("[data-vector-indice]"));
+    this.updateHandleSelectionStyles();
+  }
+
   getTitle() {
     return "Vertices";
   }
@@ -721,6 +748,7 @@ class VerticesTool extends BaseTool {
     this.verticesObject.indices.forEach((indice) => {
       const element = this.createGeometryElement(indice);
       if (element) {
+        element.setAttribute("data-vector-indice", indice.id);
         this.canvas.appendChild(element);
         this.geometryElements.push(element);
       }

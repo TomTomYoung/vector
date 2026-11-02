@@ -92,10 +92,7 @@ class ChamferTool extends BaseTool {
     } else if (this.selectedLines.length < 2) {
       // 新しく選択
       this.selectedLines.push(line);
-      const originalStroke = line.getAttribute("stroke") || "#000000";
-      line.setAttribute("data-original-stroke", originalStroke);
-      line.setAttribute("stroke", "#ff8000");
-      line.setAttribute("stroke-width", "2");
+      line.setAttribute("data-vector-highlight", "chamfer");
 
       // パネルを更新
       this.updatePanel();
@@ -117,19 +114,13 @@ class ChamferTool extends BaseTool {
     const index = this.selectedLines.indexOf(line);
     if (index > -1) {
       this.selectedLines.splice(index, 1);
-      const originalStroke = line.getAttribute("data-original-stroke");
-      line.setAttribute("stroke", originalStroke);
-      line.removeAttribute("data-original-stroke");
+      line.removeAttribute("data-vector-highlight");
     }
   }
 
   clearSelection() {
     this.selectedLines.forEach((line) => {
-      const originalStroke = line.getAttribute("data-original-stroke");
-      if (originalStroke) {
-        line.setAttribute("stroke", originalStroke);
-        line.removeAttribute("data-original-stroke");
-      }
+      line.removeAttribute("data-vector-highlight");
     });
     this.selectedLines = [];
     this.updatePanel();

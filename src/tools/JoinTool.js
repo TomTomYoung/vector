@@ -109,10 +109,7 @@ class JoinTool extends BaseTool {
 
   selectElement(element) {
     this.selectedElements.push(element);
-    const originalStroke = element.getAttribute("stroke") || "#000000";
-    element.setAttribute("data-original-stroke", originalStroke);
-    element.setAttribute("stroke", "#00ff00");
-    element.setAttribute("stroke-width", "2");
+    element.setAttribute("data-vector-highlight", "join");
 
     this.updateInfo();
     this.updatePanel();
@@ -122,9 +119,7 @@ class JoinTool extends BaseTool {
     const index = this.selectedElements.indexOf(element);
     if (index > -1) {
       this.selectedElements.splice(index, 1);
-      const originalStroke = element.getAttribute("data-original-stroke");
-      element.setAttribute("stroke", originalStroke);
-      element.removeAttribute("data-original-stroke");
+      element.removeAttribute("data-vector-highlight");
     }
 
     this.updateInfo();
@@ -133,11 +128,7 @@ class JoinTool extends BaseTool {
 
   clearSelection() {
     this.selectedElements.forEach((element) => {
-      const originalStroke = element.getAttribute("data-original-stroke");
-      if (originalStroke) {
-        element.setAttribute("stroke", originalStroke);
-        element.removeAttribute("data-original-stroke");
-      }
+      element.removeAttribute("data-vector-highlight");
     });
     this.selectedElements = [];
     this.updateInfo();

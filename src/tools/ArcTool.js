@@ -131,7 +131,8 @@ class ArcTool extends BaseTool {
 
   updateArcPreview(endPoint) {
     if (this.currentArc) {
-      this.canvas.removeChild(this.currentArc);
+      this.currentArc.remove();
+      this.currentArc = null;
     }
 
     const arcData = this.calculateArc(
@@ -168,12 +169,13 @@ class ArcTool extends BaseTool {
     // 状態を保存
     this.saveState();
 
-    // 円弧を確定
-    if (this.currentArc) {
-      this.currentArc.setAttribute("data-layer", window.currentLayerId);
-      this.currentArc.setAttribute("data-arc-tool", "true");
-      this.currentArc = null;
-    }
+    this.currentArc?.remove();
+    const arc = window.SvgUtils.createElement("path", {d: arcData.path});
+    this.applyDefaultAttributes(arc);
+    arc.setAttribute("fill", "none");
+    arc.setAttribute("data-arc-tool", "true");
+    this.canvas.appendChild(arc);
+    this.currentArc = null;
 
     this.points = [];
     if (this.previewCircle) {

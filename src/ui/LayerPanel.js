@@ -47,16 +47,8 @@ class LayerPanel {
           ? Math.max(...window.layers.map((layer) => layer.id)) + 1
           : 1;
 
-      window.layers.push({
-        id: newLayerId,
-        name: `レイヤー ${newLayerId}`,
-        visible: true,
-        locked: false,
-        color: "#000000",
-        lineStyle: "solid",
-        lineWidth: "2",
-      });
-
+      window.layers.push(DrawingDocument.defaultLayer(newLayerId));
+      window.saveState();
       window.currentLayerId = newLayerId;
       this.updateLayerList();
     });
@@ -88,6 +80,7 @@ class LayerPanel {
       visibilityCheckbox.title = "表示/非表示";
       visibilityCheckbox.addEventListener("change", (e) => {
         e.stopPropagation();
+        window.saveState();
         layer.visible = visibilityCheckbox.checked;
         this.updateLayerVisibility();
       });
@@ -103,6 +96,7 @@ class LayerPanel {
       lockBtn.title = layer.locked ? "ロック解除" : "ロック";
       lockBtn.addEventListener("click", (e) => {
         e.stopPropagation();
+        window.saveState();
         layer.locked = !layer.locked;
         this.updateLayerList();
       });
@@ -234,6 +228,7 @@ class LayerPanel {
     const okBtn = document.createElement("button");
     okBtn.textContent = "OK";
     okBtn.addEventListener("click", () => {
+      window.saveState();
       layer.name = nameInput.value;
       layer.color = colorInput.value;
       layer.lineStyle = lineStyleSelect.value;

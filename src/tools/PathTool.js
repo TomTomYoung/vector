@@ -204,6 +204,8 @@ class PathTool extends BaseTool {
         "stroke-width": document.getElementById("stroke-width")?.value || "2",
         "data-layer": window.currentLayerId,
       });
+      this.applyDefaultAttributes(this.currentPath);
+      this.currentPath.setAttribute("fill", "none");
       this.currentPath.setAttribute("data-path-tool", "true");
 
       this.canvas.appendChild(this.currentPath);

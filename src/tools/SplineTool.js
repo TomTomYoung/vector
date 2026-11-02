@@ -79,7 +79,7 @@ class SplineTool extends BaseTool {
     }
   }
 
-  handleDoubleClick(event) {
+  handleDblClick(event) {
     // ダブルクリックで完成
     event.preventDefault();
     this.finishSpline();
@@ -141,7 +141,8 @@ class SplineTool extends BaseTool {
       return;
     }
 
-    // 状態を保存
+    // Commit the clicked points, even if the last move drew a rubber-band preview.
+    this.updateSpline();
     this.saveState();
 
     // スプラインを確定

@@ -97,20 +97,11 @@ class OffsetTool extends BaseTool {
   }
 
   highlightElement(element) {
-    element.setAttribute("data-offset-highlight", "true");
-    const originalStroke = element.getAttribute("stroke") || "#000000";
-    element.setAttribute("data-original-stroke", originalStroke);
-    element.setAttribute("stroke", "#00ff00");
-    element.setAttribute("stroke-width", "2");
+    element.setAttribute("data-vector-highlight", "offset");
   }
 
   unhighlightElement(element) {
-    if (element.hasAttribute("data-offset-highlight")) {
-      const originalStroke = element.getAttribute("data-original-stroke");
-      element.setAttribute("stroke", originalStroke);
-      element.removeAttribute("data-offset-highlight");
-      element.removeAttribute("data-original-stroke");
-    }
+    element.removeAttribute("data-vector-highlight");
   }
 
   createOffset(clickPoint) {

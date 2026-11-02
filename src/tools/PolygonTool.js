@@ -247,6 +247,7 @@ class PolygonTool extends BaseTool {
     }
 
     this.requestToolPanelRefresh();
+    if (createdObject) this.saveState();
     return createdObject;
   }
 

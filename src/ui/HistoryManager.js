@@ -15,9 +15,9 @@ class HistoryManager {
     this.createUndoRedoButtons(container);
 
     // グローバル関数として公開
-    window.undo = this.undo;
-    window.redo = this.redo;
-    window.saveState = this.saveState;
+    window.undo = this.undo.bind(this);
+    window.redo = this.redo.bind(this);
+    window.saveState = this.saveState.bind(this);
   }
 
   createUndoRedoButtons(toolbar) {
@@ -51,7 +51,7 @@ class HistoryManager {
       undoBtn.id = "undo-btn";
       undoBtn.textContent = "元に戻す";
       undoBtn.disabled = true;
-      undoBtn.addEventListener("click", this.undo);
+      undoBtn.addEventListener("click", () => this.undo());
       stack.appendChild(undoBtn);
     }
 
@@ -60,97 +60,55 @@ class HistoryManager {
       redoBtn.id = "redo-btn";
       redoBtn.textContent = "やり直し";
       redoBtn.disabled = true;
-      redoBtn.addEventListener("click", this.redo);
+      redoBtn.addEventListener("click", () => this.redo());
       stack.appendChild(redoBtn);
     }
   }
 
-  // 状態を保存する関数
+  // Legacy tools call saveState both before and after editing. Capture the
+  // completed event once, keeping transient handles and previews out of history.
   saveState() {
-    const canvas = document.getElementById("canvas");
+    if (this.restoring || this.pending) return;
+    this.pending = true;
+    queueMicrotask(() => this.flush());
+  }
 
-    // 現在の状態をクローン
-    const state = canvas.cloneNode(true);
-
-    // アンドゥスタックに追加
-    window.undoStack.push(state);
-
-    // スタックが大きくなりすぎないように制限
-    if (window.undoStack.length > window.MAX_STACK_SIZE) {
-      window.undoStack.shift(); // 最も古い状態を削除
+  flush() {
+    if (!this.pending) return;
+    this.pending = false;
+    const next = DrawingDocument.serialize();
+    if (next === this.current) return;
+    if (this.current !== undefined) {
+      window.undoStack.push(this.current);
+      if (window.undoStack.length > window.MAX_STACK_SIZE) window.undoStack.shift();
     }
-
-    // リドゥスタックをクリア（新しい操作をしたため）
-    window.redoStack = [];
-
-    // ボタンの状態を更新
+    this.current = next;
+    window.redoStack.length = 0;
     HistoryManager.updateUndoRedoButtons();
   }
 
-  // アンドゥ関数
+  step(from, to) {
+    this.flush();
+    if (!from.length) return;
+    this.restoring = true;
+    try {
+      const next = from[from.length - 1];
+      DrawingDocument.open(next);
+      from.pop();
+      to.push(this.current);
+      this.current = next;
+      HistoryManager.updateUndoRedoButtons();
+    } finally {
+      this.restoring = false;
+    }
+  }
+
   undo() {
-    if (window.undoStack.length === 0) return;
-
-    const canvas = document.getElementById("canvas");
-
-    // 現在の状態をリドゥスタックに保存
-    const currentState = canvas.cloneNode(true);
-    window.redoStack.push(currentState);
-
-    // 一つ前の状態を復元
-    const previousState = window.undoStack.pop();
-
-    // キャンバスをクリア
-    while (canvas.firstChild) {
-      canvas.removeChild(canvas.firstChild);
-    }
-
-    // 前の状態を復元
-    Array.from(previousState.childNodes).forEach((node) => {
-      canvas.appendChild(node.cloneNode(true));
-    });
-
-    // 選択を解除
-    window.selectedObject = null;
-    if (window.selectTool) {
-      window.selectTool.deselectObject();
-    }
-
-    // ボタンの状態を更新
-    HistoryManager.updateUndoRedoButtons();
+    this.step(window.undoStack, window.redoStack);
   }
 
-  // リドゥ関数
   redo() {
-    if (window.redoStack.length === 0) return;
-
-    const canvas = document.getElementById("canvas");
-
-    // 現在の状態をアンドゥスタックに保存
-    const currentState = canvas.cloneNode(true);
-    window.undoStack.push(currentState);
-
-    // 次の状態を復元
-    const nextState = window.redoStack.pop();
-
-    // キャンバスをクリア
-    while (canvas.firstChild) {
-      canvas.removeChild(canvas.firstChild);
-    }
-
-    // 次の状態を復元
-    Array.from(nextState.childNodes).forEach((node) => {
-      canvas.appendChild(node.cloneNode(true));
-    });
-
-    // 選択を解除
-    window.selectedObject = null;
-    if (window.selectTool) {
-      window.selectTool.deselectObject();
-    }
-
-    // ボタンの状態を更新
-    HistoryManager.updateUndoRedoButtons();
+    this.step(window.redoStack, window.undoStack);
   }
 
   // アンドゥ/リドゥボタンの状態を更新

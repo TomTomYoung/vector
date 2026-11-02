@@ -153,25 +153,25 @@ class ToolManager {
 
   // マウスイベントハンドラー
   handleMouseDown(event) {
-    if (this.activeTool) {
+    if (this.activeTool && !window.zoomPanManager?.spacePressed && !window.zoomPanManager?.isPanning) {
       this.activeTool.handleMouseDown(event);
     }
   }
 
   handleMouseMove(event) {
-    if (this.activeTool) {
+    if (this.activeTool && !window.zoomPanManager?.spacePressed && !window.zoomPanManager?.isPanning) {
       this.activeTool.handleMouseMove(event);
     }
   }
 
   handleMouseUp(event) {
-    if (this.activeTool) {
+    if (this.activeTool && !window.zoomPanManager?.spacePressed && !window.zoomPanManager?.isPanning) {
       this.activeTool.handleMouseUp(event);
     }
   }
 
   handleMouseLeave(event) {
-    if (this.activeTool) {
+    if (this.activeTool && !window.zoomPanManager?.spacePressed && !window.zoomPanManager?.isPanning) {
       this.activeTool.handleMouseLeave(event);
     }
   }
@@ -182,40 +182,19 @@ class ToolManager {
     }
   }
 
-  handleKeyDown(event) {
-    if (this.activeTool) {
-      this.activeTool.handleKeyDown(event);
-    }
-
-    // 共通キーボードショートカット
-    if (event.ctrlKey && event.key === "z") {
-      // Ctrl+Z: アンドゥ
-      event.preventDefault();
-      if (window.undo) window.undo();
-    } else if (event.ctrlKey && event.key === "y") {
-      // Ctrl+Y: リドゥ
-      event.preventDefault();
-      if (window.redo) window.redo();
-    } else if (event.key === "Delete") {
-      // Del: 選択オブジェクト削除
-      if (window.selectedObject && window.deleteSelectedObject) {
-        window.deleteSelectedObject();
-      }
-    } else if (event.key === "Escape") {
-      // Esc: ツール操作キャンセル
-      if (this.activeTool) {
-        this.activeTool.cancel();
-      }
-    }
+  static isEditingField(target) {
+    return !!(target?.isContentEditable || target?.closest?.("input, textarea, select, [contenteditable=true]"));
   }
 
-  // ヘルパーメソッド
+  handleKeyDown(event) {
+    if (ToolManager.isEditingField(event.target) || event.defaultPrevented) return;
+    if (event.ctrlKey || event.metaKey) return;
+    this.activeTool?.handleKeyDown(event);
+    if (event.key === "Escape") this.activeTool?.cancel();
+  }
+
   getMousePosition(event) {
-    const rect = this.canvas.getBoundingClientRect();
-    return {
-      x: event.clientX - rect.left,
-      y: event.clientY - rect.top,
-    };
+    return window.CoordinatesUtils.getMousePositionInSVG(this.canvas, event);
   }
 
   // グリッドへのスナップ

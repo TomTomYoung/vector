@@ -327,6 +327,12 @@
         padding: 2px 5px;
         font-size: 12px;
       }
+      #canvas [data-vector-selected] { stroke-dasharray: 5 5; }
+      #canvas [data-vector-highlight] { stroke: #00b060; stroke-width: 2; }
+      #canvas [data-vector-highlight="trim"] { stroke: #f00; }
+      #canvas [data-vector-highlight="fillet"] { stroke: #0080ff; }
+      #canvas [data-vector-highlight="chamfer"] { stroke: #ff8000; }
+      #canvas #grid, #canvas .snap-indicator { pointer-events: none; }
     </style>
   </head>
 
@@ -414,6 +420,7 @@
     <script type="module" src="src/utils/index.js"></script>
 
     <!-- コアシステム -->
+    <script src="src/core/DrawingDocument.js"></script>
     <script src="src/core/BaseTool.js"></script>
     <script src="src/core/ToolManager.js"></script>
     <script src="src/core/SnapManager.js"></script>

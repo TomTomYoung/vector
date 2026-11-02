@@ -52,8 +52,6 @@ class BaseTool {
   // ツール無効化
   deactivate() {
     this.isActive = false;
-    this.isDrawing = false;
-    this.drawingObject = null;
     console.log(`${this.getTitle()} deactivated`);
   }
 
@@ -135,10 +133,7 @@ class BaseTool {
   }
 
   handleMouseUp(event) {
-    if (!this.isActive) return;
-
-    this.isDrawing = false;
-    this.drawingObject = null;
+    // Multi-click tools keep their construction until they explicitly finish or cancel.
   }
 
   handleMouseLeave(event) {
