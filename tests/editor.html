@@ -215,7 +215,11 @@ await check("Perpendicular and tangent endpoints are computed from the line star
   w.snapManager.snapEnabled.perpendicular = false; w.snapManager.snapEnabled.tangent = true;
   mouse("mousedown",340,100); mouse("mousemove",312,118); mouse("mouseup",312,118);
   line = [...canvas.querySelectorAll("[data-line-tool]")].at(-1);
-  assert(Math.abs(line.x2.baseVal.value-310)<0.01 && Math.abs(line.y2.baseVal.value-100-Math.sqrt(300))<0.01, "tangent point");
+  const got = {x:line.x2.baseVal.value, y:line.y2.baseVal.value};
+  const origin = {x:line.x1.baseVal.value, y:line.y1.baseVal.value};
+  const candidate = w.snapManager.snapFromAnchor(origin, {x:312,y:118}, 10, line);
+  assert(Math.abs(got.x-310)<0.01 && Math.abs(got.y-100-Math.sqrt(300))<0.01,
+    "tangent point: " + JSON.stringify({origin, got, candidate: candidate && [candidate.point.x,candidate.point.y]}));
 });
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
