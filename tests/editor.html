@@ -291,6 +291,50 @@ await check("A second editor replaces input, dispatch, arithmetic, tool, rendere
     assert(doc.querySelector("#circle-tool").textContent !== "Custom circle", "editors share no overrides");
   } finally { other.remove(); }
 });
+await check("Workbench selects real examples, reports invalid JSON and runs the model in a worker", async () => {
+  const link = doc.querySelector('a[href="geometry.html"]');
+  assert(link, "workbench link in editor");
+  const other = document.createElement("iframe");
+  const ready = new Promise(resolve => other.addEventListener("load", resolve, {once:true}));
+  other.src = link.href;
+  document.body.append(other);
+  try {
+    await ready;
+    const d = other.contentDocument, get = id => d.getElementById(id);
+    const select = get("tool"), input = get("input"), status = get("status");
+    assert(select.options.length >= 113, "public examples loaded");
+    select.value = "polygonBoolean";
+    select.dispatchEvent(new Event("change"));
+    const example = JSON.parse(input.value);
+    input.value = "{";
+    get("run").click();
+    assert(status.textContent.includes("JSON"), "invalid input shown");
+    get("reset").click();
+    assert(JSON.stringify(JSON.parse(input.value)) === JSON.stringify(example), "editable example restored");
+    get("run").click();
+    get("stop").click();
+    assert(status.textContent.includes("中止") && get("stop").disabled, "worker cancelled");
+    function completed() { return new Promise(resolve => {
+      const observer = new MutationObserver(() => {
+        if (status.textContent === "計算中…") return;
+        observer.disconnect();
+        resolve();
+      });
+      observer.observe(status, {childList:true});
+    }); }
+    const done = completed();
+    get("run").click();
+    await done;
+    assert(status.textContent === "完了" && JSON.parse(get("output").textContent).length > 0, "region difference returned");
+    select.value = "translationMatrix";
+    select.dispatchEvent(new Event("change"));
+    input.value = '{"dx":1}';
+    const missingValue = completed();
+    get("run").click();
+    await missingValue;
+    assert(status.textContent.includes("必須項目") && !get("output").textContent, "missing matrix coefficient reported");
+  } finally { other.remove(); }
+});
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
 </script>
