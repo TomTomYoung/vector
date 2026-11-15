@@ -50,4 +50,4 @@
 
 [PR #57](https://github.com/TomTomYoung/vector/pull/57)の実装コミット `1aad74f` の[CI](https://github.com/TomTomYoung/vector/actions/runs/43773702764)で、数値・モデル・編集91件とブラウザー操作40件が全て成功しました。既存の変形焼込みでSVG変換リストをCSSとして解釈していた不具合を修正し、ブラウザーが解釈したSVG行列を順に合成する方式へ変更しました。
 
-[circleControls.test.mjs](../tests/circleControls.test.mjs) で変換済みの中心移動、半径のローカル距離と方向、つかみ位置保持、図面座標のグリッド・直交拘束、無効値と精度限界を検証します。ブラウザー検証に3種類の描画でのドラッグ、ライブ表示、保存除外、Undo/Redo、数値同期とズーム、取消・ロック・形状変更・削除・非可逆変換、別ポインター・パン、描画方式の切替を追加しました。数値・モデル・編集95件はローカルで成功し、ブラウザー検証はCI確認中です。
+[circleControls.test.mjs](../tests/circleControls.test.mjs) で変換済みの中心移動、半径のローカル距離と方向、つかみ位置保持、図面座標のグリッド・直交拘束、無効値と精度限界を検証します。ブラウザー検証に3種類の描画でのドラッグ、ライブ表示、保存除外、Undo/Redo、数値同期とズーム、取消・ロック・形状変更・削除・非可逆変換、別ポインター・パン、描画方式の切替を追加しました。[PR #58](https://github.com/TomTomYoung/vector/pull/58) の実装コミット `807116d` に対する[CI](https://github.com/TomTomYoung/vector/actions/runs/43774899395)で、数値・モデル・編集95件と実Chromeのブラウザー操作45件が全て成功しました。
