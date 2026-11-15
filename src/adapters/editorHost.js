@@ -4,6 +4,7 @@ import {edit} from "../utils/linearEditing.js";
 import {renderGeometry, pathData, readOffsetShape} from "./svgGeometry.js";
 import {createRenderRegistry} from './renderStrategies.js';
 import {parseImplementationPreferences} from './implementationPreferences.js';
+import {circleModel, circleGeometrySnapshot} from './circleSource.js';
 
 function snapPoint(point, {geometry, exclude, anchor, manager}) {
   if (geometry && window.snapManager) return window.snapManager.snapPoint(point, exclude, anchor);
@@ -62,6 +63,9 @@ export function createEditorHost({
     render(shape, target, options = {}) {
       const prepared = render ? shape : drawing.prepare(options.toolName, shape, options, options.renderer);
       const element = render ? render(prepared, target, options) : renderGeometry(prepared, target, options, encodePath);
+      if (element && shape?.kind === 'circle' && ['circle','path'].includes(element.tagName.toLowerCase())) {
+        element.setAttribute('data-vector-circle', JSON.stringify({version:1,model:circleModel(shape),geometry:circleGeometrySnapshot(element)}));
+      }
       if (element && shape?.kind === 'splineCurve') {
         element.setAttribute('data-vector-spline', JSON.stringify({version: 1, model: shape, path: element.getAttribute('d')}));
         if (prepared?.sampling?.complete === false) element.setAttribute('data-vector-partial', 'true');

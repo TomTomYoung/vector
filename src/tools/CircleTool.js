@@ -416,6 +416,7 @@ class CircleTool extends BaseTool {
     circle.setAttribute("cx", geometry.cx);
     circle.setAttribute("cy", geometry.cy);
     circle.setAttribute("r", geometry.r);
+    window.VectorUtils.circleSource.recordCircleAttributeEdit(circle);
   }
 
   renderAffineControls(container, circle) {
@@ -670,7 +671,12 @@ class CircleTool extends BaseTool {
 
     let matrix;
     try {
-      matrix = new DOMMatrix(transformAttr);
+      // SVG transform lists (translate(10 20), rotate(a cx cy), ...) are not CSS
+      // transform strings accepted by DOMMatrix. Read the parsed SVG matrices.
+      matrix = new DOMMatrix();
+      const transforms = circle.transform.baseVal;
+      if (!transforms.numberOfItems) return;
+      for (let i = 0; i < transforms.numberOfItems; i++) matrix = matrix.multiply(transforms.getItem(i).matrix);
     } catch (error) {
       console.error("Failed to parse transform:", error);
       return;
@@ -689,6 +695,7 @@ class CircleTool extends BaseTool {
     circle.setAttribute("cx", this.roundValue(center.x, 4));
     circle.setAttribute("cy", this.roundValue(center.y, 4));
     circle.setAttribute("r", this.roundValue(radius, 4));
+    window.VectorUtils.circleSource.recordCircleAttributeEdit(circle, 'アフィン変換後の中心と半径方向の1点から円を構成（縦横別拡縮は円へ近似）');
     circle.removeAttribute("transform");
 
     this.saveState();
