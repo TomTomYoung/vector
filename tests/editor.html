@@ -1069,6 +1069,137 @@ await check('Circle gestures ignore other pointers and panning, and renderer cha
   }finally{w.zoomPanManager.spacePressed=false;w.snapToGrid=snap;w.orthoMode=ortho;}
 });
 
+const arcPoints=[{x:240,y:160},{x:208,y:224},{x:160,y:240}];
+function arcAction(action){const button=doc.querySelector(`[data-arc-action="${action}"]`);assert(button,'arc action '+action);button.click();}
+const arcField=(label,value,event='input')=>splineField(label,value,event);
+const arcText=points=>points.map(p=>p.x+', '+p.y).join('\n');
+const arcHandle=i=>canvas.querySelector(`[data-arc-control-index="${i}"]`);
+function addEditableArc(renderer='default'){
+  const host=w.toolManager.host;host.selectImplementation('arc','default');
+  const [start,through,end]=arcPoints,element=host.render(host.execute('arc',{start,through,end}),null,{toolName:'arc',renderer,sampleCount:16});
+  element.id='editable-arc';element.setAttribute('stroke','#624382');element.setAttribute('stroke-width','5');element.setAttribute('fill','none');
+  element.setAttribute('data-layer',w.layers[0].id);canvas.append(element);return element;
+}
+
+await check('Arc toolbar saves actual three-point input with every renderer and omits unfinished geometry',async()=>{
+  const host=w.toolManager.host,before=host.exportPreferences(),snap=w.snapToGrid;w.snapToGrid=false;
+  try {
+    for(const renderer of ['default','sampled','cubic']){
+      fixture();await tick();host.selectRenderer('arc',renderer,{sampleCount:12});activate('arc');
+      click(240,160);
+      // MouseEvent may quantize screen coordinates. Compare with the actual event input,
+      // not the ideal canvas point used to construct the synthetic click.
+      const screen=new w.DOMPoint(208,224).matrixTransform(canvas.getScreenCTM());
+      const event=new w.MouseEvent('mousedown',{clientX:screen.x,clientY:screen.y,button:0,bubbles:true});
+      const expectedThrough=w.toolManager.getMousePosition(event);canvas.dispatchEvent(event);mouse('mouseup',208,224);
+      const acceptedThrough={...w.toolManager.tools.arc.points[1]};
+      assert(closePoint(acceptedThrough,expectedThrough),'click coordinate conversion: '+JSON.stringify({acceptedThrough,expectedThrough}));
+      mouse('mousemove',160,240);
+      assert(!w.DrawingDocument.capture().querySelector('[data-vector-arc]'),'unfinished arc omitted '+renderer);
+      click(160,240);const element=canvas.querySelector('[data-arc-tool]');assert(element,'committed arc '+renderer);
+      const source=JSON.parse(element.getAttribute('data-vector-arc'));
+      assert(JSON.stringify(source.input.through)===JSON.stringify(acceptedThrough) && source.path===element.getAttribute('d'),'actual through point saved: '+JSON.stringify({source,acceptedThrough}));
+      assert(JSON.parse(element.getAttribute('data-vector-implementation')).rendering.id===renderer,'actual renderer recorded');
+      w.DrawingDocument.open(w.DrawingDocument.serialize());const loaded=canvas.querySelector('[data-arc-tool]');w.selectTool.selectObject(loaded);arcAction('begin');
+      assert(JSON.stringify(w.toolPropertiesPanel.arcEditor.input().points[1])===JSON.stringify(acceptedThrough),'source reopens '+renderer);arcAction('cancel');
+    }
+  }finally{host.restorePreferences(before);w.snapToGrid=snap;}
+});
+
+await check('Arc numeric editing changes sweep and renderer while preserving appearance, transforms and one-step history',async()=>{
+  fixture('<g id="arc-parent" transform="translate(20 10) rotate(13)"/>');await tick();let element=addEditableArc();
+  doc.getElementById('arc-parent').append(element);element.setAttribute('transform','scale(-0.8 1.2) translate(-450 0)');element.setAttribute('style','opacity:0.7');
+  element.setAttribute('stroke-dasharray','7 2');element.setAttribute('data-transform-layers','[]');
+  const title=doc.createElementNS(canvas.namespaceURI,'title');title.textContent='arc';element.append(title);
+  w.saveState();await tick();w.undoStack.length=0;activate('select');w.selectTool.selectObject(element);
+  const original=element.getAttribute('d'),source=element.getAttribute('data-vector-arc'),attrs=['id','transform','style','stroke','stroke-width','stroke-dasharray','data-layer','data-transform-layers'],appearance=attrs.map(key=>element.getAttribute(key));
+  arcAction('begin');arcField('円弧の3点（始点・通過点・終点）',arcText([arcPoints[0],{x:80,y:160},arcPoints[2]]));arcField('円弧の再描画実装','cubic','change');arcAction('preview');
+  const preview=canvas.querySelector('[data-vector-preview="arc-edit"]');assert(preview.getAttribute('d').match(/C/g).length===3,'major arc cubic spans');
+  const a=element.getScreenCTM(),b=preview.getScreenCTM();assert(['a','b','c','d','e','f'].every(k=>Math.abs(a[k]-b[k])<1e-5),'preview in transformed frame');
+  assert(element.getAttribute('d')===original && !w.DrawingDocument.capture().querySelector('[data-vector-preview]'),'original and helper-free save');
+  arcAction('apply');await tick();assert(doc.getElementById('editable-arc')===element && attrs.every((key,i)=>element.getAttribute(key)===appearance[i]) && element.querySelector('title').textContent==='arc','identity and appearance preserved');
+  let saved=JSON.parse(element.getAttribute('data-vector-arc'));assert(Math.abs(saved.model.turn+1.5*Math.PI)<1e-6 && w.undoStack.length===1,'major arc and one history step');
+  assert(doc.querySelector('[data-recorded-implementation]').textContent.includes('元の生成 arc'),'original computation displayed');
+  key('z',{ctrlKey:true});await tick();assert(doc.getElementById('editable-arc').getAttribute('data-vector-arc')===source,'undo exact original source');
+  key('Z',{ctrlKey:true,shiftKey:true});await tick();element=doc.getElementById('editable-arc');w.selectTool.selectObject(element);arcAction('begin');
+  arcField('円弧の再描画実装','sampled','change');arcField('円弧の再描画分割数',24);arcAction('apply');assert(element.getAttribute('d').match(/L/g).length===24,'sampled detail');
+  arcAction('begin');arcField('円弧の3点（始点・通過点・終点）',arcText([arcPoints[2],{x:80,y:160},arcPoints[0]]));arcField('円弧の再描画実装','default','change');arcAction('apply');
+  saved=JSON.parse(element.getAttribute('data-vector-arc'));assert(Math.abs(saved.model.turn-1.5*Math.PI)<1e-6 && element.getAttribute('d').includes('A'),'reversed arc with native rendering');
+});
+
+await check('Arc drag uses local input points, preserves drafts through degeneracy and commits after recovery',async()=>{
+  frame.scrollIntoView();fixture('<g id="arc-drag-parent" transform="translate(10 20) rotate(11)"/>');await tick();const element=addEditableArc('sampled');
+  element.setAttribute('transform','scale(-0.7 1.2) translate(-450 0)');doc.getElementById('arc-drag-parent').append(element);
+  const snap=w.snapToGrid,ortho=w.orthoMode;w.snapToGrid=false;w.orthoMode=false;
+  try {
+    activate('select');w.selectTool.selectObject(element);w.saveState();await tick();w.undoStack.length=0;arcAction('begin');const source=element.getAttribute('data-vector-arc');
+    assert(canvas.querySelectorAll('[data-arc-control-index]').length===3 && !canvas.querySelector('.control-handle'),'three named handles only');
+    pointer('pointerdown',arcHandle(1),localScreen(element,{x:210,y:223}));pointer('pointermove',doc,localScreen(element,{x:222,y:209}));await paint();
+    assert(closePoint(w.toolPropertiesPanel.arcEditor.input().points[1],{x:220,y:210}),'grab offset preserved');
+    pointer('pointerup',doc,localScreen(element,{x:232,y:209}));assert(closePoint(w.toolPropertiesPanel.arcEditor.input().points[1],{x:230,y:210}),'last pointer flushed');
+    assert(element.getAttribute('data-vector-arc')===source && w.undoStack.length===0 && !w.DrawingDocument.capture().querySelector('[data-vector-preview]'),'drag leaves saved original');
+    arcField('円弧の3点（始点・通過点・終点）','240,160\n200,200\n160,240');arcAction('preview');
+    assert(!canvas.querySelector('[data-vector-preview="arc-edit"]') && arcHandle(1) && doc.querySelector('[data-arc-edit-status]').textContent.includes('この3点'),'collinear input keeps handles for repair');
+    pointer('pointerdown',arcHandle(1),localScreen(element,{x:200,y:200}));pointer('pointerup',doc,localScreen(element,{x:208,y:224}));
+    assert(canvas.querySelector('[data-vector-preview="arc-edit"]'),'valid drag recovers preview');arcAction('apply');await tick();
+    assert(w.undoStack.length===1 && closePoint(JSON.parse(element.getAttribute('data-vector-arc')).input.through,{x:208,y:224}),'recovered draft committed once');
+  }finally{w.snapToGrid=snap;w.orthoMode=ortho;}
+});
+
+await check('Arc input errors, stale sources, locked and singular targets never overwrite geometry',async()=>{
+  frame.scrollIntoView();fixture();await tick();const element=addEditableArc('sampled');activate('select');w.selectTool.selectObject(element);w.saveState();await tick();w.undoStack.length=0;arcAction('begin');
+  const original=element.getAttribute('d'),source=element.getAttribute('data-vector-arc');
+  for(const invalid of ['0,0\n1,1','0,0\n1,1\n2,2','0,0\n1,1\n0,0','NaN,0\n1,1\n2,0']){
+    arcField('円弧の3点（始点・通過点・終点）',invalid);arcAction('apply');assert(element.getAttribute('d')===original,'invalid input rejected');
+  }
+  arcField('円弧の3点（始点・通過点・終点）',arcText(arcPoints));arcField('円弧の再描画分割数',10001);arcAction('apply');assert(element.getAttribute('d')===original,'sample limit');arcField('円弧の再描画分割数',16);
+  const layer=w.layers.find(l=>l.id===Number(element.getAttribute('data-layer')));pointer('pointerdown',arcHandle(0),localScreen(element,arcPoints[0]));layer.locked=true;pointer('pointerup',doc,localScreen(element,{x:250,y:170}));layer.locked=false;
+  assert(element.getAttribute('data-vector-arc')===source && !w.toolPropertiesPanel.arcEditor.controls.drag,'lock refuses gesture');arcAction('cancel');arcAction('begin');
+  element.setAttribute('d',original+' L400 400');arcAction('apply');assert(element.getAttribute('d').endsWith('L400 400'),'concurrent outline preserved');arcAction('cancel');arcAction('begin');
+  assert(!w.toolPropertiesPanel.arcEditor.draft && doc.querySelector('[data-arc-edit-status]').textContent.includes('一致しません'),'saved source mismatch refused');
+  element.setAttribute('d',original);element.setAttribute('transform','scale(0 1)');arcAction('begin');assert(!arcHandle(0),'singular target hides handles');
+  element.removeAttribute('transform');await paint();await paint();assert(arcHandle(0),'handles recover');arcAction('preview');activate('line');
+  assert(!arcHandle(0) && !canvas.querySelector('[data-vector-preview]') && w.undoStack.length===0,'tool switch clears draft without save');
+});
+
+await check('Arc gestures cancel individually, snap in drawing coordinates and track numeric edits and zoom',async()=>{
+  frame.scrollIntoView();fixture();await tick();const element=addEditableArc();activate('select');w.selectTool.selectObject(element);arcAction('begin');
+  const before=w.toolPropertiesPanel.arcEditor.draft.pointsText;
+  for(const action of ['escape','cancel','blur']){
+    pointer('pointerdown',arcHandle(1),localScreen(element,arcPoints[1]));pointer('pointermove',doc,localScreen(element,{x:220,y:230}));await paint();
+    if(action==='escape')key('Escape');else if(action==='blur')w.dispatchEvent(new w.Event('blur'));else pointer('pointercancel',doc,localScreen(element,{x:220,y:230}));
+    assert(w.toolPropertiesPanel.arcEditor.draft.pointsText===before && !w.toolPropertiesPanel.arcEditor.controls.drag,'cancel gesture '+action);
+  }
+  const snap=w.snapToGrid,viewport=w.zoomPanManager.getTransform();w.snapToGrid=true;
+  try {
+    pointer('pointerdown',arcHandle(1),localScreen(element,arcPoints[1]));pointer('pointerup',doc,localScreen(element,{x:254,y:232}),{shiftKey:true});
+    assert(closePoint(w.toolPropertiesPanel.arcEditor.input().points[1],{x:260,y:224}),'grid and horizontal constraint');
+    arcField('円弧の3点（始点・通過点・終点）',arcText(arcPoints));const diameter=arcHandle(1).getBoundingClientRect().width;
+    w.zoomPanManager.setTransform(2,40,20);await paint();await paint();assert(Math.abs(arcHandle(1).getBoundingClientRect().width-diameter)<0.05,'constant screen size');
+    const expected=localScreen(element,arcPoints[1]),bounds=arcHandle(1).getBoundingClientRect();assert(Math.abs(bounds.x+bounds.width/2-expected.x)<0.05,'numeric point follows zoom');
+    doc.querySelector('[aria-label="円弧の3点（始点・通過点・終点）"]').dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));
+    assert(!w.toolPropertiesPanel.arcEditor.draft && !arcHandle(0),'Escape exits edit');
+  }finally{w.snapToGrid=snap;w.zoomPanManager.setTransform(viewport.zoom,viewport.panX,viewport.panY);}
+});
+
+await check('Arc plugin input is preserved, unavailable implementations are explicit, and outline splits invalidate the source',async()=>{
+  fixture();await tick();const host=w.toolManager.host,element=addEditableArc();
+  host.registerImplementation('arc',{id:'test-arc-source',label:'Arc plugin',algorithm:'Three-point arc without through property',run:(input,ops,execute)=>{const result=execute('arc',input,{implementation:'default'});delete result.through;return result;}});
+  host.registerImplementation('arc',{id:'test-arc-failure',label:'Fail arc',algorithm:'Intentional failure',run:()=>{throw Error('arc calculation failure');}});
+  host.registerRenderer({id:'test-arc-line',label:'Line only',algorithm:'Chord',supports:name=>name==='arc',prepare:shape=>({kind:'segment',start:shape.start,end:shape.end})});
+  const before=JSON.stringify(host.exportPreferences()),original=element.getAttribute('d');activate('select');w.selectTool.selectObject(element);arcAction('begin');
+  arcField('円弧の再計算実装','test-arc-failure','change');arcAction('apply');assert(element.getAttribute('d')===original && JSON.stringify(host.exportPreferences())===before,'failure restores implementation');
+  arcField('円弧の再計算実装','test-arc-source','change');arcField('円弧の再描画実装','test-arc-line','change');arcAction('apply');assert(element.getAttribute('d')===original,'nonpath renderer refused');
+  arcField('円弧の再描画実装','sampled','change');arcAction('apply');
+  assert(closePoint(JSON.parse(element.getAttribute('data-vector-arc')).input.through,arcPoints[1]) && JSON.stringify(host.exportPreferences())===before,'actual plugin input retained without preference changes');
+  let record=JSON.parse(element.getAttribute('data-vector-implementation'));record.calculation.id='missing-arc';element.setAttribute('data-vector-implementation',JSON.stringify(record));arcAction('begin');arcAction('apply');
+  assert(doc.querySelector('[data-arc-edit-status]').textContent.includes('計算実装がありません'),'unknown calculation visible');arcField('円弧の再計算実装','default','change');arcAction('apply');
+  const middle=element.getPointAtLength(element.getTotalLength()/2);w.VectorUtils.linearEditing.split(element,canvas,{x:middle.x,y:middle.y});
+  assert(!element.hasAttribute('data-vector-arc') && !element.nextElementSibling.hasAttribute('data-vector-arc'),'split invalidates both sources');w.toolPropertiesPanel.updatePanel();assert(!doc.querySelector('[data-arc-editor]'),'outline cannot revive stale arc');
+  fixture('<path id="legacy-arc" d="M240 160 A80 80 0 0 1 160 240" stroke="black" fill="none"/>');await tick();w.selectTool.selectObject(doc.getElementById('legacy-arc'));
+  assert(!doc.querySelector('[data-arc-editor]'),'old external arcs are not assigned invented through points');
+});
+
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
 </script>
