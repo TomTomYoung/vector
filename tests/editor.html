@@ -548,7 +548,7 @@ await check('Saved spline editing previews without mutation and applies in place
   const preview=canvas.querySelector('[data-vector-preview="spline-edit"]');assert(preview,'edit preview');
   assert(curve.getAttribute('d')===original && curve.getAttribute('data-vector-spline')===source,'preview preserves original');
   const expected=curve.getScreenCTM(),actual=preview.getScreenCTM();
-  assert(['a','b','c','d','e','f'].every(k=>Math.abs(actual[k]-expected[k])<1e-5),'preview respects parent and element transforms');
+  assert(['a','b','c','d','e','f'].every(k=>Math.abs(actual[k]-expected[k])<1e-5),'preview respects parent and element transforms: '+JSON.stringify({expected:expected.toJSON(),actual:actual.toJSON()}));
   const captured=w.DrawingDocument.capture();
   assert(!captured.querySelector('[data-vector-preview]') && captured.querySelector('#editable-spline').getAttribute('d')===original,'save during preview contains original only');
   const history=w.undoStack.length;splineAction('apply');await tick();

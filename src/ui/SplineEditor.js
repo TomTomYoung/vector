@@ -56,8 +56,10 @@ class SplineEditor {
     try {
       const result=this.build(),canvas=this.manager.canvas;
       const matrix=canvas.getScreenCTM().inverse().multiply(this.element.getScreenCTM());
-      if(![matrix.a,matrix.b,matrix.c,matrix.d,matrix.e,matrix.f].every(Number.isFinite))throw Error('プレビューの座標変換を計算できません。');
-      result.setAttribute('transform',matrix.toString());
+      const coefficients=[matrix.a,matrix.b,matrix.c,matrix.d,matrix.e,matrix.f];
+      if(!coefficients.every(Number.isFinite))throw Error('プレビューの座標変換を計算できません。');
+      // DOMMatrix.toString() rounds through CSS serialization. Keep the numeric precision here.
+      result.setAttribute('transform','matrix('+coefficients.join(' ')+')');
       result.setAttribute('data-vector-preview','spline-edit');result.setAttribute('pointer-events','none');
       const style=getComputedStyle(this.element);
       result.setAttribute('fill','none');result.setAttribute('stroke','#1265d6');result.setAttribute('stroke-width',style.strokeWidth || '2');
