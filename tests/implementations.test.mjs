@@ -100,13 +100,13 @@ test('render alternatives preserve curves and adaptive error status; render sele
   assert.equal(second.describe('cubicBezier').id,'default');assert.throws(()=>first.select('line','adaptive'));
 });
 
-test('new spline shapes preserve NURBS circles, custom knots and reject discontinuities and invalid weights', () => {
+test('spline shapes preserve NURBS circles and custom knots while rejecting invalid weights', () => {
   const shape=run('nurbsCurve',{points:[p(1,0),p(1,1),p(0,1)],degree:2,weights:[1,Math.SQRT1_2,1]});
   for(const point of sampleSplineCurve(shape,80))near(Math.hypot(point.x,point.y),1);
   const input={points:[p(0,0),p(1,1),p(2,0),p(3,1)],degree:2,knots:[0,0,0,0.2,1,1,1]};
   const curve=run('bSplineCurve',input); assert.ok(curve);
   pointNear(sampleSplineCurve(curve,20)[0],input.points[0]);pointNear(sampleSplineCurve(curve,20).at(-1),input.points.at(-1));
-  assert.equal(run('bSplineCurve',{...input,degree:1,knots:[0,0,0.5,0.5,1,1]}),null);
-  assert.equal(run('nurbsCurve',{...input,weights:[1,-1,1,1]}),null);
+  assert.ok(run('bSplineCurve',{...input,degree:1,knots:[0,0,0.5,0.5,1,1]}));
+  assert.equal(run('nurbsCurve',{...input,weights:[0,0,0,0]}),null);
   assert.throws(()=>sampleSplineCurve(curve,10001));
 });

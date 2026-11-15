@@ -168,10 +168,12 @@ class ToolPropertiesPanel {
         const text = document.createElement('p'); text.dataset.recordedImplementation = '';
         try {
           const raw = element.closest('[data-vector-implementation]')?.getAttribute('data-vector-implementation');
-          const record = raw?.length < 20000 ? JSON.parse(raw) : null;
+          const record = raw?.length < 2000000 ? JSON.parse(raw) : null;
           text.textContent = record?.version === 1 ? `${record.tool}: 計算 ${record.calculation?.algorithm ?? '不明'} / 描画 ${record.rendering?.algorithm ?? '不明'}` +
             (record.dependencies?.length > 1 ? ' / 委譲先 ' + record.dependencies.slice(1).map(d => `${d.tool}: ${d.algorithm}`).join('; ') : '') +
             (record.rendering?.options && Object.keys(record.rendering.options).length ? ' / 描画設定 ' + JSON.stringify(record.rendering.options) : '') +
+            (record.parameters ? ' / 曲線設定 ' + JSON.stringify(record.parameters) : '') +
+            (record.sampling ? ` / 描画枝 ${record.sampling.branches}、省略区間 ${record.sampling.omitted.length}` : '') +
             (record.warning ? ' / ' + record.warning : '') + (record.note ? ' / ' + record.note : '') : '方式の記録なし（旧データ・外部SVG等）';
         } catch { text.textContent = '方式の記録を読めません。'; }
         text.style.cssText = 'font-size:12px;line-height:1.6'; section.append(text);
@@ -271,6 +273,7 @@ class ToolPropertiesPanel {
               }
             }
           );
+          numberInput.setAttribute('aria-label', control.label);
           group.appendChild(numberInput);
           break;
         }
@@ -397,6 +400,7 @@ class ToolPropertiesPanel {
               }
             }
           );
+          numberInput.setAttribute('aria-label', prop.label);
           group.appendChild(numberInput);
           break;
 
@@ -415,6 +419,7 @@ class ToolPropertiesPanel {
               prop.onChange(checked);
             }
           });
+          checkbox.querySelector('input').setAttribute('aria-label', prop.label);
           group.appendChild(checkbox);
           break;
 
