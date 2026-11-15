@@ -16,11 +16,17 @@ import * as pointSets from "./pointSets.js";
 import * as projective from "./projective.js";
 import * as mesh from "./mesh.js";
 
+import {regionBoundary} from "./regionBoundary.js";
+import {constrainedDelaunay} from "./constrainedMesh.js";
+import {bezierIntersections} from "./bezierIntersections.js";
+import {solveConstraints} from "./constraints.js";
+
 const defaults = {select, line, rectangle, circle, arc, polygon, path, spline, quadraticBezier,
   cubicBezier, nthBezier, polyline, vertices, text, dimension, offset, trim, extend, fillet, chamfer, split, join,
   reflectPoint, polylineLength, signedArea,
   ...affine, ...intersections, ...conics, ...polygons, ...chains, ...curveAnalysis,
-  ...regions, ...splines, ...pointSets, ...projective, ...mesh};
+  ...regions, ...splines, ...pointSets, ...projective, ...mesh,
+  regionBoundary, constrainedDelaunay, bezierIntersections, solveConstraints};
 
 export const toolNames = Object.freeze(Object.keys(defaults));
 

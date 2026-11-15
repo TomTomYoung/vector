@@ -60,3 +60,14 @@ window.vectorEditorOptions = {
 `affine.js`・`projective.js` は座標変換、`intersections.js`・`conics.js` は交差・円・楕円、`polygons.js`・`regions.js`・`mesh.js` は輪郭・領域・点群の分割を扱います。距離で折れ線を扱う入口は `polyline.js`、曲線の解析とノット編集は `curveAnalysis.js`・`splines.js`、点群の当てはめは `pointSets.js` です。どれも描画先やブラウザを必要としません。
 
 全ての名前付き機能は `toolNames` から列挙でき、作図エディタの「演算室を開く」から JSON の例を個別に実行できます。領域演算は凸セル群、曲線長は上下限、三角形分割は目的に応じて座標または元の頂点番号を返します。[各機能の入出力・数式・退化条件](../../doc/文章.md#拡張88件)
+
+## 領域復元・交点・制約を組み合わせる
+
+全117機能に、次の4つを含みます。演算室の「領域復元・交点・拘束」から入力例を実行できます。
+
+- `regionBoundary.js` の `regionBoundary({cells,tolerance?})` は、内部が重ならない凸セル群から外周・穴・包含関係と面積を復元します。
+- `bezierIntersections.js` の `bezierIntersections({first,second,...})` は、制御点列から交点と重複区間を返します。`complete: false` のときは `unresolved` に未確定のパラメータ区間が残ります。一般の非線形再パラメータ化による重なりは未確定になる場合があります。
+- `constrainedMesh.js` の `constrainedDelaunay({points,edges?,holes?,clipExterior?})` は、制約辺を維持して穴・外部を除き、元頂点番号の三角形・辺・隣接関係を返します。制約の交点は入力頂点として指定します。
+- `constraints.js` の `solveConstraints({points,fixed?,constraints?,...})` は、距離・水平・垂直・一致・直交を数値的に解きます。固定頂点を保ち、拘束ごとの残差と `converged` を返します。未収束を解の不存在とは解釈しません。
+
+[入出力・数式・許容差・計算上限](../../doc/文章.md#612-領域交点三角形分割寸法拘束を組み合わせる)

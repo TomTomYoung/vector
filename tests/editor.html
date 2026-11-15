@@ -23,6 +23,7 @@ async function check(name, run) {
   } catch (error) {
     reports.push("FAIL " + name + "\n" + error.stack + "\n" + errors.join("\n"));
   }
+  result.textContent = reports.join("\n");
 }
 function assert(value, message) { if (!value) throw Error(message); }
 function activate(name) { doc.getElementById(name + "-tool").click(); }
@@ -302,7 +303,7 @@ await check("Workbench selects real examples, reports invalid JSON and runs the 
     await ready;
     const d = other.contentDocument, get = id => d.getElementById(id);
     const select = get("tool"), input = get("input"), status = get("status");
-    assert(select.options.length >= 113, "public examples loaded");
+    assert(select.options.length === 117, "public examples loaded");
     select.value = "polygonBoolean";
     select.dispatchEvent(new Event("change"));
     const example = JSON.parse(input.value);
@@ -334,6 +335,48 @@ await check("Workbench selects real examples, reports invalid JSON and runs the 
     await missingValue;
     assert(status.textContent.includes("必須項目") && !get("output").textContent, "missing matrix coefficient reported");
   } finally { other.remove(); }
+});
+await check("Four composed geometry operations run in the workbench worker", async () => {
+  const other = document.createElement("iframe");
+  const ready = new Promise(resolve => other.addEventListener("load", resolve, {once:true}));
+  other.src = "../geometry.html";
+  document.body.append(other);
+  try {
+    await ready;
+    const d = other.contentDocument, get = id => d.getElementById(id);
+    async function execute(name, change) {
+      get("tool").value = name;
+      get("tool").dispatchEvent(new Event("change"));
+      if (change) get("input").value = JSON.stringify(change(JSON.parse(get("input").value)));
+      const done = new Promise(resolve => {
+        const observer = new MutationObserver(() => {
+          if (get("status").textContent === "計算中…") return;
+          observer.disconnect(); resolve();
+        });
+        observer.observe(get("status"), {childList:true});
+      });
+      get("run").click(); await done;
+      return {value: JSON.parse(get("output").textContent), status: get("status").textContent};
+    }
+    const boundary = await execute("regionBoundary");
+    assert(boundary.status === "完了" && boundary.value.rings.length === 2 && boundary.value.area === 12, "hole reconstructed");
+    const mesh = await execute("constrainedDelaunay");
+    assert(mesh.status === "完了" && mesh.value.triangles.length === 8, "mesh around hole");
+    const curves = await execute("bezierIntersections");
+    assert(curves.status === "完了" && curves.value.complete && curves.value.intersections.length === 2, "two curve intersections");
+    const solver = await execute("solveConstraints");
+    assert(solver.status === "完了" && solver.value.converged && solver.value.degreesOfFreedom === 0, "fixed origin constraints");
+    const limited = await execute("bezierIntersections", () => ({
+      first:[{x:-1,y:1},{x:0,y:-1},{x:1,y:1}], second:[{x:-1,y:-0.5},{x:0,y:1.5},{x:1,y:-0.5}], maxNodes:1,
+    }));
+    assert(limited.status.includes("未確定") && !limited.value.complete, "partial isolation is not labeled complete");
+    const stalled = await execute("solveConstraints", input => ({...input,maxIterations:0}));
+    assert(stalled.status.includes("収束しません") && !stalled.value.converged, "unconverged solution shown");
+    const invalid = await execute("constrainedDelaunay", input => ({...input,edges:[[0,999]]}));
+    assert(invalid.status.includes("入力条件") && invalid.value === null, "invalid constraint index reported");
+    const recovered = await execute("solveConstraints");
+    assert(recovered.value.converged && recovered.status === "完了", "worker recovers after invalid input");
+  } finally {other.remove();}
 });
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";

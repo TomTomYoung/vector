@@ -37,6 +37,25 @@ const groups = {
     reflectPoint: ["直線に関する鏡映", {start, end, point}], polylineLength: ["長さ・周長", {points: square, closed: true}],
     signedArea: ["符号付き面積", {points: square}],
   },
+  "領域復元・交点・拘束": {
+    regionBoundary: ["凸セルから外周と穴を復元", {cells: [
+      [p(0,0),p(4,0),p(4,1),p(0,1)], [p(0,3),p(4,3),p(4,4),p(0,4)],
+      [p(0,1),p(1,1),p(1,3),p(0,3)], [p(3,1),p(4,1),p(4,3),p(3,3)],
+    ]}],
+    constrainedDelaunay: ["指定辺と穴を保つ三角形分割", {
+      points: [...square, p(1,1),p(3,1),p(3,3),p(1,3)],
+      edges: [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4]], holes: [p(2,2)], clipExterior: true,
+    }],
+    bezierIntersections: ["ベジェ同士の交点と重なり", {
+      first: [p(0,0),p(2,4),p(4,0)], second: [p(0,1),p(4,1)],
+    }],
+    solveConstraints: ["距離・直交などの寸法拘束", {
+      points: [p(0,0),p(3,1),p(3,4)], fixed: [0], constraints: [
+        {type: "distance", a: 0, b: 1, value: 4}, {type: "horizontal", a: 0, b: 1},
+        {type: "distance", a: 1, b: 2, value: 3}, {type: "perpendicular", first: [0,1], second: [1,2]},
+      ],
+    }],
+  },
   "座標・変換": {
     translationMatrix: ["平行移動", {dx: 3, dy: -2}], rotationMatrix: ["中心のまわりの回転", {angle, center: point}],
     scaleMatrix: ["拡大・縮小", {sx: 2, sy: 3, center: point}], shearMatrix: ["せん断", {kx: 0.5}],
