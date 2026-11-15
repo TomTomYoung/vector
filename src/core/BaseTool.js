@@ -30,7 +30,7 @@ class BaseTool {
   }
 
   draw(name, input, target, options) {
-    return this.toolManager.host.render(this.run(name, input), target, {...options, toolName: name});
+    return this.toolManager.host.render(this.run(name, input), target, {...options, toolName: name,...(name === 'arc' ? {sourceInput:input} : {})});
   }
 
   editOutline(name, element, edges, point) {

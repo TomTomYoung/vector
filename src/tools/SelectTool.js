@@ -605,6 +605,8 @@ class SelectTool extends BaseTool {
     if(splineEditor?.draft && splineEditor.element===this.selectedObject)return;
     const circleEditor=window.toolPropertiesPanel?.circleEditor;
     if(circleEditor?.draft && circleEditor.element===this.selectedObject)return;
+    const arcEditor=window.toolPropertiesPanel?.arcEditor;
+    if(arcEditor?.draft && arcEditor.element===this.selectedObject)return;
     const bb = this.selectedObject.getBBox();
     const handles = [
       { x: bb.x, y: bb.y, cls: "nw", cursor: "nwse-resize" },

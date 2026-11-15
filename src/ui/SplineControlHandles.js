@@ -1,6 +1,10 @@
-// Pointer interaction edits only the SplineEditor draft. Apply owns the history commit.
+// Shared point gestures for spline controls and the arc's three input points.
 class SplineControlHandles {
-  constructor(editor) {this.editor=editor;this.canvas=editor.manager.canvas;this.group=null;this.drag=null;}
+  constructor(editor,{namespace='spline',labels=null,escapeInFields=false}={}) {
+    this.editor=editor;this.canvas=editor.manager.canvas;this.group=null;this.drag=null;this.namespace=namespace;this.labels=labels;
+    this.indexAttribute='data-'+namespace+'-control-index';this.selector='['+this.indexAttribute+']';
+    this.escapeInFields=escapeInFields;
+  }
   open() {
     this.close();this.events=new AbortController();const signal=this.events.signal;
     const on=(target,name,fn)=>target.addEventListener(name,fn,{capture:true,signal});
@@ -11,19 +15,19 @@ class SplineControlHandles {
     on(this.canvas,'lostpointercapture',event=>{if(this.drag?.id===event.pointerId)this.stop(true,'このドラッグを取り消しました。');});
     on(window,'blur',event=>{if(event.target===window && this.drag)this.stop(true,'このドラッグを取り消しました。');});
     on(document,'keydown',event=>{
-      if(event.key!=='Escape' || ToolManager.isEditingField(event.target))return;
+      if(event.key!=='Escape' || (!this.escapeInFields && ToolManager.isEditingField(event.target)))return;
       event.preventDefault();event.stopImmediatePropagation();
       if(this.drag)this.stop(true,'このドラッグを取り消しました。');else this.editor.cancel();
     });
     on(this.canvas,'mousedown',event=>{
-      if(event.target.closest?.('[data-spline-control-index]') && !window.zoomPanManager?.spacePressed){event.preventDefault();event.stopImmediatePropagation();}
+      if(event.target.closest?.(this.selector) && !window.zoomPanManager?.spacePressed){event.preventDefault();event.stopImmediatePropagation();}
     });
     on(window,'resize',()=>this.scheduleSync());
     this.observer=new MutationObserver(records=>{
       const element=this.editor.element;
       if(!element?.isConnected || records.some(r=>r.target===element || r.target===this.canvas || r.target.contains(element)))this.scheduleSync();
     });
-    this.observer.observe(this.canvas,{attributes:true,subtree:true,childList:true,attributeFilter:['transform','style','viewBox','width','height','d','data-vector-spline','data-layer']});
+    this.observer.observe(this.canvas,{attributes:true,subtree:true,childList:true,attributeFilter:['transform','style','viewBox','width','height','d','data-vector-'+this.namespace,'data-vector-implementation','data-layer']});
     this.layerObserver=new MutationObserver(()=>this.scheduleSync());
     const layers=document.getElementById('layer-list');if(layers)this.layerObserver.observe(layers,{subtree:true,childList:true});
     this.resizeObserver=new ResizeObserver(()=>this.scheduleSync());this.resizeObserver.observe(this.canvas);
@@ -56,15 +60,15 @@ class SplineControlHandles {
       const points=this.editor.input().points,frame=this.frame(),text=window.VectorUtils.splineControlGeometry.splineMatrixText;
       this.editor.manager.tools.select.removeControlPoints();
       if(!this.group) {
-        this.group=this.create('g',{'data-vector-preview':'spline-controls','pointer-events':'none'});
-        this.polygon=this.create('path',{'data-spline-control-polygon':'',fill:'none',stroke:'#777','stroke-width':1,'stroke-dasharray':'4 4','vector-effect':'non-scaling-stroke'});
+        this.group=this.create('g',{'data-vector-preview':this.namespace+'-controls','pointer-events':'none'});
+        this.polygon=this.create('path',{['data-'+this.namespace+'-control-polygon']:'',fill:'none',stroke:'#777','stroke-width':1,'stroke-dasharray':'4 4','vector-effect':'non-scaling-stroke'});
         this.group.append(this.polygon);this.items=[];
       }
       while(this.items.length>points.length)this.items.pop().remove();
       while(this.items.length<points.length){
-        const i=this.items.length,group=this.create('g'),circle=this.create('circle',{r:7,fill:'#fff',stroke:'#1265d6','stroke-width':1.5,'pointer-events':'all',cursor:'grab','data-spline-control-index':i,'aria-label':'制御点 '+(i+1)});
-        circle.style.touchAction='none';const title=this.create('title');title.textContent='制御点 '+(i+1)+'：ドラッグして移動';circle.append(title);
-        const label=this.create('text',{x:10,y:-10,fill:'#1265d6','font-size':11});label.textContent=i+1;
+        const i=this.items.length,caption=this.labels?.[i]??'制御点 '+(i+1),group=this.create('g'),circle=this.create('circle',{r:7,fill:'#fff',stroke:'#1265d6','stroke-width':1.5,'pointer-events':'all',cursor:'grab',[this.indexAttribute]:i,'aria-label':caption});
+        circle.style.touchAction='none';const title=this.create('title');title.textContent=caption+'：ドラッグして移動';circle.append(title);
+        const label=this.create('text',{x:10,y:-10,fill:'#1265d6','font-size':11});label.textContent=this.labels?.[i]??i+1;
         group.append(circle,label);this.items.push(group);this.group.append(group);
       }
       const canvasPoints=points.map(frame.toCanvas);
@@ -80,11 +84,11 @@ class SplineControlHandles {
     }
   }
   start(event) {
-    const handle=event.target.closest?.('[data-spline-control-index]');
+    const handle=event.target.closest?.(this.selector);
     if(!handle || !this.group?.contains(handle) || event.button!==0 || event.isPrimary===false || this.drag || window.zoomPanManager?.spacePressed || window.zoomPanManager?.isPanning)return;
     event.preventDefault();event.stopImmediatePropagation();
     try {
-      this.editor.assertTarget();const points=this.editor.input().points,index=Number(handle.dataset.splineControlIndex),frame=this.frame();
+      this.editor.assertTarget();const points=this.editor.input().points,index=Number(handle.getAttribute(this.indexAttribute)),frame=this.frame();
       const pointer=frame.fromScreen({x:event.clientX,y:event.clientY}),point=points[index];
       this.drag={id:event.pointerId,index,points,handle,before:this.editor.draft.pointsText,start:{x:event.clientX,y:event.clientY},moved:false,anchor:frame.toCanvas(point),offset:{x:point.x-pointer.x,y:point.y-pointer.y}};
       handle.setAttribute('cursor','grabbing');

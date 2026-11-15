@@ -5,6 +5,7 @@ import {renderGeometry, pathData, readOffsetShape} from "./svgGeometry.js";
 import {createRenderRegistry} from './renderStrategies.js';
 import {parseImplementationPreferences} from './implementationPreferences.js';
 import {circleModel, circleGeometrySnapshot} from './circleSource.js';
+import {arcInput, arcModel} from './arcSource.js';
 
 function snapPoint(point, {geometry, exclude, anchor, manager}) {
   if (geometry && window.snapManager) return window.snapManager.snapPoint(point, exclude, anchor);
@@ -60,9 +61,14 @@ export function createEditorHost({
     registerImplementation: (name, implementation) => run.register(name, implementation),
     renderers: name => render ? [describeRendering(name)] : drawing.list(name),
     selectRenderer: drawing.select, registerRenderer: drawing.register, describeRendering, annotate,
-    render(shape, target, options = {}) {
+    render(shape, target, {sourceInput, ...options} = {}) {
+      const arcSource = shape?.kind === 'arc' && options.toolName === 'arc' && (sourceInput || shape.through) ?
+        {version:1,input:arcInput(sourceInput ?? shape),model:arcModel(shape)} : null;
       const prepared = render ? shape : drawing.prepare(options.toolName, shape, options, options.renderer);
       const element = render ? render(prepared, target, options) : renderGeometry(prepared, target, options, encodePath);
+      if (arcSource && element?.tagName === 'path') {
+        element.setAttribute('data-vector-arc',JSON.stringify({...arcSource,path:element.getAttribute('d')}));
+      }
       if (element && shape?.kind === 'circle' && ['circle','path'].includes(element.tagName.toLowerCase())) {
         element.setAttribute('data-vector-circle', JSON.stringify({version:1,model:circleModel(shape),geometry:circleGeometrySnapshot(element)}));
       }

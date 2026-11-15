@@ -22,6 +22,7 @@
 import {createEditorHost} from "../adapters/editorHost.js";
 import {readSplineSource} from '../adapters/splineSource.js';
 import * as circleSource from '../adapters/circleSource.js';
+import * as arcSource from '../adapters/arcSource.js';
 import {createImplementationPreferences} from '../adapters/implementationPreferences.js';
 import * as splineControlGeometry from '../adapters/splineControlGeometry.js';
 import * as circleControlGeometry from '../adapters/circleControlGeometry.js';
@@ -38,6 +39,7 @@ window.VectorUtils = {
   createEditorHost,
   readSplineSource,
   circleSource,
+  arcSource,
   createImplementationPreferences,
   splineControlGeometry,
   circleControlGeometry,

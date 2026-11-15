@@ -81,12 +81,13 @@ test("geometry stays in local coordinates when a transformed line is split", () 
   assert.deepEqual(localPoints(target.next),[{x:25,y:0},{x:50,y:0}]);
 });
 
-test("splitting an open sampled outline invalidates spline and circle sources on both resulting outlines", () => {
-  const target = shape("path", {d:"M0 0 L20 0 L40 20", "data-vector-spline":"old model", "data-vector-circle":"old circle model", "data-vector-partial":"true"});
+test("splitting an open sampled outline invalidates spline, circle and arc sources on both resulting outlines", () => {
+  const target = shape("path", {d:"M0 0 L20 0 L40 20", "data-vector-spline":"old model", "data-vector-circle":"old circle model", "data-vector-arc":"old arc model", "data-vector-partial":"true"});
   split(target,canvas,{x:10,y:0});
   for (const el of [target,target.next]) {
     assert.equal(el.getAttribute("data-vector-spline"),null);
     assert.equal(el.getAttribute("data-vector-circle"),null);
+    assert.equal(el.getAttribute("data-vector-arc"),null);
     assert.equal(el.getAttribute("data-vector-partial"),null);
   }
 });

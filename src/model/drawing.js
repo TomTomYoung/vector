@@ -81,12 +81,15 @@ export function circleCenter(a, b, c) {
 }
 
 export function arc({start, through, end}, ops = {}) {
+  if (![start,through,end].every(p=>p && Number.isFinite(p.x) && Number.isFinite(p.y))) return null;
   const center = (ops.circleCenter ?? circleCenter)(start, through, end);
-  if (!center) return null;
+  if (!center || !Number.isFinite(center.x) || !Number.isFinite(center.y)) return null;
   const angle = direction(center, start);
   const positive = positiveTurn(direction(center, end) - angle);
   const turn = positiveTurn(direction(center, through) - angle) <= positive ? positive : positive - fullTurn;
-  return {kind: "arc", center, start, end, radius: (ops.distance ?? distance)(center, start), turn};
+  const radius = (ops.distance ?? distance)(center, start);
+  if (!Number.isFinite(radius) || radius <= 0 || !Number.isFinite(turn) || !turn || Math.abs(turn) >= fullTurn) return null;
+  return {kind: "arc", center, start, through: {...through}, end, radius, turn};
 }
 
 export function dimension({points, mode = "linear"}, ops = {}) {
