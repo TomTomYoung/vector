@@ -540,6 +540,7 @@ await check('Saved spline editing previews without mutation and applies in place
   doc.getElementById('spline-holder').append(curve);w.saveState();await tick();
   w.DrawingDocument.open(w.DrawingDocument.serialize());curve=doc.getElementById('editable-spline');
   activate('select');w.selectTool.selectObject(curve);
+  w.undoStack.length=0; // Isolate this check from the 20-entry limit reached by earlier fixtures.
   const original=curve.getAttribute('d'),source=curve.getAttribute('data-vector-spline'),parent=curve.parentElement;
   const attrs=['id','transform','stroke','stroke-width','stroke-dasharray','style','data-layer','data-transform-layers'];
   const appearance=attrs.map(a=>curve.getAttribute(a));
@@ -568,6 +569,7 @@ await check('Saved spline editing previews without mutation and applies in place
 await check('Cancel, invalid inputs, stale outlines and locked layers preserve the selected spline',async()=>{
   fixture();await tick();const curve=addEditableSpline('nurbsCurve',{points:editPoints,degree:2});
   activate('select');w.selectTool.selectObject(curve);w.saveState();await tick();
+  w.undoStack.length=0;
   const original=curve.getAttribute('d'),source=curve.getAttribute('data-vector-spline'),history=w.undoStack.length;
   splineAction('begin');splineField('編集する重み（空欄で全て1）','1,2,1,1');splineAction('preview');splineAction('cancel');
   assert(curve.getAttribute('d')===original && !canvas.querySelector('[data-vector-preview]'),'cancel original');
