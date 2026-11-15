@@ -44,7 +44,7 @@ test('host saves circle models for native, sampled and cubic geometry with effec
 test('native legacy circles derive actual local coordinates while arbitrary paths and unsupported units are refused',()=>{
   assert.deepEqual(read(native()).model,{kind:'circle',center:{x:12,y:34},radius:20});
   assert.deepEqual(read(native({r:2})).model.center,{x:0,y:0});
-  for(const attrs of [{r:'20%'},{r:0},{r:-1},{r:''},{r:'1e999'},{r:1,cx:'2px'}])assert.throws(()=>read(native(attrs)));
+  for(const attrs of [{r:'20%'},{r:0},{r:-1},{r:''},{r:'1e999'},{r:'0x10'},{r:1,cx:'2px'}])assert.throws(()=>read(native(attrs)));
   assert.throws(()=>read(new Element('path')),/元データ/);
 });
 

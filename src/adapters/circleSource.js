@@ -44,7 +44,7 @@ export function readCircleSource(sourceText, implementationText, geometry) {
     // Older native circles have an exact model. Arbitrary paths do not.
     if (geometry?.tag !== 'circle') throw Error('このパスには円の元データが保存されていません。');
     const number = (text, fallback) => text === null || text === undefined ? fallback :
-      typeof text === 'string' && text.trim() !== '' ? Number(text) : NaN;
+      typeof text === 'string' && /^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/.test(text.trim()) ? Number(text) : NaN;
     model = circleModel({kind:'circle',center:{x:number(geometry.cx,0),y:number(geometry.cy,0)},radius:number(geometry.r,0)});
   }
   if (model.radius <= 0) throw Error('再編集する円の半径は0より大きくしてください。');
