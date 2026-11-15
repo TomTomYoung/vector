@@ -71,3 +71,5 @@ UIと適用処理は [SplineEditor.js](../src/ui/SplineEditor.js)、保存モデ
 実装コミット `e42e9a7` の[CI](https://github.com/TomTomYoung/vector/actions/runs/43742784799)で、数値・モデル・編集73件とブラウザー操作26件が全て成功しました。
 
 [splineControls.test.mjs](../tests/splineControls.test.mjs) では、入れ子の変換・反転・縦横別の拡縮・ズーム、一定サイズのハンドル、つかみ位置の保持、グリッドと直交拘束、非有限値・非可逆変換の拒否を検証します。ブラウザー検証には、実際のポインターイベント、表示更新、キャンバス外での終了、Esc・操作取消・フォーカス喪失、周期・負重み、変換変更、選択切替、保存除外とUndo/Redoを追加しました。
+
+制御点ドラッグの実装コミット `084d3bc` の[CI](https://github.com/TomTomYoung/vector/actions/runs/43771807235)で、数値・モデル・編集85件とブラウザー操作35件が全て成功しました。

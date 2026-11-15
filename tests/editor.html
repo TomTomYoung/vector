@@ -765,6 +765,7 @@ await check('Spline control dragging preserves transformed originals and commits
     pointer('pointerdown',splineHandle(1),localScreen(curve,start));
     pointer('pointermove',doc,localScreen(curve,{x:192,y:169}));await paint();
     assert(closePoint(draftPoints()[1],{x:190,y:170}) && canvas.querySelector('[data-vector-preview="spline-edit"]'),'live local-coordinate preview');
+    assert(canvas.lastElementChild.getAttribute('data-vector-preview')==='spline-controls','handles stay above the preview');
     assert(curve.getAttribute('d')===path && curve.getAttribute('data-vector-spline')===source && w.undoStack.length===0,'drag leaves source and history untouched');
     const captured=w.DrawingDocument.capture();assert(!captured.querySelector('[data-vector-preview]') && captured.querySelector('#editable-spline').getAttribute('d')===path,'draft and handles excluded from save');
     pointer('pointermove',doc,localScreen(curve,{x:222,y:149}));

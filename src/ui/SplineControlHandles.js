@@ -71,7 +71,7 @@ class SplineControlHandles {
       this.polygon.setAttribute('d',canvasPoints.map((p,i)=>(i?'L':'M')+p.x+' '+p.y).join(' ')+(this.editor.draft.periodic&&points.length?' Z':''));
       canvasPoints.forEach((p,i)=>this.items[i].setAttribute('transform',text(frame.handleMatrix(p))));
       if(this.editor.preview)this.editor.preview.setAttribute('transform',text(frame.localCanvas));
-      if(this.group.parentNode!==this.canvas)this.canvas.append(this.group);
+      if(this.group.parentNode!==this.canvas || (this.editor.preview && this.group.nextSibling))this.canvas.append(this.group);
       if(this.error){this.error=false;this.editor.message='制御点をドラッグできます。「適用」で元図形を更新します。';this.editor.updateStatus();}
     } catch(error) {
       if(this.drag)this.stop(true,error.message);
