@@ -1,5 +1,6 @@
 // SplineTool.js
-// スプライン曲線描画ツール（Catmull-Rom スプライン）
+// スプライン曲線描画ツール（Cardinal / Catmull-Rom系の接線倍率調整版）
+// 係数の規約・計算とSVG描画・参照資料: ../../doc/algorithms.md#spline-convention
 //
 // 【依存関係】
 // - SvgUtils (window.SvgUtils): SVG要素作成
