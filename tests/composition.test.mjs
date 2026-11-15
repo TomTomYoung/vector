@@ -243,3 +243,13 @@ test("nonlinear curved overlaps keep an unresolved result instead of claiming al
   const result=run("bezierIntersections",{first,second,maxNodes:2000});
   assert.equal(result.complete,false); assert.ok(result.unresolved.length>0);
 });
+
+
+test("Bezier precision limits remain explicit for huge coordinates or unrepresentable tolerances", () => {
+  const input=geometryExamples.bezierIntersections.input;
+  for(const args of [{...input,tolerance:1e-20},{...input,parameterTolerance:1e-20},
+    {first:input.first.map(q=>p(q.x+1e12,q.y+1e12)),second:input.second.map(q=>p(q.x+1e12,q.y+1e12))}]) {
+    const result=run("bezierIntersections",args);
+    assert.equal(result.complete,false); assert.equal(result.unresolved[0].reason,"precision");
+  }
+});

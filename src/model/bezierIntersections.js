@@ -44,6 +44,10 @@ export function bezierIntersections({first, second, tolerance = 1e-7, parameterT
   const magnitude = Math.max(1, ...[...first, ...second].flatMap(p => [Math.abs(p.x), Math.abs(p.y)]));
   const roundoff = 64 * Number.EPSILON * magnitude * Math.max(first.length, second.length);
   const overlaps = [], intersections = [], unresolved = [];
+  if (tolerance < roundoff * 4 || parameterTolerance < 64 * Number.EPSILON) {
+    return {intersections, overlaps, complete: false,
+      unresolved: [{t: [0, 1], u: [0, 1], reason: "precision"}], visited: 0};
+  }
   function parameters(curve, point) {
     const bounds = pointBounds({points: curve}), axis = bounds.width >= bounds.height ? "x" : "y";
     return roots(curve.map(p => p[axis] - point[axis]), roundoff).filter(t => distance(evaluate(curve, t), point) <= roundoff * 4);
@@ -180,8 +184,8 @@ export function bezierIntersections({first, second, tolerance = 1e-7, parameterT
     visited++;
     if (covered(t, u)) continue;
     const ba = pointBounds({points: a}), bb = pointBounds({points: b});
-    // Unpadded hull boxes avoid turning nearby disjoint curves into intersections.
-    if (ba.x > bb.x + bb.width || bb.x > ba.x + ba.width || ba.y > bb.y + bb.height || bb.y > ba.y + ba.height) continue;
+    // Pad only by arithmetic roundoff, not by the requested geometric tolerance.
+    if (ba.x > bb.x + bb.width + roundoff || bb.x > ba.x + ba.width + roundoff || ba.y > bb.y + bb.height + roundoff || bb.y > ba.y + ba.height + roundoff) continue;
     if (separated(a, b)) continue;
     const small = Math.max(t[1] - t[0], u[1] - u[0]) <= parameterTolerance &&
       Math.max(ba.width, ba.height, bb.width, bb.height) <= tolerance;

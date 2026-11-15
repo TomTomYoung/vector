@@ -23,6 +23,7 @@ async function check(name, run) {
   } catch (error) {
     reports.push("FAIL " + name + "\n" + error.stack + "\n" + errors.join("\n"));
   }
+  result.textContent = reports.join("\n");
 }
 function assert(value, message) { if (!value) throw Error(message); }
 function activate(name) { doc.getElementById(name + "-tool").click(); }
