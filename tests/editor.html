@@ -742,6 +742,117 @@ await check('Per-figure spline implementation replacement never overwrites saved
   }finally{app.element.remove();localStorage.removeItem(storageKey);}
 });
 
+const paint=()=>new Promise(resolve=>w.requestAnimationFrame(()=>resolve()));
+function pointer(type,target,screen,options={}) {
+  target.dispatchEvent(new w.PointerEvent(type,{bubbles:true,cancelable:true,pointerId:71,pointerType:'mouse',isPrimary:true,button:0,
+    buttons:type==='pointerup'?0:1,clientX:screen.x,clientY:screen.y,...options}));
+}
+const localScreen=(curve,p)=>new w.DOMPoint(p.x,p.y).matrixTransform(curve.getScreenCTM());
+const splineHandle=i=>canvas.querySelector(`[data-spline-control-index="${i}"]`);
+const draftPoints=()=>w.toolPropertiesPanel.splineEditor.input().points;
+const closePoint=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y)<1e-6;
+
+await check('Spline control dragging preserves transformed originals and commits once with Undo/Redo',async()=>{
+  frame.scrollIntoView();fixture('<g id="drag-parent" transform="translate(20 30) rotate(17)"/>');await tick();
+  const viewport=w.zoomPanManager.getTransform(),snap=w.snapToGrid,ortho=w.orthoMode;w.snapToGrid=false;w.orthoMode=false;
+  try {
+    let curve=addEditableSpline('bSplineCurve',{points:editPoints,degree:3});curve.setAttribute('transform','scale(-0.7 1.2) translate(-450 0)');
+    doc.getElementById('drag-parent').append(curve);w.zoomPanManager.setTransform(1.5,35,20);
+    w.saveState();await tick();w.undoStack.length=0;activate('select');w.selectTool.selectObject(curve);splineAction('begin');
+    assert(canvas.querySelectorAll('[data-spline-control-index]').length===4 && !canvas.querySelector('.control-handle'),'only source controls shown');
+    const source=curve.getAttribute('data-vector-spline'),path=curve.getAttribute('d'),transform=curve.getAttribute('transform');
+    const start={x:editPoints[1].x+2,y:editPoints[1].y-1};
+    pointer('pointerdown',splineHandle(1),localScreen(curve,start));
+    pointer('pointermove',doc,localScreen(curve,{x:192,y:169}));await paint();
+    assert(closePoint(draftPoints()[1],{x:190,y:170}) && canvas.querySelector('[data-vector-preview="spline-edit"]'),'live local-coordinate preview');
+    assert(curve.getAttribute('d')===path && curve.getAttribute('data-vector-spline')===source && w.undoStack.length===0,'drag leaves source and history untouched');
+    const captured=w.DrawingDocument.capture();assert(!captured.querySelector('[data-vector-preview]') && captured.querySelector('#editable-spline').getAttribute('d')===path,'draft and handles excluded from save');
+    pointer('pointermove',doc,localScreen(curve,{x:222,y:149}));
+    pointer('pointerup',doc,localScreen(curve,{x:232,y:139}));await paint();
+    assert(closePoint(draftPoints()[1],{x:230,y:140}),'release outside canvas flushes final pointer');
+    assert(doc.querySelector('[aria-label="編集する制御点（1行に x, y）"]').value===w.toolPropertiesPanel.splineEditor.draft.pointsText,'coordinate field follows drag');
+    splineAction('apply');await tick();
+    assert(closePoint(JSON.parse(curve.getAttribute('data-vector-spline')).model.points[1],{x:230,y:140}),'edited model committed');
+    assert(curve.getAttribute('transform')===transform && curve.parentElement.id==='drag-parent' && curve.getAttribute('stroke')==='#624382','appearance and transforms retained');
+    assert(w.undoStack.length===1 && !canvas.querySelector('[data-spline-control-index]'),'single apply and handle cleanup');
+    key('z',{ctrlKey:true});await tick();curve=doc.getElementById('editable-spline');assert(curve.getAttribute('data-vector-spline')===source,'undo original source');
+    key('Z',{ctrlKey:true,shiftKey:true});await tick();assert(closePoint(JSON.parse(doc.getElementById('editable-spline').getAttribute('data-vector-spline')).model.points[1],{x:230,y:140}),'redo dragged control');
+  }finally{w.snapToGrid=snap;w.orthoMode=ortho;w.zoomPanManager.setTransform(viewport.zoom,viewport.panX,viewport.panY);}
+});
+
+await check('Escape, pointer cancellation and focus loss roll back only the current control drag',async()=>{
+  frame.scrollIntoView();fixture();await tick();const curve=addEditableSpline('bSplineCurve',{points:editPoints,degree:3});
+  activate('select');w.selectTool.selectObject(curve);w.saveState();await tick();w.undoStack.length=0;splineAction('begin');
+  const original=curve.getAttribute('d'),before=w.toolPropertiesPanel.splineEditor.draft.pointsText;
+  for(const action of ['escape','cancel','blur']){
+    pointer('pointerdown',splineHandle(0),localScreen(curve,editPoints[0]));
+    pointer('pointermove',doc,localScreen(curve,{x:120,y:150}));await paint();
+    assert(w.toolPropertiesPanel.splineEditor.draft.pointsText!==before,'drag changed before '+action);
+    if(action==='escape')key('Escape');else if(action==='cancel')pointer('pointercancel',doc,{x:0,y:0});else w.dispatchEvent(new w.FocusEvent('blur'));
+    pointer('pointerup',doc,localScreen(curve,{x:180,y:190}));await paint();
+    assert(w.toolPropertiesPanel.splineEditor.draft.pointsText===before && !w.toolPropertiesPanel.splineEditor.controls.drag,'one drag rolled back '+action);
+    assert(curve.getAttribute('d')===original && w.undoStack.length===0,'original remains '+action);
+  }
+  key('Escape');assert(!w.toolPropertiesPanel.splineEditor.draft && !canvas.querySelector('[data-spline-control-index]'),'second Escape exits edit');
+  assert(canvas.querySelector('.control-handle'),'normal selection controls restored');
+});
+
+await check('Control handles track numeric edits and zoom with drawing-space grid and orthogonal constraints',async()=>{
+  frame.scrollIntoView();fixture();await tick();const curve=addEditableSpline('bSplineCurve',{points:editPoints,degree:3});
+  const snap=w.snapToGrid,ortho=w.orthoMode,viewport=w.zoomPanManager.getTransform();
+  try {
+    w.snapToGrid=true;w.orthoMode=false;activate('select');w.selectTool.selectObject(curve);splineAction('begin');
+    const before=w.toolPropertiesPanel.splineEditor.draft.pointsText;
+    pointer('pointerdown',splineHandle(1),localScreen(curve,editPoints[1]));pointer('pointerup',doc,localScreen(curve,editPoints[1]));
+    assert(w.toolPropertiesPanel.splineEditor.draft.pointsText===before,'click alone does not snap or move');
+    pointer('pointerdown',splineHandle(1),localScreen(curve,editPoints[1]));pointer('pointerup',doc,localScreen(curve,{x:194,y:176}),{shiftKey:true});
+    assert(closePoint(draftPoints()[1],{x:200,y:220}),'grid then horizontal constraint uses drawing coordinates');
+    splineField('編集する制御点（1行に x, y）','80,100\n150,220\n240,110\n300,190\n330,220');
+    assert(canvas.querySelectorAll('[data-spline-control-index]').length===5,'numeric addition creates matching handle');
+    const diameter=splineHandle(0).getBoundingClientRect().width;
+    w.zoomPanManager.setTransform(2.5,50,40);await paint();await paint();
+    assert(Math.abs(splineHandle(0).getBoundingClientRect().width-diameter)<0.05,'handle size is constant in screen pixels');
+    const center=localScreen(curve,{x:80,y:100}),bounds=splineHandle(0).getBoundingClientRect();
+    assert(Math.abs(bounds.x+bounds.width/2-center.x)<0.05 && Math.abs(bounds.y+bounds.height/2-center.y)<0.05,'handle follows zoom and pan');
+    splineAction('cancel');
+  }finally{w.snapToGrid=snap;w.orthoMode=ortho;w.zoomPanManager.setTransform(viewport.zoom,viewport.panX,viewport.panY);}
+});
+
+await check('Periodic and negative-weight NURBS keep wrapped controls and pole gaps while dragging',async()=>{
+  frame.scrollIntoView();fixture();await tick();
+  let curve=addEditableSpline('nurbsCurve',{points:editPoints,degree:3,periodic:true,weights:[1,2,1,1]});
+  activate('select');w.selectTool.selectObject(curve);splineAction('begin');
+  assert(canvas.querySelectorAll('[data-spline-control-index]').length===4 && canvas.querySelector('[data-spline-control-polygon]').getAttribute('d').endsWith('Z'),'periodic source controls only');
+  pointer('pointerdown',splineHandle(0),localScreen(curve,editPoints[0]));pointer('pointerup',doc,localScreen(curve,{x:100,y:120}));splineAction('apply');
+  let model=JSON.parse(curve.getAttribute('data-vector-spline')).model;
+  assert(model.points.length===7 && closePoint(model.points[0],{x:100,y:120}) && closePoint(model.points[0],model.points[4]),'periodic wrap regenerated once');
+  fixture();await tick();curve=addEditableSpline('nurbsCurve',{points:editPoints.slice(0,3),degree:2,weights:[1,-1,1]});
+  activate('select');w.selectTool.selectObject(curve);splineAction('begin');
+  pointer('pointerdown',splineHandle(1),localScreen(curve,editPoints[1]));pointer('pointerup',doc,localScreen(curve,{x:180,y:190}));
+  assert(canvas.querySelector('[data-vector-preview="spline-edit"]').getAttribute('d').match(/M/g).length===2,'live preview keeps pole branches separate');
+  assert(doc.querySelector('[data-spline-edit-status]').textContent.includes('省略'),'pole warning remains visible');
+  splineAction('apply');assert(curve.hasAttribute('data-vector-partial') && curve.getAttribute('fill')==='none','partial marker and no fill retained');
+});
+
+await check('Locked, stale and singular targets reject control movement and selection changes clean up capture',async()=>{
+  frame.scrollIntoView();fixture();await tick();const curve=addEditableSpline('bSplineCurve',{points:editPoints,degree:3});
+  activate('select');w.selectTool.selectObject(curve);splineAction('begin');
+  const original=curve.getAttribute('d'),before=w.toolPropertiesPanel.splineEditor.draft.pointsText;
+  pointer('pointerdown',splineHandle(0),localScreen(curve,editPoints[0]));pointer('pointermove',doc,localScreen(curve,{x:100,y:150}));await paint();
+  const layer=w.layers.find(l=>l.id===Number(curve.getAttribute('data-layer')));layer.locked=true;
+  pointer('pointerup',doc,localScreen(curve,{x:130,y:180}));
+  assert(curve.getAttribute('d')===original && w.toolPropertiesPanel.splineEditor.draft.pointsText===before,'lock rolls back pending movement');
+  layer.locked=false;splineAction('cancel');splineAction('begin');
+  pointer('pointerdown',splineHandle(0),localScreen(curve,editPoints[0]));curve.setAttribute('d',original+' L400 400');
+  pointer('pointerup',doc,localScreen(curve,{x:120,y:120}));
+  assert(curve.getAttribute('d').endsWith('L400 400') && !canvas.querySelector('[data-spline-control-index]'),'changed geometry never overwritten');
+  splineAction('cancel');curve.setAttribute('d',original);curve.setAttribute('transform','scale(0 1)');splineAction('begin');
+  assert(!canvas.querySelector('[data-spline-control-index]') && doc.querySelector('[data-spline-edit-status]').textContent.includes('変換'),'singular transform refuses handles');
+  curve.removeAttribute('transform');await paint();await paint();assert(splineHandle(0),'handles recover after invertible transform');
+  pointer('pointerdown',splineHandle(0),localScreen(curve,editPoints[0]));activate('line');pointer('pointerup',doc,localScreen(curve,{x:200,y:200}));
+  assert(!canvas.querySelector('[data-spline-control-index]') && !w.toolPropertiesPanel.splineEditor.controls.drag && curve.getAttribute('d')===original,'tool switch releases drag and draft');
+});
+
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
 </script>

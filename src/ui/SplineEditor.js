@@ -1,12 +1,13 @@
 // Transactional reconstruction of one selected spline. The source stays untouched until Apply.
 class SplineEditor {
-  constructor(manager, refresh) {this.manager=manager;this.refresh=refresh;this.element=null;this.draft=null;this.preview=null;this.message='';}
+  constructor(manager, refresh) {this.manager=manager;this.refresh=refresh;this.element=null;this.draft=null;this.preview=null;this.message='';this.controls=new SplineControlHandles(this);}
   select(element) {
     if(this.element!==element){this.cancel(false);this.element=element;}
   }
-  cancel(refresh=true) {this.preview?.remove();this.preview=null;this.draft=null;this.message='';if(refresh)this.refresh();}
+  cancel(refresh=true) {this.controls.close();this.preview?.remove();this.preview=null;this.draft=null;this.message='';if(this.manager.activeToolName==='select')this.manager.tools.select.refreshHandles();if(refresh)this.refresh();}
   assertTarget() {
     if(!this.element?.isConnected || this.element.tagName!=='path' || !this.manager.tools.select.canSelect(this.element)) throw Error('編集対象が削除されたか、非表示・ロック中です。');
+    if(this.draft && (this.manager.activeToolName!=='select' || window.selectedObjects?.length!==1 || window.selectedObjects[0]!==this.element))throw Error('編集対象の選択が変更されました。');
     if(this.draft && (this.element.getAttribute('d')!==this.originalPath || this.element.getAttribute('data-vector-spline')!==this.originalSource)) throw Error('編集中に元図形が変更されました。取消してから読み直してください。');
   }
   begin() {
@@ -20,6 +21,7 @@ class SplineEditor {
       this.message='座標は図形のローカル座標です。移動・回転・色・線幅・レイヤーは保持します。';
     } catch(error){this.message=error.message;}
     this.refresh();
+    if(this.draft)this.controls.open();
   }
   input() {
     const d=this.draft;
@@ -51,7 +53,7 @@ class SplineEditor {
       return result;
     } finally {host.selectImplementation(d.method,previous);}
   }
-  showPreview() {
+  showPreview(refresh=true) {
     this.preview?.remove();this.preview=null;
     try {
       const result=this.build(),canvas=this.manager.canvas;
@@ -68,7 +70,8 @@ class SplineEditor {
       const record=JSON.parse(result.getAttribute('data-vector-implementation'));
       this.message=record.warning ?? '青い破線が再計算結果です。「適用」で元図形を更新します。';
     } catch(error){this.message=error.message;}
-    this.refresh();
+    this.controls.sync();
+    if(refresh)this.refresh();else this.updateStatus();
   }
   apply() {
     try {
@@ -90,7 +93,10 @@ class SplineEditor {
   changed() {
     this.preview?.remove();this.preview=null;
     this.message='入力を変更しました。プレビューまたは適用で再計算します。';
+    this.controls.sync();
   }
+  updateStatus() {const el=document.querySelector('[data-spline-edit-status]');if(el)el.textContent=this.message;}
+  updatePointsField() {const el=document.querySelector('[aria-label="編集する制御点（1行に x, y）"]');if(el&&this.draft)el.value=this.draft.pointsText;}
   render(container) {
     const message=document.createElement('p');message.dataset.splineEditStatus='';message.textContent=this.message;message.style.cssText='font-size:12px;line-height:1.6';
     const button=(text,action,id)=>{
@@ -99,6 +105,7 @@ class SplineEditor {
     };
     if(!this.draft){button('曲線を再編集',()=>this.begin(),'begin');container.append(message);return;}
     const d=this.draft;
+    const hint=document.createElement('p');hint.textContent='番号付きの制御点をドラッグできます。灰色の破線は制御多角形、青い破線は変更後の曲線です。Shiftまたは直交モードで縦横に移動します。Escはドラッグ中ならその移動、移動中でなければ再編集全体を取り消します。';hint.style.fontSize='12px';container.append(hint);
     const field=(label,value,change,{multiline=false,type='text',min,max,step}={})=>{
       const wrapper=document.createElement('label');wrapper.textContent=label;wrapper.style.cssText='display:block;font-size:12px;margin:10px 0';
       const input=document.createElement(multiline?'textarea':'input');if(!multiline)input.type=type;else input.rows=6;
