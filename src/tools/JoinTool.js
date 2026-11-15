@@ -153,6 +153,7 @@ class JoinTool extends BaseTool {
 
     // 連結された線を見つけて順序付け
     const orderedPoints = this.run("join", {segments});
+    const dependencies = this.toolManager.host.execute.trace?.();
 
     if (orderedPoints.length === 0) {
       console.log("選択した線は連結されていません");
@@ -161,6 +162,7 @@ class JoinTool extends BaseTool {
 
     const first = this.selectedElements[0];
     const polyline = this.draw("polyline", {points: orderedPoints});
+    this.toolManager.host.annotate?.(polyline, 'join', {dependencies});
     window.SvgUtils.setAttributes(polyline, {
       stroke: first.getAttribute("stroke"), "stroke-width": first.getAttribute("stroke-width"),
       fill: "none", "data-layer": first.getAttribute("data-layer"),

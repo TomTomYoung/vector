@@ -37,6 +37,7 @@ class ToolManager {
   // ツール登録
   registerTool(name, toolInstance) {
     this.tools[name] = toolInstance;
+    toolInstance.implementationName = name;
 
     // ツールボタンを作成
     const button = document.createElement("button");

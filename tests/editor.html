@@ -42,9 +42,9 @@ function fixture(content = "") {
   w.DrawingDocument.open('<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600">' + content + '</svg>');
   w.saveState();
 }
-await check("All 22 registered toolbar buttons activate", async () => {
+await check("All 31 registered toolbar buttons activate", async () => {
   const buttons = [...doc.querySelectorAll("#tool-buttons-scroll button")];
-  assert(buttons.length === 22, "registered " + buttons.length);
+  assert(buttons.length === 31, "registered " + buttons.length);
   for (const button of buttons) {
     button.click();
     assert(w.toolManager.activeToolName + "-tool" === button.id, button.id);
@@ -303,7 +303,7 @@ await check("Workbench selects real examples, reports invalid JSON and runs the 
     await ready;
     const d = other.contentDocument, get = id => d.getElementById(id);
     const select = get("tool"), input = get("input"), status = get("status");
-    assert(select.options.length === 117, "public examples loaded");
+    assert(select.options.length === 119, "public examples loaded");
     select.value = "polygonBoolean";
     select.dispatchEvent(new Event("change"));
     const example = JSON.parse(input.value);
@@ -377,6 +377,85 @@ await check("Four composed geometry operations run in the workbench worker", asy
     const recovered = await execute("solveConstraints");
     assert(recovered.value.converged && recovered.status === "完了", "worker recovers after invalid input");
   } finally {other.remove();}
+});
+await check('Properties switch the calculation and renderer, record approximation limits and survive SVG reload', async () => {
+  fixture(); await tick(); activate('cubicBezier');
+  const choose = (type, id) => {
+    const select=doc.querySelector(`[data-implementation-select="${type}"]`);
+    assert(select, 'implementation picker '+type); select.value=id;select.dispatchEvent(new w.Event('change'));
+  };
+  choose('rendering','adaptive');
+  const depth=doc.querySelector('[data-render-parameter="maxDepth"]');
+  depth.value=0;depth.dispatchEvent(new w.Event('change'));
+  click(100,100);click(120,250);click(250,80);click(300,150);
+  let curve=canvas.querySelector('[data-cubic-bezier-tool]');
+  assert(curve && !curve.getAttribute('d').includes('C') && curve.getAttribute('d').includes('L'),'adaptive SVG path');
+  let record=JSON.parse(curve.getAttribute('data-vector-implementation'));
+  assert(record.rendering.id==='adaptive' && record.warning && record.rendering.options.maxDepth===0,'actual implementation and limit recorded');
+  const saved=w.DrawingDocument.serialize();w.DrawingDocument.open(saved);
+  curve=canvas.querySelector('[data-cubic-bezier-tool]');
+  w.selectedObject=curve;w.selectedObjects=[curve];w.toolPropertiesPanel.updatePanel();
+  assert(doc.querySelector('[data-recorded-implementation]').textContent.includes('最大深さ'),'selected imported drawing shows actual record');
+  activate('spline');choose('calculation','centripetal');
+  click(30,30);click(80,150);click(300,100);key('Enter');
+  const spline=canvas.querySelector('[data-spline-tool]');
+  assert(JSON.parse(spline.getAttribute('data-vector-implementation')).calculation.id==='centripetal','selected calculation used');
+  assert(doc.querySelector('[data-implementation-panel]').textContent.includes('α=0.5'),'properties show algorithm');
+});
+
+await check('Nine new point-input tools produce editable SVG and omit unfinished construction from export', async () => {
+  const tools=['bSplineCurve','nurbsCurve','convexHull','triangulatePolygon','delaunayTriangles','voronoiCells','fitLine','fitCircle','minimumEnclosingCircle'];
+  for(const name of tools){
+    fixture(); await tick(); activate(name);
+    for(const [x,y] of [[100,100],[250,100],[280,200],[100,180]])click(x,y);
+    assert(!w.DrawingDocument.capture().querySelector('[data-vector-preview], [data-tool-layer="construction-handles"]'),'preview excluded '+name);
+    key('Enter');
+    const element=canvas.querySelector('[data-construction-tool="'+name+'"]');
+    assert(element,'new drawing '+name);
+    assert(JSON.parse(element.getAttribute('data-vector-implementation')).tool===name,'provenance '+name);
+    assert(!canvas.querySelector('[data-vector-preview], [data-tool-layer="construction-handles"]'),'construction cleared '+name);
+  }
+  fixture();await tick();activate('nurbsCurve');
+  const tool=w.toolManager.activeTool;tool.degree=2;
+  tool.weightsText='1,0.7071067811865476,1';
+  click(200,100);click(200,200);click(100,200);key('Enter');
+  assert(canvas.querySelector('[data-construction-tool="nurbsCurve"]'),'weighted NURBS');
+  const before=canvas.querySelectorAll('[data-construction-tool]').length;
+  tool.weightsText='1,-1,1';click(300,100);click(300,200);click(200,200);key('Enter');
+  assert(canvas.querySelectorAll('[data-construction-tool]').length===before && tool.implementationError,'invalid weights do not commit');
+  key('Escape');
+});
+
+await check('Renderer changes SVG tag safely and independent external implementations have honest metadata', async () => {
+  fixture();await tick();activate('circle');
+  const host=w.toolManager.host;
+  host.selectRenderer('circle','cubic');
+  mouse('mousedown',100,100);mouse('mousemove',140,100);mouse('mouseup',140,100);
+  const circle=canvas.querySelector('path[data-vector-implementation]');
+  assert(circle?.getAttribute('d').includes('C') && circle.getAttribute('d').endsWith('Z'),'circle through cubic path');
+  host.selectRenderer('circle','default');
+  const replacement=w.VectorUtils.createEditorHost({tools:{circle:()=>({kind:'circle',center:{x:1,y:2},radius:7})}});
+  assert(replacement.describe('circle').algorithm.includes('情報未指定'),'custom function not mislabeled as default formula');
+  replacement.registerRenderer({id:'custom-test',label:'Test renderer',algorithm:'Identity test',supports:name=>name==='circle',prepare:shape=>({...shape,radius:9})});
+  replacement.selectRenderer('circle','custom-test');
+  const shape=replacement.render(replacement.execute('circle',{}),null,{toolName:'circle'});
+  assert(shape.r.baseVal.value===9 && JSON.parse(shape.getAttribute('data-vector-implementation')).rendering.id==='custom-test','external renderer reached output');
+  assert(host.describe('circle').id==='default','isolated registry');
+});
+
+await check('Workbench implementation picker executes the chosen alternative in the worker', async () => {
+  const other=document.createElement('iframe');
+  const ready=new Promise(resolve=>other.addEventListener('load',resolve,{once:true}));other.src='../geometry.html';document.body.append(other);
+  try{
+    await ready;const d=other.contentDocument,get=id=>d.getElementById(id);
+    get('tool').value='spline';get('tool').dispatchEvent(new Event('change'));
+    get('implementation').value='uniform';get('implementation').dispatchEvent(new Event('change'));
+    assert(get('algorithm').textContent.includes('tension=1'),'algorithm shown');
+    const done=new Promise(resolve=>{const obs=new MutationObserver(()=>{if(get('status').textContent==='計算中…')return;obs.disconnect();resolve();});obs.observe(get('status'),{childList:true});});
+    get('run').click();await done;
+    const result=JSON.parse(get('output').textContent);
+    assert(Math.abs(result.segments[0].control1.x-1/3)<1e-12,'uniform result rather than default half tangent');
+  }finally{other.remove();}
 });
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";

@@ -20,23 +20,19 @@ import {regionBoundary} from "./regionBoundary.js";
 import {constrainedDelaunay} from "./constrainedMesh.js";
 import {bezierIntersections} from "./bezierIntersections.js";
 import {solveConstraints} from "./constraints.js";
+import {bSplineCurve, nurbsCurve} from "./splineCurves.js";
+import {createImplementationRegistry} from "./implementationRegistry.js";
 
 const defaults = {select, line, rectangle, circle, arc, polygon, path, spline, quadraticBezier,
   cubicBezier, nthBezier, polyline, vertices, text, dimension, offset, trim, extend, fillet, chamfer, split, join,
   reflectPoint, polylineLength, signedArea,
   ...affine, ...intersections, ...conics, ...polygons, ...chains, ...curveAnalysis,
   ...regions, ...splines, ...pointSets, ...projective, ...mesh,
-  regionBoundary, constrainedDelaunay, bezierIntersections, solveConstraints};
+  regionBoundary, constrainedDelaunay, bezierIntersections, solveConstraints, bSplineCurve, nurbsCurve};
 
 export const toolNames = Object.freeze(Object.keys(defaults));
 
 // Optional dispatcher. Every default tool can also be imported and called directly.
-export function createToolset({tools = {}, operations = {}} = {}) {
-  const implementations = {...defaults, ...tools};
-  const ops = {...operations};
-  function execute(name, input) {
-    if (!Object.hasOwn(implementations, name)) throw new RangeError("Unknown tool: " + name);
-    return implementations[name](input, ops, execute);
-  }
-  return execute;
+export function createToolset(options = {}) {
+  return createImplementationRegistry(defaults, options);
 }

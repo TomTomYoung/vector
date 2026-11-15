@@ -15,6 +15,7 @@ class OffsetTool extends BaseTool {
     super(canvas, toolManager);
     this.selectedElement = null;
     this.offsetDistance = 10;
+    this.miterLimit = 10;
   }
 
   getTitle() {
@@ -39,6 +40,8 @@ class OffsetTool extends BaseTool {
 
   getToolProperties() {
     return [
+      {type: 'number', label: 'Miter実装の上限比', value: this.miterLimit, min: 1, max: 1000, step: 1,
+        onChange: value => {if (Number.isFinite(value) && value >= 1) this.miterLimit = value;}},
       {
         type: "number",
         label: "オフセット距離",
@@ -104,7 +107,7 @@ class OffsetTool extends BaseTool {
     const local = new DOMPoint(point.x, point.y).matrixTransform(toLocal);
     if (!Number.isFinite(local.x) || !Number.isFinite(local.y)) return;
     const shape = host.readShape(source);
-    const copy = shape && this.draw("offset", {shape, point: local, amount: this.offsetDistance});
+    const copy = shape && this.draw("offset", {shape, point: local, amount: this.offsetDistance, miterLimit: this.miterLimit});
     if (!copy) return;
     window.SvgUtils.setAttributes(copy, {
       stroke: source.getAttribute("stroke"), "stroke-width": source.getAttribute("stroke-width"),

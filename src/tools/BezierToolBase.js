@@ -49,6 +49,8 @@ class BezierToolBase extends BaseTool {
     }
   }
 
+  onImplementationChanged() { this.updatePreview(); }
+
   activate() {
     super.activate();
     this.canvas.style.cursor = 'crosshair';

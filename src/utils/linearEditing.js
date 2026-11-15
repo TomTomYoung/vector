@@ -83,14 +83,17 @@ export function edit(name, el, canvas, edges, point, execute, save) {
   if (!parts.length) return;
   save();
   let previous = el;
+  const edited = [el];
   for (const points of parts.slice(1)) {
     const next = el.cloneNode(false);
     for (const attr of ["id", "data-line-id", "data-polyline-id", "data-path-id", "data-vector-selected", "data-vector-indice"]) next.removeAttribute(attr);
     writePoints(next, points, shape.inverse);
     previous.after(next);
     previous = next;
+    edited.push(next);
   }
   writePoints(el, parts[0], shape.inverse);
+  return edited;
 }
 
 const execute = (name, input) => linear[name](input);

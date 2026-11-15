@@ -100,6 +100,15 @@ class App {
       chamfer: ChamferTool,
       split: SplitTool,
       join: JoinTool,
+      bSplineCurve: pointConstructionController('bSplineCurve', 'B-spline'),
+      nurbsCurve: pointConstructionController('nurbsCurve', 'NURBS'),
+      convexHull: pointConstructionController('convexHull', '凸包'),
+      triangulatePolygon: pointConstructionController('triangulatePolygon', '多角形三角形分割'),
+      delaunayTriangles: pointConstructionController('delaunayTriangles', 'Delaunay分割'),
+      voronoiCells: pointConstructionController('voronoiCells', 'Voronoi分割'),
+      fitLine: pointConstructionController('fitLine', '直線当てはめ'),
+      fitCircle: pointConstructionController('fitCircle', '円当てはめ'),
+      minimumEnclosingCircle: pointConstructionController('minimumEnclosingCircle', '最小包含円'),
       ...this.controllers,
     };
     for (const [name, Controller] of Object.entries(controllers)) {

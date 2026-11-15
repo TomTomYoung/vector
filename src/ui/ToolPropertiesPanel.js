@@ -83,6 +83,8 @@ class ToolPropertiesPanel {
     // 操作説明セクション
     this.createInstructionsSection();
 
+    this.createImplementationSection();
+
     // 共通プロパティセクション
     this.createCommonPropertiesSection();
 
@@ -91,6 +93,92 @@ class ToolPropertiesPanel {
 
     // 選択されたオブジェクトのアフィン変換レイヤーセクション
     this.createTransformLayersSection();
+  }
+
+  createImplementationSection() {
+    const host = this.toolManager.host, name = this.currentTool.implementationName ?? this.toolManager.activeToolName;
+    const section = this.createSection('実装・アルゴリズム', {emphasize: true});
+    section.dataset.implementationPanel = name;
+    section.style.overflowWrap = 'anywhere';
+    const note = document.createElement('p');
+    note.textContent = '次の作図・編集に使用する方式です。';
+    section.append(note);
+    const info = host.describe?.(name);
+    const show = (title, item) => {
+      const p = document.createElement('p');
+      p.textContent = title + ': ' + (item?.algorithm ?? '情報未指定');
+      p.style.cssText = 'font-size:12px;line-height:1.6'; section.append(p);
+      if (item?.source) {
+        const source = document.createElement('a');
+        const path = String(item.source);
+        source.textContent = '実装: ' + path;
+        if (/^src\/[\w/.-]+\.js$/.test(path)) source.href = 'https://github.com/TomTomYoung/vector/blob/master/' + path;
+        else if (/^https?:\/\//.test(path)) source.href = path;
+        source.target = '_blank'; source.rel = 'noopener'; source.style.fontSize = '11px'; section.append(source);
+      }
+    };
+    const variants = host.implementations?.(name) ?? [];
+    if (variants.length > 1) {
+      const group = this.createPropertyGroup('計算の実装');
+      const select = this.createSelect(variants.map(v => ({value: v.id, label: v.label})), info.id, id => {
+        host.selectImplementation(name, id); this.currentTool.onImplementationChanged?.(); this.updatePanel();
+      });
+      select.dataset.implementationSelect = 'calculation'; select.setAttribute('aria-label', '計算の実装');
+      group.append(select); section.append(group);
+    }
+    show('計算', info);
+    if (info?.operations?.length) {
+      const p = document.createElement('p');
+      p.textContent = '補助演算の差し替え: ' + info.operations.join(', '); p.style.fontSize = '12px'; section.append(p);
+    }
+    const rendering = host.describeRendering?.(name), renderers = host.renderers?.(name) ?? [];
+    if (renderers.length > 1) {
+      const group = this.createPropertyGroup('描画の実装');
+      const select = this.createSelect(renderers.map(v => ({value: v.id, label: v.label})), rendering.id, id => {
+        host.selectRenderer(name, id); this.currentTool.onImplementationChanged?.(); this.updatePanel();
+      });
+      select.dataset.implementationSelect = 'rendering'; select.setAttribute('aria-label', '描画の実装');
+      group.append(select); section.append(group);
+      const numeric = (label, key, value, min, max, step) => {
+        const group = this.createPropertyGroup(label);
+        const input = this.createNumberInput(value, min, max, step, value => {
+          if (!Number.isFinite(value) || value < min || value > max || (step === 1 && !Number.isInteger(value))) return;
+          host.selectRenderer(name, rendering.id, {[key]: value}); this.currentTool.onImplementationChanged?.();
+        });
+        input.dataset.renderParameter = key; input.setAttribute('aria-label', label); group.append(input); section.append(group);
+      };
+      if (['sampled', 'bernstein'].includes(rendering.id)) numeric('描画の分割数', 'sampleCount', rendering.options.sampleCount ?? 80, 2, 10000, 1);
+      if (rendering.id === 'adaptive') {
+        numeric('図面座標での許容差', 'tolerance', rendering.options.tolerance ?? 0.25, 0.000001, 1000, 0.05);
+        numeric('最大分割深さ', 'maxDepth', rendering.options.maxDepth ?? 12, 0, 18, 1);
+      }
+    }
+    show('描画', rendering);
+    if (this.currentTool.implementationError) {
+      const p = document.createElement('p'); p.textContent = this.currentTool.implementationError; p.style.color = '#a22'; section.append(p);
+    }
+    const link = document.createElement('a');
+    link.textContent = '方式・換装方法・参照資料';
+    link.href = 'https://github.com/TomTomYoung/vector/blob/master/doc/implementation-options.md';
+    link.target = '_blank'; link.rel = 'noopener'; section.append(link);
+    const selected = window.selectedObjects?.length ? window.selectedObjects : window.selectedObject ? [window.selectedObject] : [];
+    if (selected.length) {
+      const heading = document.createElement('h5'); heading.textContent = '選択図形に記録された生成・編集方式'; section.append(heading);
+      for (const element of selected.slice(0, 10)) {
+        const text = document.createElement('p'); text.dataset.recordedImplementation = '';
+        try {
+          const raw = element.closest('[data-vector-implementation]')?.getAttribute('data-vector-implementation');
+          const record = raw?.length < 20000 ? JSON.parse(raw) : null;
+          text.textContent = record?.version === 1 ? `${record.tool}: 計算 ${record.calculation?.algorithm ?? '不明'} / 描画 ${record.rendering?.algorithm ?? '不明'}` +
+            (record.dependencies?.length > 1 ? ' / 委譲先 ' + record.dependencies.slice(1).map(d => `${d.tool}: ${d.algorithm}`).join('; ') : '') +
+            (record.rendering?.options && Object.keys(record.rendering.options).length ? ' / 描画設定 ' + JSON.stringify(record.rendering.options) : '') +
+            (record.warning ? ' / ' + record.warning : '') + (record.note ? ' / ' + record.note : '') : '方式の記録なし（旧データ・外部SVG等）';
+        } catch { text.textContent = '方式の記録を読めません。'; }
+        text.style.cssText = 'font-size:12px;line-height:1.6'; section.append(text);
+      }
+      if (selected.length > 10) section.append(document.createTextNode('先頭10図形の記録を表示しています。'));
+    }
+    this.panel.append(section);
   }
 
   createInstructionsSection() {

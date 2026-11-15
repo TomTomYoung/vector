@@ -22,11 +22,17 @@ export function pathData(shape, options = {}) {
       ? "C " + [segment.control1, segment.control2, segment.end].map(pair).join(", ")
       : "L " + pair(segment.end));
   }
+  if (shape.closed) commands.push('Z');
   return commands.join(" ");
 }
 
 export function renderGeometry(shape, element = null, options = {}, encodePath = pathData) {
   if (!shape) return null;
+  if (shape.kind === 'group') {
+    const group = element ?? createElement('g');
+    group.replaceChildren(...shape.children.map(child => renderGeometry(child, null, options, encodePath)).filter(Boolean));
+    return group;
+  }
   let tag = shape.kind, attrs;
   switch (shape.kind) {
     case "segment":
@@ -56,7 +62,13 @@ export function renderGeometry(shape, element = null, options = {}, encodePath =
     default:
       throw new TypeError("Unsupported geometry: " + shape.kind);
   }
-  const target = element ?? createElement(tag);
+  let target = element ?? createElement(tag);
+  if (target.tagName !== tag) {
+    const replacement = createElement(tag);
+    for (const attribute of target.attributes) replacement.setAttribute(attribute.name, attribute.value);
+    for (const name of ['x', 'y', 'width', 'height', 'cx', 'cy', 'r', 'points', 'd', 'x1', 'y1', 'x2', 'y2']) replacement.removeAttribute(name);
+    target.replaceWith(replacement); target = replacement;
+  }
   setAttributes(target, attrs);
   if (shape.kind === "text") target.textContent = shape.content;
   return target;

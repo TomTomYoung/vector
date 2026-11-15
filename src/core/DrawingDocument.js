@@ -1,6 +1,6 @@
 // The SVG artwork and its editable metadata, shared by file I/O and undo.
 class DrawingDocument {
-  static helpers = "#grid, .control-handle, .rotate-handle, .rotate-line, .translate-handle, .marquee-selection, .snap-indicator, [data-tool-layer='vertices-handles']";
+  static helpers = "#grid, .control-handle, .rotate-handle, .rotate-line, .translate-handle, .marquee-selection, .snap-indicator, [data-tool-layer='vertices-handles'], [data-tool-layer='construction-handles'], [data-vector-preview]";
   static metadata = "metadata[data-vector-document]";
   static sizeAttributes = ["width", "height", "viewBox", "preserveAspectRatio"];
 
