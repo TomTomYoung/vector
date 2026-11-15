@@ -854,6 +854,107 @@ await check('Locked, stale and singular targets reject control movement and sele
   assert(!canvas.querySelector('[data-spline-control-index]') && !w.toolPropertiesPanel.splineEditor.controls.drag && curve.getAttribute('d')===original,'tool switch releases drag and draft');
 });
 
+function circleAction(action) {
+  const button=doc.querySelector(`[data-circle-action="${action}"]`);assert(button,'circle action '+action);button.click();
+}
+const circleField=(label,value,event='input')=>splineField(label,value,event);
+function addEditableCircle(renderer='sampled',method='circle') {
+  const host=w.toolManager.host,input=method==='circle'?{center:{x:160,y:130},radius:50}:
+    {points:[{x:110,y:130},{x:160,y:80},{x:210,y:130},{x:160,y:180}]};
+  const element=host.render(host.execute(method,input),null,{toolName:method,renderer,sampleCount:16});
+  element.id='editable-circle';element.setAttribute('stroke','#624382');element.setAttribute('stroke-width','5');
+  element.setAttribute('fill','none');element.setAttribute('data-layer',w.layers[0].id);canvas.append(element);return element;
+}
+
+await check('Circle edits preview in transformed coordinates, replace path with native circle and undo in one step',async()=>{
+  fixture('<g id="circle-holder" transform="translate(15 20) rotate(12)"><title>holder</title></g>');await tick();
+  let circle=addEditableCircle();const parent=doc.getElementById('circle-holder');parent.append(circle);
+  circle.setAttribute('transform','translate(30 10) scale(-0.8 1.2)');circle.setAttribute('stroke-dasharray','9 2');
+  circle.setAttribute('style','opacity:0.7');circle.setAttribute('data-transform-layers','[]');
+  const title=doc.createElementNS(canvas.namespaceURI,'title');title.textContent='editable circle';circle.append(title);
+  const after=doc.createElementNS(canvas.namespaceURI,'desc');after.id='after-circle';parent.append(after);
+  w.saveState();await tick();w.undoStack.length=0;activate('select');w.selectTool.selectObject(circle);
+  const original=circle.getAttribute('d'),originalSource=circle.getAttribute('data-vector-circle');
+  const attrs=['id','transform','stroke','stroke-width','stroke-dasharray','style','data-layer','data-transform-layers'];
+  const appearance=attrs.map(a=>circle.getAttribute(a));
+  circleAction('begin');circleField('円の中心X',180);circleField('円の半径',60);circleField('円の再描画実装','default','change');circleAction('preview');
+  const preview=canvas.querySelector('[data-vector-preview="circle-edit"]');assert(preview?.tagName==='circle','native preview');
+  const expected=circle.getScreenCTM(),actual=preview.getScreenCTM();
+  assert(['a','b','c','d','e','f'].every(k=>Math.abs(actual[k]-expected[k])<1e-5),'nested transforms preserved');
+  assert(circle.getAttribute('d')===original && circle.getAttribute('data-vector-circle')===originalSource,'preview leaves original');
+  assert(!w.DrawingDocument.capture().querySelector('[data-vector-preview]'),'preview excluded from save');
+  circleAction('apply');await tick();circle=doc.getElementById('editable-circle');
+  assert(circle.tagName==='circle' && circle.getAttribute('cx')==='180' && circle.getAttribute('r')==='60','native edit result');
+  assert(circle.parentElement===parent && circle.nextElementSibling.id==='after-circle' && circle.querySelector('title').textContent==='editable circle','position and children preserved');
+  assert(attrs.every((a,i)=>circle.getAttribute(a)===appearance[i]),'appearance preserved');
+  assert(w.selectedObject===circle && w.selectedObjects[0]===circle && w.selectTool.selectedObject===circle,'selection follows replacement');
+  assert(w.undoStack.length===1 && !canvas.querySelector('[data-vector-preview]'),'one history step');
+  key('z',{ctrlKey:true});await tick();assert(doc.getElementById('editable-circle').getAttribute('d')===original,'undo original path');
+  key('Z',{ctrlKey:true,shiftKey:true});await tick();assert(doc.getElementById('editable-circle').getAttribute('r')==='60','redo native model');
+});
+
+await check('Circle native, cubic and sampled switches survive SVG reload while preserving origin and per-figure settings',async()=>{
+  fixture();await tick();let circle=addEditableCircle('default','fitCircle');
+  activate('select');w.selectTool.selectObject(circle);circleAction('begin');circleField('円の半径',65);circleField('円の再描画実装','cubic','change');circleAction('apply');
+  circle=doc.getElementById('editable-circle');assert(circle.tagName==='path' && circle.getAttribute('d').match(/C/g).length===4,'four cubic spans');
+  let record=JSON.parse(circle.getAttribute('data-vector-implementation'));
+  assert(record.tool==='circle' && record.circleEdit.origin.tool==='fitCircle','current and original computations separated');
+  assert(doc.querySelector('[data-recorded-implementation]').textContent.includes('元の生成 fitCircle'),'original algorithm displayed');
+  w.DrawingDocument.open(w.DrawingDocument.serialize());circle=doc.getElementById('editable-circle');
+  activate('select');w.selectTool.selectObject(circle);circleAction('begin');
+  assert(doc.querySelector('[aria-label="円の半径"]').value==='65' && doc.querySelector('[aria-label="円の再描画実装"]').value==='cubic','source survives reload');
+  circleField('円の再描画実装','sampled','change');circleField('円の再描画分割数',24);circleAction('apply');
+  assert(doc.getElementById('editable-circle')===circle && circle.getAttribute('d').match(/L/g).length===24,'same path identity with chosen detail');
+  record=JSON.parse(circle.getAttribute('data-vector-implementation'));
+  assert(record.rendering.options.sampleCount===24 && record.circleEdit.origin.tool==='fitCircle' && !record.circleEdit.origin.circleEdit,'origin does not nest');
+});
+
+await check('Circle cancellation, invalid input, locks, concurrent changes and tool changes never commit a draft',async()=>{
+  fixture();await tick();const circle=addEditableCircle();activate('select');w.selectTool.selectObject(circle);w.saveState();await tick();w.undoStack.length=0;
+  const original=circle.getAttribute('d');circleAction('begin');circleField('円の半径',70);circleAction('preview');key('Escape');
+  assert(!w.toolPropertiesPanel.circleEditor.draft && !canvas.querySelector('[data-vector-preview]'),'escape cancels draft');
+  circleAction('begin');
+  for(const value of ['','-1','0','1e999']){circleField('円の半径',value);circleAction('apply');assert(circle.getAttribute('d')===original,'invalid radius preserved');}
+  circleField('円の半径',60);circleField('円の再描画分割数',10001);circleAction('apply');assert(circle.getAttribute('d')===original,'invalid count');circleField('円の再描画分割数',20);
+  const layer=w.layers.find(l=>l.id===Number(circle.getAttribute('data-layer')));layer.locked=true;circleAction('apply');layer.locked=false;
+  assert(doc.querySelector('[data-circle-edit-status]').textContent.includes('ロック'),'lock refuses apply');
+  circle.setAttribute('d',original+' L400 400');circleAction('apply');
+  assert(circle.getAttribute('d').endsWith('L400 400') && doc.querySelector('[data-circle-edit-status]').textContent.includes('変更されました'),'concurrent edit preserved');
+  circleAction('cancel');circleAction('begin');assert(!w.toolPropertiesPanel.circleEditor.draft && doc.querySelector('[data-circle-edit-status]').textContent.includes('一致しません'),'stale saved source refused');
+  circle.setAttribute('d',original);circleAction('begin');circleAction('preview');activate('line');
+  assert(!w.toolPropertiesPanel.circleEditor.draft && !canvas.querySelector('[data-vector-preview]') && w.undoStack.length===0,'tool change cancels without history');
+});
+
+await check('Legacy native circles and direct circle controls re-edit actual geometry without reviving stale models',async()=>{
+  fixture('<circle id="legacy-circle" cx="100" cy="90" r="30" stroke="black" fill="none" data-circle-tool="true"/>');await tick();
+  let circle=doc.getElementById('legacy-circle');activate('select');w.selectTool.selectObject(circle);circleAction('begin');circleField('円の半径',40);circleAction('apply');
+  assert(doc.getElementById('legacy-circle')===circle && circle.getAttribute('r')==='40','legacy native edited in place');
+  w.toolManager.tools.circle.applyCircleGeometry(circle,{cx:120,cy:80,r:55});
+  assert(!circle.hasAttribute('data-vector-circle') && JSON.parse(circle.getAttribute('data-vector-implementation')).calculation.id==='direct-attributes','direct attributes invalidate saved model');
+  w.toolPropertiesPanel.updatePanel();circleAction('begin');assert(doc.querySelector('[aria-label="円の半径"]').value==='55','uses actual radius');circleAction('apply');
+  circle.setAttribute('transform','translate(10 20) scale(2)');w.toolManager.tools.circle.applyAffineToGeometry(circle);w.toolPropertiesPanel.updatePanel();circleAction('begin');
+  assert(doc.querySelector('[aria-label="円の半径"]').value==='110' && doc.querySelector('[aria-label="円の中心X"]').value==='250','baked geometry used');circleAction('cancel');
+  const arbitrary=doc.createElementNS(canvas.namespaceURI,'path');arbitrary.setAttribute('d','M0 0 L10 10 Z');canvas.append(arbitrary);w.selectTool.selectObject(arbitrary);
+  assert(!doc.querySelector('[data-circle-editor]'),'no inference from arbitrary path');
+});
+
+await check('Circle renderer and calculation overrides are explicit and do not change next-drawing preferences on success or failure',async()=>{
+  fixture();await tick();const host=w.toolManager.host;
+  host.registerImplementation('circle',{id:'test-circle-edit',label:'Test circle',algorithm:'Explicit radius doubled',run:({center,radius})=>({kind:'circle',center,radius:radius*2})});
+  host.registerImplementation('circle',{id:'test-circle-failure',label:'Fail circle',algorithm:'Intentional failure',run:()=>{throw Error('circle calculation failure');}});
+  let circle=addEditableCircle();const original=circle.getAttribute('d');
+  host.selectRenderer('circle','cubic',{sampleCount:33});const before=JSON.stringify(host.exportPreferences());
+  activate('select');w.selectTool.selectObject(circle);circleAction('begin');circleField('円の再計算実装','test-circle-failure','change');circleAction('apply');
+  assert(circle.getAttribute('d')===original && JSON.stringify(host.exportPreferences())===before,'failure restores selection');
+  circleField('円の再計算実装','test-circle-edit','change');circleField('円の半径',30);circleAction('apply');circle=doc.getElementById('editable-circle');
+  assert(JSON.parse(circle.getAttribute('data-vector-circle')).model.radius===60 && JSON.stringify(host.exportPreferences())===before,'selected plugin used without preferences change');
+  let record=JSON.parse(circle.getAttribute('data-vector-implementation'));record.rendering.id='unregistered-circle-renderer';circle.setAttribute('data-vector-implementation',JSON.stringify(record));
+  circleAction('begin');circleAction('apply');assert(doc.querySelector('[data-circle-edit-status]').textContent.includes('描画実装がありません'),'missing renderer refused');
+  circleField('円の再描画実装','default','change');circleField('円の再計算実装','default','change');circleAction('apply');
+  assert(doc.getElementById('editable-circle').tagName==='circle' && JSON.stringify(host.exportPreferences())===before,'explicit fallback succeeds');
+  host.selectRenderer('circle','default');
+});
+
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
 </script>

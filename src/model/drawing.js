@@ -9,7 +9,11 @@ export function rectangle({start, end}) {
     width: Math.abs(end.x - start.x), height: Math.abs(end.y - start.y)};
 }
 
-export function circle({center, point}, ops = {}) {
+export function circle({center, point, radius}, ops = {}) {
+  if (radius !== undefined) {
+    if (!Number.isFinite(center?.x) || !Number.isFinite(center?.y) || !Number.isFinite(radius) || radius < 0) return null;
+    return {kind:'circle',center:{x:center.x,y:center.y},radius};
+  }
   return {kind: "circle", center, radius: (ops.distance ?? distance)(center, point)};
 }
 

@@ -17,7 +17,7 @@ export const toolMetadata = Object.freeze({
   },
   "circle": {
     "label": "標準",
-    "algorithm": "中心から入力点までのユークリッド距離を半径にする",
+    "algorithm": "中心と明示半径、または中心から入力点までのユークリッド距離で円を構成",
     "source": "src/model/drawing.js"
   },
   "arc": {
