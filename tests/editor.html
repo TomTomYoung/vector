@@ -955,6 +955,120 @@ await check('Circle renderer and calculation overrides are explicit and do not c
   host.selectRenderer('circle','default');
 });
 
+const circleHandle=kind=>canvas.querySelector(`[data-circle-control="${kind}"]`);
+const circleDraft=()=>w.toolPropertiesPanel.circleEditor.input();
+
+await check('Circle center and radius dragging preserve transformed originals for native, sampled and cubic output with one Undo/Redo',async()=>{
+  frame.scrollIntoView();const viewport=w.zoomPanManager.getTransform(),snap=w.snapToGrid,ortho=w.orthoMode;w.snapToGrid=false;w.orthoMode=false;
+  try {
+    for(const renderer of ['default','sampled','cubic']){
+      fixture('<g id="circle-drag-parent" transform="translate(20 30) rotate(17)"/>');await tick();let circle=addEditableCircle(renderer);
+      circle.setAttribute('transform','scale(-0.7 1.2) translate(-450 0)');doc.getElementById('circle-drag-parent').append(circle);
+      w.zoomPanManager.setTransform(1.5,35,20);w.saveState();await tick();w.undoStack.length=0;activate('select');w.selectTool.selectObject(circle);circleAction('begin');
+      const source=circle.getAttribute('data-vector-circle'),geometry=JSON.stringify(w.VectorUtils.circleSource.circleGeometrySnapshot(circle)),transform=circle.getAttribute('transform');
+      assert(canvas.querySelectorAll('[data-circle-control]').length===2 && !canvas.querySelector('.control-handle'),'only circle input handles');
+      pointer('pointerdown',circleHandle('center'),localScreen(circle,{x:162,y:129}));
+      pointer('pointermove',doc,localScreen(circle,{x:182,y:139}));await paint();
+      assert(closePoint(circleDraft().center,{x:180,y:140}) && circleDraft().radius===50,'center grab offset and fixed radius');
+      pointer('pointerup',doc,localScreen(circle,{x:192,y:149}));
+      assert(closePoint(circleDraft().center,{x:190,y:150}),'final center pointer outside canvas');
+      pointer('pointerdown',circleHandle('radius'),localScreen(circle,{x:240,y:150}));
+      pointer('pointermove',doc,localScreen(circle,{x:225,y:210}));await paint();
+      pointer('pointerup',doc,localScreen(circle,{x:250,y:230}));await paint();
+      assert(Math.abs(circleDraft().radius-100)<1e-6 && closePoint(circleDraft().center,{x:190,y:150}),'local radial distance under unequal scaling');
+      const preview=canvas.querySelector('[data-vector-preview="circle-edit"]'),expected=circle.getScreenCTM(),actual=preview.getScreenCTM();
+      assert(['a','b','c','d','e','f'].every(k=>Math.abs(actual[k]-expected[k])<1e-5),'preview transformation');
+      assert(canvas.lastElementChild.getAttribute('data-vector-preview')==='circle-controls','handles above preview');
+      assert(circle.getAttribute('data-vector-circle')===source && JSON.stringify(w.VectorUtils.circleSource.circleGeometrySnapshot(circle))===geometry && w.undoStack.length===0,'original and history untouched');
+      const saved=w.DrawingDocument.capture();assert(!saved.querySelector('[data-vector-preview]') && saved.querySelector('#editable-circle').getAttribute('data-vector-circle')===source,'helpers and draft excluded');
+      assert(Math.abs(Number(doc.querySelector('[aria-label="円の半径"]').value)-100)<1e-6,'radius field synchronized');
+      circleAction('apply');await tick();circle=doc.getElementById('editable-circle');
+      const model=JSON.parse(circle.getAttribute('data-vector-circle')).model;
+      assert(closePoint(model.center,{x:190,y:150}) && Math.abs(model.radius-100)<1e-6 && circle.getAttribute('transform')===transform,'model and transform committed');
+      assert(w.undoStack.length===1 && !circleHandle('center') && !w.toolPropertiesPanel.circleEditor.controls.drag,'one history step and cleanup');
+      key('z',{ctrlKey:true});await tick();assert(doc.getElementById('editable-circle').getAttribute('data-vector-circle')===source,'undo circle model');
+      key('Z',{ctrlKey:true,shiftKey:true});await tick();assert(Math.abs(JSON.parse(doc.getElementById('editable-circle').getAttribute('data-vector-circle')).model.radius-100)<1e-6,'redo radius');
+    }
+  } finally {w.snapToGrid=snap;w.orthoMode=ortho;w.zoomPanManager.setTransform(viewport.zoom,viewport.panX,viewport.panY);}
+});
+
+await check('Circle Escape, pointer cancellation, lost capture and focus loss roll back the current gesture only',async()=>{
+  frame.scrollIntoView();fixture();await tick();const circle=addEditableCircle();activate('select');w.selectTool.selectObject(circle);w.saveState();await tick();w.undoStack.length=0;
+  const source=circle.getAttribute('data-vector-circle');circleAction('begin');circleField('円の中心X',180);circleField('円の半径',70);
+  const before=JSON.stringify(circleDraft());
+  for(const action of ['escape','cancel','capture','blur']){
+    pointer('pointerdown',circleHandle('radius'),localScreen(circle,{x:250,y:130}));
+    pointer('pointermove',doc,localScreen(circle,{x:280,y:160}));await paint();assert(JSON.stringify(circleDraft())!==before,'gesture changed draft '+action);
+    if(action==='escape')key('Escape');
+    else if(action==='blur')w.dispatchEvent(new w.Event('blur'));
+    else pointer(action==='capture'?'lostpointercapture':'pointercancel',action==='capture'?canvas:doc,localScreen(circle,{x:280,y:160}));
+    assert(w.toolPropertiesPanel.circleEditor.draft && JSON.stringify(circleDraft())===before && !w.toolPropertiesPanel.circleEditor.controls.drag,'rollback keeps earlier numeric edits '+action);
+    assert(circle.getAttribute('data-vector-circle')===source && w.undoStack.length===0,'original remains '+action);
+  }
+  key('Escape');assert(!w.toolPropertiesPanel.circleEditor.draft && !circleHandle('center') && canvas.querySelector('.control-handle'),'second Escape closes editor and restores selection handles');
+});
+
+await check('Circle handles synchronize numeric input and zoom while grid and orthogonal gestures use drawing coordinates',async()=>{
+  frame.scrollIntoView();fixture();await tick();const circle=addEditableCircle();
+  const viewport=w.zoomPanManager.getTransform(),snap=w.snapToGrid,ortho=w.orthoMode;w.snapToGrid=true;w.orthoMode=false;
+  try {
+    activate('select');w.selectTool.selectObject(circle);circleAction('begin');const before=JSON.stringify(circleDraft());
+    pointer('pointerdown',circleHandle('center'),localScreen(circle,{x:160,y:130}));pointer('pointerup',doc,localScreen(circle,{x:160,y:130}));
+    assert(JSON.stringify(circleDraft())===before,'click does not snap');
+    pointer('pointerdown',circleHandle('center'),localScreen(circle,{x:160,y:130}));pointer('pointerup',doc,localScreen(circle,{x:194,y:146}),{shiftKey:true});
+    assert(closePoint(circleDraft().center,{x:200,y:130}) && circleDraft().radius===50,'center snapped horizontally');
+    pointer('pointerdown',circleHandle('radius'),localScreen(circle,{x:250,y:130}));pointer('pointerup',doc,localScreen(circle,{x:278,y:168}),{shiftKey:true});
+    assert(Math.abs(circleDraft().radius-80)<1e-6 && closePoint(circleDraft().center,{x:200,y:130}),'radius uses center anchor');
+    circleField('円の中心Y',170);circleField('円の半径',60);
+    const diameter=circleHandle('center').getBoundingClientRect().width;
+    w.zoomPanManager.setTransform(2.5,50,40);await paint();await paint();
+    assert(Math.abs(circleHandle('center').getBoundingClientRect().width-diameter)<0.05,'screen size stays constant');
+    for(const [kind,point] of [['center',{x:200,y:170}],['radius',{x:260,y:170}]]){
+      const expected=localScreen(circle,point),bounds=circleHandle(kind).getBoundingClientRect();
+      assert(Math.abs(bounds.x+bounds.width/2-expected.x)<0.05 && Math.abs(bounds.y+bounds.height/2-expected.y)<0.05,'numeric position follows zoom '+kind);
+    }
+    circleField('円の半径',0);assert(!circleHandle('radius'),'invalid input hides handles');circleField('円の半径',60);assert(circleHandle('radius'),'valid input restores handles');circleAction('cancel');
+  }finally{w.snapToGrid=snap;w.orthoMode=ortho;w.zoomPanManager.setTransform(viewport.zoom,viewport.panX,viewport.panY);}
+});
+
+await check('Circle drag rejects locked, stale and singular targets and releases interaction on tool or selection changes',async()=>{
+  frame.scrollIntoView();fixture();await tick();const circle=addEditableCircle();activate('select');w.selectTool.selectObject(circle);circleAction('begin');
+  const original=circle.getAttribute('d'),before=JSON.stringify(circleDraft());
+  pointer('pointerdown',circleHandle('center'),localScreen(circle,{x:160,y:130}));pointer('pointermove',doc,localScreen(circle,{x:180,y:160}));await paint();
+  const layer=w.layers.find(l=>l.id===Number(circle.getAttribute('data-layer')));layer.locked=true;pointer('pointerup',doc,localScreen(circle,{x:210,y:180}));
+  assert(circle.getAttribute('d')===original && JSON.stringify(circleDraft())===before,'lock rolls back current gesture');
+  layer.locked=false;circleAction('cancel');circleAction('begin');
+  pointer('pointerdown',circleHandle('radius'),localScreen(circle,{x:210,y:130}));circle.setAttribute('d',original+' L400 400');pointer('pointerup',doc,localScreen(circle,{x:250,y:180}));
+  assert(circle.getAttribute('d').endsWith('L400 400') && !circleHandle('radius'),'stale outline preserved');
+  circleAction('cancel');circle.setAttribute('d',original);circle.setAttribute('transform','scale(0 1)');circleAction('begin');
+  assert(!circleHandle('center') && doc.querySelector('[data-circle-edit-status]').textContent.includes('変換'),'singular frame refuses handles');
+  circle.removeAttribute('transform');await paint();await paint();assert(circleHandle('center'),'invertible transform restores handles');
+  pointer('pointerdown',circleHandle('center'),localScreen(circle,{x:160,y:130}));activate('line');pointer('pointerup',doc,localScreen(circle,{x:200,y:200}));
+  assert(!circleHandle('center') && !w.toolPropertiesPanel.circleEditor.controls.drag && circle.getAttribute('d')===original,'tool change releases capture');
+  activate('select');w.selectTool.selectObject(circle);circleAction('begin');
+  const other=doc.createElementNS(canvas.namespaceURI,'rect');other.setAttribute('width',30);other.setAttribute('height',30);canvas.append(other);
+  pointer('pointerdown',circleHandle('center'),localScreen(circle,{x:160,y:130}));w.selectTool.selectObject(other);
+  assert(!circleHandle('center') && !w.toolPropertiesPanel.circleEditor.controls.drag && !w.toolPropertiesPanel.circleEditor.draft,'selection change clears gesture and draft');
+});
+
+await check('Circle gestures ignore other pointers and panning, and renderer changes keep the dragged input',async()=>{
+  frame.scrollIntoView();fixture();await tick();let circle=addEditableCircle('default');activate('select');w.selectTool.selectObject(circle);circleAction('begin');
+  const snap=w.snapToGrid,ortho=w.orthoMode;w.snapToGrid=false;w.orthoMode=false;
+  try {
+    w.zoomPanManager.spacePressed=true;pointer('pointerdown',circleHandle('radius'),localScreen(circle,{x:210,y:130}));
+    assert(!w.toolPropertiesPanel.circleEditor.controls.drag,'panning takes priority');w.zoomPanManager.spacePressed=false;
+    pointer('pointerdown',circleHandle('radius'),localScreen(circle,{x:210,y:130}));pointer('pointerup',doc,localScreen(circle,{x:260,y:130}),{pointerId:99});
+    assert(w.toolPropertiesPanel.circleEditor.controls.drag && circleDraft().radius===50,'unrelated pointer ignored');
+    pointer('pointerup',doc,localScreen(circle,{x:160,y:210}));assert(Math.abs(circleDraft().radius-80)<1e-6,'radius direction changes');
+    circleField('円の再描画実装','cubic','change');circleAction('preview');
+    assert(canvas.querySelector('[data-vector-preview="circle-edit"]').getAttribute('d').includes('C') && circleHandle('radius'),'preview and handles survive renderer change');
+    circleAction('apply');circle=doc.getElementById('editable-circle');assert(circle.tagName==='path' && Math.abs(JSON.parse(circle.getAttribute('data-vector-circle')).model.radius-80)<1e-6,'dragged input committed through tag replacement');
+    circleAction('begin');circle.remove();await paint();await paint();
+    assert(!circleHandle('center') && !canvas.querySelector('[data-vector-preview]'),'deleted target clears helpers');
+    w.selectTool.deselectObject();w.toolPropertiesPanel.updatePanel();
+  }finally{w.zoomPanManager.spacePressed=false;w.snapToGrid=snap;w.orthoMode=ortho;}
+});
+
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
 </script>

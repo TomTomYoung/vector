@@ -24,6 +24,7 @@ import {readSplineSource} from '../adapters/splineSource.js';
 import * as circleSource from '../adapters/circleSource.js';
 import {createImplementationPreferences} from '../adapters/implementationPreferences.js';
 import * as splineControlGeometry from '../adapters/splineControlGeometry.js';
+import * as circleControlGeometry from '../adapters/circleControlGeometry.js';
 import * as geometry from './geometry.js';
 import * as coordinates from './coordinates.js';
 import * as svg from './svg.js';
@@ -39,6 +40,7 @@ window.VectorUtils = {
   circleSource,
   createImplementationPreferences,
   splineControlGeometry,
+  circleControlGeometry,
   geometry,
   linearEditing,
   coordinates,

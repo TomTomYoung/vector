@@ -2,12 +2,12 @@
 class CircleEditor {
   constructor(manager, refresh) {
     this.manager=manager;this.refresh=refresh;this.element=null;this.draft=null;this.preview=null;this.message='';
-    this.escape=event=>{if(event.key==='Escape' && this.draft){event.preventDefault();event.stopImmediatePropagation();this.cancel();}};
+    this.controls=new CircleControlHandles(this);
   }
   select(element) {if(this.element!==element){this.cancel(false);this.element=element;}}
   cancel(refresh=true) {
-    this.preview?.remove();this.preview=null;this.draft=null;this.message='';
-    document.removeEventListener('keydown',this.escape,true);
+    this.controls.close();this.preview?.remove();this.preview=null;this.draft=null;this.message='';
+    if(this.manager.activeToolName==='select')this.manager.tools.select.refreshHandles();
     if(refresh)this.refresh();
   }
   snapshot() {return JSON.stringify(window.VectorUtils.circleSource.circleGeometrySnapshot(this.element));}
@@ -26,17 +26,21 @@ class CircleEditor {
       this.originalRecord=this.element.getAttribute('data-vector-implementation');
       this.draft={...source,cx:String(source.model.center.x),cy:String(source.model.center.y),radius:String(source.model.radius)};
       this.message='図形のローカル座標で中心・半径を編集します。色・変形・レイヤーは保持します。';
-      document.addEventListener('keydown',this.escape,true);
     } catch(error){this.message=error.message;}
     this.refresh();
+    if(this.draft)this.controls.open();
   }
-  build() {
-    this.assertTarget();
-    const host=this.manager.host,d=this.draft;
+  input() {
+    const d=this.draft;
     const number=value=>String(value).trim() ? Number(value) : NaN;
     const input={center:{x:number(d.cx),y:number(d.cy)},radius:number(d.radius)};
     window.VectorUtils.circleSource.circleModel({kind:'circle',...input});
     if(input.radius<=0)throw Error('半径は0より大きくしてください。');
+    return input;
+  }
+  build() {
+    this.assertTarget();
+    const host=this.manager.host,d=this.draft,input=this.input();
     if(!host.implementations('circle').some(v=>v.id===d.implementation))throw Error('記録された計算実装がありません。使用する実装を選び直してください。');
     if(!host.renderers('circle').some(v=>v.id===d.renderer))throw Error('記録された描画実装がありません。使用する実装を選び直してください。');
     const previous=host.describe('circle').id;
@@ -57,8 +61,15 @@ class CircleEditor {
       return result;
     } finally {host.selectImplementation('circle',previous);}
   }
-  changed() {this.preview?.remove();this.preview=null;this.message='入力を変更しました。プレビューまたは適用で再計算します。';}
-  showPreview() {
+  changed() {this.controls.stop(false);this.preview?.remove();this.preview=null;this.message='入力を変更しました。プレビューまたは適用で再計算します。';this.controls.sync();}
+  updateStatus() {const status=document.querySelector('[data-circle-edit-status]');if(status)status.textContent=this.message;}
+  updateFields() {
+    if(!this.draft)return;
+    for(const [key,label] of [['cx','円の中心X'],['cy','円の中心Y'],['radius','円の半径']]){
+      const input=document.querySelector(`[aria-label="${label}"]`);if(input)input.value=this.draft[key];
+    }
+  }
+  showPreview(refresh=true) {
     this.preview?.remove();this.preview=null;
     try {
       const result=this.build(),canvas=this.manager.canvas;
@@ -71,7 +82,8 @@ class CircleEditor {
       result.setAttribute('stroke-dasharray','6 3');result.setAttribute('vector-effect','non-scaling-stroke');
       canvas.append(result);this.preview=result;this.message='青い破線が再計算結果です。「適用」で元図形を更新します。';
     } catch(error){this.message=error.message;}
-    this.refresh();
+    this.controls.sync();
+    if(refresh)this.refresh();else this.updateStatus();
   }
   apply() {
     try {
@@ -111,7 +123,7 @@ class CircleEditor {
     if(!this.draft){button('円を再編集','begin',()=>this.begin());container.append(status);return;}
     const d=this.draft;
     const hint=document.createElement('p');hint.style.fontSize='12px';
-    hint.textContent='中心・半径から円を作り直します。点群への当てはめ等の元の作図入力は再実行しません。Escでも取り消せます。';container.append(hint);
+    hint.textContent='中心と半径のハンドルをドラッグできます。Shift・直交モードでは図面の縦横方向へ拘束します。Escはドラッグ中ならその移動、それ以外は編集全体を取り消します。点群への当てはめ等の元の作図入力は再実行しません。';container.append(hint);
     const field=(label,value,change,min,max,step='any')=>{
       const wrapper=document.createElement('label');wrapper.textContent=label;wrapper.style.cssText='display:block;font-size:12px;margin:10px 0';
       const input=document.createElement('input');input.type='number';input.value=value;input.step=step;
