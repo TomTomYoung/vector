@@ -59,6 +59,9 @@ export function outline(el, canvas) {
 }
 
 export function writePoints(el, points, inverse) {
+  // The generated spline model no longer describes an edited sampled outline.
+  el.removeAttribute('data-vector-spline');
+  el.removeAttribute('data-vector-partial');
   const local = points.map(p => transformPoint(inverse, p));
   if (el.tagName === "line") {
     local.forEach((p, i) => {

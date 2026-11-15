@@ -515,6 +515,114 @@ await check('Negative-weight NURBS isolate poles, show omissions and retain samp
   tool.weightsText='';tool.degree=3;
 });
 
+function splineAction(action) {
+  const button=doc.querySelector(`[data-spline-action="${action}"]`);
+  assert(button,'spline action '+action);button.click();
+}
+function splineField(label,value,event='input') {
+  const input=doc.querySelector(`[aria-label="${label}"]`);assert(input,'spline field '+label);
+  if(input.type==='checkbox')input.checked=value;else input.value=value;
+  input.dispatchEvent(new w.Event(event));
+}
+function addEditableSpline(method,input,options={}) {
+  const host=w.toolManager.host;host.selectImplementation(method,'default');
+  const curve=host.render(host.execute(method,input),null,{toolName:method,renderer:'default',...options});
+  curve.id='editable-spline';curve.setAttribute('stroke','#624382');curve.setAttribute('stroke-width','5');curve.setAttribute('fill','none');
+  curve.setAttribute('data-layer',w.layers[0].id);canvas.append(curve);return curve;
+}
+const editPoints=[{x:80,y:100},{x:150,y:220},{x:240,y:110},{x:300,y:190}];
+
+await check('Saved spline editing previews without mutation and applies in place with one Undo/Redo',async()=>{
+  fixture('<g id="spline-holder" transform="translate(15 20) rotate(8)"/>');await tick();
+  let curve=addEditableSpline('bSplineCurve',{points:editPoints,degree:3});
+  curve.setAttribute('transform','translate(30 10) scale(0.8)');curve.setAttribute('stroke-dasharray','9 2');
+  curve.setAttribute('style','opacity:0.7');curve.setAttribute('data-transform-layers','[]');
+  doc.getElementById('spline-holder').append(curve);w.saveState();await tick();
+  w.DrawingDocument.open(w.DrawingDocument.serialize());curve=doc.getElementById('editable-spline');
+  activate('select');w.selectTool.selectObject(curve);
+  const original=curve.getAttribute('d'),source=curve.getAttribute('data-vector-spline'),parent=curve.parentElement;
+  const attrs=['id','transform','stroke','stroke-width','stroke-dasharray','style','data-layer','data-transform-layers'];
+  const appearance=attrs.map(a=>curve.getAttribute(a));
+  splineAction('begin');splineField('編集する制御点（1行に x, y）','80,100\n150,260\n240,80\n300,190');
+  splineField('編集する次数',2);splineField('再描画の分割数',24);splineAction('preview');
+  const preview=canvas.querySelector('[data-vector-preview="spline-edit"]');assert(preview,'edit preview');
+  assert(curve.getAttribute('d')===original && curve.getAttribute('data-vector-spline')===source,'preview preserves original');
+  const expected=curve.getScreenCTM(),actual=preview.getScreenCTM();
+  assert(['a','b','c','d','e','f'].every(k=>Math.abs(actual[k]-expected[k])<1e-5),'preview respects parent and element transforms');
+  const captured=w.DrawingDocument.capture();
+  assert(!captured.querySelector('[data-vector-preview]') && captured.querySelector('#editable-spline').getAttribute('d')===original,'save during preview contains original only');
+  const history=w.undoStack.length;splineAction('apply');await tick();
+  const changed=curve.getAttribute('d'),model=JSON.parse(curve.getAttribute('data-vector-spline'));
+  assert(changed!==original && model.model.degree===2 && model.model.points[1].y===260 && model.path===changed,'source and path updated');
+  assert(doc.getElementById('editable-spline')===curve && curve.parentElement===parent,'identity and parent preserved');
+  assert(attrs.every((a,i)=>curve.getAttribute(a)===appearance[i]),'appearance and layer preserved');
+  assert(JSON.parse(curve.getAttribute('data-vector-implementation')).sampling.sampleCount===24,'edit settings recorded');
+  assert(w.undoStack.length===history+1 && !canvas.querySelector('[data-vector-preview]'),'single history step');
+  key('z',{ctrlKey:true});await tick();
+  assert(doc.getElementById('editable-spline').getAttribute('d')===original && doc.getElementById('editable-spline').getAttribute('data-vector-spline')===source,'undo original model');
+  key('Z',{ctrlKey:true,shiftKey:true});await tick();
+  assert(doc.getElementById('editable-spline').getAttribute('d')===changed,'redo edit');
+});
+
+await check('Cancel, invalid inputs, stale outlines and locked layers preserve the selected spline',async()=>{
+  fixture();await tick();const curve=addEditableSpline('nurbsCurve',{points:editPoints,degree:2});
+  activate('select');w.selectTool.selectObject(curve);w.saveState();await tick();
+  const original=curve.getAttribute('d'),source=curve.getAttribute('data-vector-spline'),history=w.undoStack.length;
+  splineAction('begin');splineField('編集する重み（空欄で全て1）','1,2,1,1');splineAction('preview');splineAction('cancel');
+  assert(curve.getAttribute('d')===original && !canvas.querySelector('[data-vector-preview]'),'cancel original');
+  splineAction('begin');
+  for(const invalid of ['0,0,0,0','1,NaN,1,1','1,1']){
+    splineField('編集する重み（空欄で全て1）',invalid);splineAction('apply');
+    assert(curve.getAttribute('d')===original && curve.getAttribute('data-vector-spline')===source,'invalid input preserves source');
+  }
+  splineField('編集する重み（空欄で全て1）','');
+  const layer=w.layers.find(l=>l.id===Number(curve.getAttribute('data-layer')));layer.locked=true;splineAction('apply');layer.locked=false;
+  assert(doc.querySelector('[data-spline-edit-status]').textContent.includes('ロック'),'locked target refused');
+  curve.setAttribute('d',original+' L340 100');splineAction('apply');
+  assert(curve.getAttribute('d').endsWith('L340 100') && doc.querySelector('[data-spline-edit-status]').textContent.includes('変更されました'),'concurrent geometry not overwritten');
+  splineAction('cancel');splineAction('begin');
+  assert(!doc.querySelector('[data-spline-action="apply"]') && doc.querySelector('[data-spline-edit-status]').textContent.includes('一致しません'),'stale source not opened');
+  curve.setAttribute('d',original);splineAction('begin');splineAction('preview');activate('line');
+  assert(!canvas.querySelector('[data-vector-preview]') && !w.toolPropertiesPanel.splineEditor.draft,'tool change cancels');
+  assert(w.undoStack.length===history,'no failed or cancelled edit saved');
+});
+
+await check('Legacy periodic sources edit repeatedly without accumulating wrapped controls or changing global implementations',async()=>{
+  fixture();await tick();const host=w.toolManager.host;
+  const curve=addEditableSpline('nurbsCurve',{points:editPoints,degree:3,periodic:true,weights:[1,2,1,1]});
+  const old=JSON.parse(curve.getAttribute('data-vector-spline'));delete old.path;curve.setAttribute('data-vector-spline',JSON.stringify(old));
+  host.registerImplementation('nurbsCurve',{id:'editor-test-calc',label:'Editor test',algorithm:'Recorded model test',run:()=>old.model});
+  host.selectImplementation('nurbsCurve','editor-test-calc');host.selectRenderer('nurbsCurve','default',{sampleCount:17});
+  activate('select');w.selectTool.selectObject(curve);
+  try{
+    for(let i=0;i<2;i++){
+      splineAction('begin');
+      assert(doc.querySelector('[aria-label="編集する制御点（1行に x, y）"]').value.split('\n').length===4,'four unwrapped controls');
+      assert(doc.querySelector('[aria-label="編集する周期指定"]').checked,'periodic recovered');
+      splineField('再描画の分割数',25+i);splineAction('apply');
+      const source=JSON.parse(curve.getAttribute('data-vector-spline')),record=JSON.parse(curve.getAttribute('data-vector-implementation'));
+      assert(source.model.points.length===7 && source.model.weights.length===7 && curve.getAttribute('d').endsWith('Z'),'one wrap and closure');
+      assert(record.calculation.id==='default' && record.sampling.sampleCount===25+i,'saved per-figure implementation used');
+      assert(host.describe('nurbsCurve').id==='editor-test-calc' && host.describeRendering('nurbsCurve').options.sampleCount===17,'global selection unchanged');
+    }
+    splineAction('begin');splineField('再計算の実装','editor-test-calc','change');splineAction('apply');
+    assert(JSON.parse(curve.getAttribute('data-vector-implementation')).calculation.id==='editor-test-calc','explicit per-figure replacement recorded');
+  }finally{host.selectImplementation('nurbsCurve','default');host.selectRenderer('nurbsCurve','default',{sampleCount:80});}
+});
+
+await check('NURBS re-editing preserves pole warnings and invalidates source after linear splitting',async()=>{
+  fixture();await tick();const curve=addEditableSpline('nurbsCurve',{points:editPoints.slice(0,3),degree:2});
+  curve.style.fill='#eeccaa';activate('select');w.selectTool.selectObject(curve);
+  splineAction('begin');splineField('編集する重み（空欄で全て1）','1,-1,1');splineAction('apply');
+  const record=JSON.parse(curve.getAttribute('data-vector-implementation'));
+  assert(!record.sampling.complete && curve.getAttribute('d').match(/M/g).length===2,'pole gap remains separate');
+  assert(curve.style.fill==='none' && doc.querySelector('[data-spline-edit-status]').textContent.includes('省略'),'partial output warning and no fill');
+  splineAction('begin');splineField('編集する重み（空欄で全て1）','');splineAction('apply');
+  assert(!curve.hasAttribute('data-vector-partial'),'complete replacement clears partial marker');
+  w.VectorUtils.linearEditing.split(curve,canvas,{x:100,y:130});w.toolPropertiesPanel.updatePanel();
+  assert(!curve.hasAttribute('data-vector-spline') && !doc.querySelector('[data-spline-editor]'),'outline split removes obsolete model editor');
+});
+
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
 </script>
