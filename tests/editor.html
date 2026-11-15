@@ -933,7 +933,7 @@ await check('Legacy native circles and direct circle controls re-edit actual geo
   assert(!circle.hasAttribute('data-vector-circle') && JSON.parse(circle.getAttribute('data-vector-implementation')).calculation.id==='direct-attributes','direct attributes invalidate saved model');
   w.toolPropertiesPanel.updatePanel();circleAction('begin');assert(doc.querySelector('[aria-label="円の半径"]').value==='55','uses actual radius');circleAction('apply');
   circle.setAttribute('transform','translate(10 20) scale(2)');w.toolManager.tools.circle.applyAffineToGeometry(circle);w.toolPropertiesPanel.updatePanel();circleAction('begin');
-  assert(doc.querySelector('[aria-label="円の半径"]').value==='110' && doc.querySelector('[aria-label="円の中心X"]').value==='250','baked geometry used');circleAction('cancel');
+  assert(doc.querySelector('[aria-label="円の半径"]').value==='110' && doc.querySelector('[aria-label="円の中心X"]').value==='250','baked geometry used: '+circle.outerHTML);circleAction('cancel');
   const arbitrary=doc.createElementNS(canvas.namespaceURI,'path');arbitrary.setAttribute('d','M0 0 L10 10 Z');canvas.append(arbitrary);w.selectTool.selectObject(arbitrary);
   assert(!doc.querySelector('[data-circle-editor]'),'no inference from arbitrary path');
 });

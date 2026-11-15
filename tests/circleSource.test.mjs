@@ -62,6 +62,7 @@ test('circle source rejects malformed versions, nonfinite or overflowing models,
 });
 
 test('fit provenance stays bounded across repeated direct edits and does not masquerade as recalculation',()=>{
+  assert.equal(circleOrigin({version:1,tool:'circle',circleEdit:{origin:null}}),null);
   const el=native(),origin={version:1,tool:'fitCircle',calculation:{id:'default',algorithm:'Kasa fit'},rendering:{id:'default'}};
   el.setAttribute('data-vector-implementation',JSON.stringify(origin));
   el.setAttribute('data-vector-circle','old source');

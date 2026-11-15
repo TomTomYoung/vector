@@ -15,7 +15,7 @@ export function circleGeometrySnapshot(element) {
 }
 
 export function circleOrigin(record) {
-  const origin = record?.circleEdit?.origin ?? record;
+  const origin = record?.circleEdit && Object.hasOwn(record.circleEdit,'origin') ? record.circleEdit.origin : record;
   if (origin?.tool) return Object.fromEntries(['tool','calculation','rendering','dependencies','note']
     .filter(key=>origin[key] !== undefined).map(key=>[key,origin[key]]));
   return null;

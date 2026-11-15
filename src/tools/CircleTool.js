@@ -671,7 +671,12 @@ class CircleTool extends BaseTool {
 
     let matrix;
     try {
-      matrix = new DOMMatrix(transformAttr);
+      // SVG transform lists (translate(10 20), rotate(a cx cy), ...) are not CSS
+      // transform strings accepted by DOMMatrix. Read the parsed SVG matrices.
+      matrix = new DOMMatrix();
+      const transforms = circle.transform.baseVal;
+      if (!transforms.numberOfItems) return;
+      for (let i = 0; i < transforms.numberOfItems; i++) matrix = matrix.multiply(transforms.getItem(i).matrix);
     } catch (error) {
       console.error("Failed to parse transform:", error);
       return;
