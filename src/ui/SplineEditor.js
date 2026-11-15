@@ -58,7 +58,7 @@ class SplineEditor {
       const matrix=canvas.getScreenCTM().inverse().multiply(this.element.getScreenCTM());
       const coefficients=[matrix.a,matrix.b,matrix.c,matrix.d,matrix.e,matrix.f];
       if(!coefficients.every(Number.isFinite))throw Error('プレビューの座標変換を計算できません。');
-      // DOMMatrix.toString() rounds through CSS serialization. Keep the numeric precision here.
+      // getScreenCTM may return an SVGMatrix whose toString is not an SVG transform.
       result.setAttribute('transform','matrix('+coefficients.join(' ')+')');
       result.setAttribute('data-vector-preview','spline-edit');result.setAttribute('pointer-events','none');
       const style=getComputedStyle(this.element);
