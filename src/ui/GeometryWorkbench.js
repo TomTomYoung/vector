@@ -42,7 +42,10 @@ function execute() {
     current.onmessage = ({data}) => {
       if (worker !== current) return;
       if (data.error) finish("入力を確認してください。 " + data.error);
-      else finish("完了", data.json);
+      else finish({complete: "完了", invalid: "入力条件を満たしません。",
+        incomplete: "未確定の区間が残っています。許容差または計算上限を確認してください。",
+        unconverged: "拘束を満たす解に収束しませんでした。残差を確認してください。",
+      }[data.outcome] ?? "完了", data.json);
     };
     current.onerror = event => { if (worker === current) finish("演算を実行できません。 " + event.message); };
     status.textContent = "計算中…";
