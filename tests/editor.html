@@ -1086,9 +1086,14 @@ await check('Arc toolbar saves actual three-point input with every renderer and 
   try {
     for(const renderer of ['default','sampled','cubic']){
       fixture();await tick();host.selectRenderer('arc',renderer,{sampleCount:12});activate('arc');
-      click(240,160);click(208,224);
+      click(240,160);
+      // MouseEvent may quantize screen coordinates. Compare with the actual event input,
+      // not the ideal canvas point used to construct the synthetic click.
+      const screen=new w.DOMPoint(208,224).matrixTransform(canvas.getScreenCTM());
+      const event=new w.MouseEvent('mousedown',{clientX:screen.x,clientY:screen.y,button:0,bubbles:true});
+      const expectedThrough=w.toolManager.getMousePosition(event);canvas.dispatchEvent(event);mouse('mouseup',208,224);
       const acceptedThrough={...w.toolManager.tools.arc.points[1]};
-      assert(Math.hypot(acceptedThrough.x-208,acceptedThrough.y-224)<0.001,'click coordinate conversion: '+JSON.stringify(acceptedThrough));
+      assert(closePoint(acceptedThrough,expectedThrough),'click coordinate conversion: '+JSON.stringify({acceptedThrough,expectedThrough}));
       mouse('mousemove',160,240);
       assert(!w.DrawingDocument.capture().querySelector('[data-vector-arc]'),'unfinished arc omitted '+renderer);
       click(160,240);const element=canvas.querySelector('[data-arc-tool]');assert(element,'committed arc '+renderer);
