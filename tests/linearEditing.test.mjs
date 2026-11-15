@@ -80,3 +80,12 @@ test("geometry stays in local coordinates when a transformed line is split", () 
   assert.deepEqual(localPoints(target),[{x:0,y:0},{x:25,y:0}]);
   assert.deepEqual(localPoints(target.next),[{x:25,y:0},{x:50,y:0}]);
 });
+
+test("splitting a sampled spline invalidates the source model on both resulting outlines", () => {
+  const target = shape("path", {d:"M0 0 L20 0 L40 20", "data-vector-spline":"old model", "data-vector-partial":"true"});
+  split(target,canvas,{x:10,y:0});
+  for (const el of [target,target.next]) {
+    assert.equal(el.getAttribute("data-vector-spline"),null);
+    assert.equal(el.getAttribute("data-vector-partial"),null);
+  }
+});

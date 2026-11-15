@@ -118,10 +118,15 @@ export function createRenderRegistry({renderers = [], rendering = {}} = {}) {
   };
   return {register, select,
     list: name => [...registry.values()].filter(e => e.supports(name)).map(e => info(e, name)),
-    describe: name => ({...info(registry.get(chosen.get(name) ?? 'default'), name), options: {...settings.get(name)}}),
-    prepare(name, shape, options = {}) {
-      const entry = registry.get(chosen.get(name) ?? 'default');
-      return entry.prepare(shape, {...options, ...settings.get(name)});
+    describe: (name, id) => {
+      const entry = registry.get(id ?? chosen.get(name) ?? 'default');
+      if (!entry?.supports(name)) throw new RangeError('対象ツールに対応しない描画実装です。');
+      return {...info(entry, name), options: id ? {} : {...settings.get(name)}};
+    },
+    prepare(name, shape, options = {}, id) {
+      const entry = registry.get(id ?? chosen.get(name) ?? 'default');
+      if (!entry?.supports(name)) throw new RangeError('対象ツールに対応しない描画実装です。');
+      return entry.prepare(shape, id ? options : {...options, ...settings.get(name)});
     },
   };
 }

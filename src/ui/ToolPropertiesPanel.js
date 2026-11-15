@@ -6,6 +6,7 @@ class ToolPropertiesPanel {
     this.panel = null;
     this.currentTool = null;
     this.transformManagers = new WeakMap(); // オブジェクト -> TransformManager
+    this.splineEditor = new SplineEditor(toolManager, () => this.updatePanel());
 
     // デフォルトの共通プロパティ
     this.commonProperties = {
@@ -62,6 +63,8 @@ class ToolPropertiesPanel {
   }
 
   updatePanel() {
+    const selected = window.selectedObjects?.length === 1 ? window.selectedObjects[0] : null;
+    this.splineEditor.select(this.toolManager.activeToolName === 'select' && selected?.hasAttribute('data-vector-spline') ? selected : null);
     if (!this.currentTool) {
       this.panel.innerHTML = "<p style='color: #666;'>ツールが選択されていません</p>";
       return;
@@ -84,6 +87,12 @@ class ToolPropertiesPanel {
     this.createInstructionsSection();
 
     this.createImplementationSection();
+    if (this.splineEditor.element) {
+      const section = this.createSection('曲線の元データを編集', {emphasize: true});
+      section.dataset.splineEditor = '';
+      this.splineEditor.render(section);
+      this.panel.append(section);
+    }
 
     // 共通プロパティセクション
     this.createCommonPropertiesSection();

@@ -67,15 +67,15 @@ const result = sampleSplineBranches(shape, {
 
 `sampleSplineBranches` と `splineBezierSpans` は、`bSplineCurve` / `nurbsCurve` が返す有効な `splineCurve` データを入力とします。`sampleSplineCurve(shape, count)` は旧来の単一配列用の入口として残していますが、複数の枝または省略区間がある場合は例外にし、間隙を消して1本の点列にはしません。
 
-`maxNodes` は全曲線で共有する検査ノード数の上限で、既定32768、範囲1〜200000です。GUIには深さと除外幅を表示し、ノード上限はAPI・初期描画設定で変更できます。`host.selectRenderer('nurbsCurve','default',{poleTolerance:1e-8,maxDepth:20,maxNodes:65536})` の形式も使えます。
+`maxNodes` は全曲線で共有する検査ノード数の上限で、既定32768、範囲1〜200000です。新規作図GUIには深さと除外幅を表示し、ノード上限はAPI・初期描画設定、または[再編集画面](spline-editing.md)で変更できます。`host.selectRenderer('nurbsCurve','default',{poleTolerance:1e-8,maxDepth:20,maxNodes:65536})` の形式も使えます。
 
 `omitted.reason` は `near-zero`（分母係数の範囲が除外幅内）、`unresolved`（深さ上限またはパラメータ分割の数値限界）、`budget`（ノード数上限）、`numeric`（有限座標に変換できない）です。`complete` は分母検査による省略の有無を表し、曲線近似の誤差保証ではありません。
 
 ## 保存とプロパティ表示
 
-[editorHost.js](../src/adapters/editorHost.js)が `data-vector-spline` に `{version:1, model:...}` を保存します。`model` は制御点・次数・ノット・重みと、周期指定時の `periodic`・元の制御点数 `controlCount` を含みます。周期曲線では評価用に末尾へ追加した制御点と重みも保存します。
+[editorHost.js](../src/adapters/editorHost.js)が `data-vector-spline` に `{version:1, model:..., path:...}` を保存します。`path` は元モデルと現在の輪郭を照合するための出力 `d` 属性です。旧形式のモデルのみの記録にも再編集用の互換読込があります。`model` は制御点・次数・ノット・重みと、周期指定時の `periodic`・元の制御点数 `controlCount` を含みます。周期曲線では評価用に末尾へ追加した制御点と重みも保存します。
 
-`data-vector-implementation` には従来の計算・描画方式に加え、`parameters` に次数・周期指定・元の点数、`sampling` に枝数・省略区間・設定値・処理ノード数を保存します。保存SVGを開いた場合も、選択図形の記録に省略の情報を表示できます。元のモデルを使った再編集UIや、任意の外部SVGから元モデルを復元する機能は今回の実装範囲に含みません。
+`data-vector-implementation` には従来の計算・描画方式に加え、`parameters` に次数・周期指定・元の点数、`sampling` に枝数・省略区間・設定値・処理ノード数を保存します。保存SVGを開いた場合も、選択図形の記録に省略の情報を表示できます。元のモデルを使った[再編集UI](spline-editing.md)を追加しました。選択ツールで曲線を選んで「曲線を再編集」から操作できます。任意の外部SVGから元モデルを復元する機能は未実装です。
 
 ## 残る制約
 

@@ -18,8 +18,8 @@ export function createEditorHost({
   const run = execute ?? createToolset({tools, operations, implementations, selection, metadata});
   const drawing = createRenderRegistry({renderers, rendering});
   const describe = name => run.describe?.(name) ?? {id: 'custom', label: '外部execute', algorithm: '実行関数を差し替え（アルゴリズム情報未指定）', source: null};
-  const describeRendering = name => render ? {id: 'custom', label: '外部render', algorithm: '描画関数を差し替え（アルゴリズム情報未指定）', source: null, options: {}} :
-    {...drawing.describe(name), ...(encodePath !== pathData ? {algorithm: drawing.describe(name).algorithm + ' / encodePathは外部実装', source: null} : {})};
+  const describeRendering = (name, id) => render ? {id: 'custom', label: '外部render', algorithm: '描画関数を差し替え（アルゴリズム情報未指定）', source: null, options: {}} :
+    {...drawing.describe(name, id), ...(encodePath !== pathData ? {algorithm: drawing.describe(name, id).algorithm + ' / encodePathは外部実装', source: null} : {})};
   function annotate(element, name, extra = {}) {
     if (element && name) element.setAttribute('data-vector-implementation', JSON.stringify({version: 1, tool: name,
       calculation: describe(name), rendering: describeRendering(name), dependencies: run.trace?.() ?? [], ...extra}));
@@ -32,17 +32,17 @@ export function createEditorHost({
     renderers: name => render ? [describeRendering(name)] : drawing.list(name),
     selectRenderer: drawing.select, registerRenderer: drawing.register, describeRendering, annotate,
     render(shape, target, options = {}) {
-      const prepared = render ? shape : drawing.prepare(options.toolName, shape, options);
+      const prepared = render ? shape : drawing.prepare(options.toolName, shape, options, options.renderer);
       const element = render ? render(prepared, target, options) : renderGeometry(prepared, target, options, encodePath);
       if (element && shape?.kind === 'splineCurve') {
-        element.setAttribute('data-vector-spline', JSON.stringify({version: 1, model: shape}));
+        element.setAttribute('data-vector-spline', JSON.stringify({version: 1, model: shape, path: element.getAttribute('d')}));
         if (prepared?.sampling?.complete === false) element.setAttribute('data-vector-partial', 'true');
         else element.removeAttribute('data-vector-partial');
       }
       return annotate(element, options.toolName, {
-        rendering: {...describeRendering(options.toolName), options: {
-          ...Object.fromEntries(Object.entries(options).filter(([key]) => key !== 'toolName')),
-          ...describeRendering(options.toolName).options,
+        rendering: {...describeRendering(options.toolName, options.renderer), options: {
+          ...Object.fromEntries(Object.entries(options).filter(([key]) => !['toolName','renderer'].includes(key))),
+          ...describeRendering(options.toolName, options.renderer).options,
         }},
         ...(prepared?.withinTolerance === false ? {warning: '最大深さに達し、許容差を満たしていません。'} : {}),
         ...(prepared?.warning ? {warning: prepared.warning} : {}),
