@@ -18,7 +18,7 @@ export function pathData(shape, options = {}) {
   }
   const commands = ["M " + pair(shape.start)];
   for (const segment of shape.segments) {
-    commands.push(segment.kind === "cubic"
+    commands.push(segment.kind === 'move' ? 'M ' + pair(segment.end) : segment.kind === "cubic"
       ? "C " + [segment.control1, segment.control2, segment.end].map(pair).join(", ")
       : "L " + pair(segment.end));
   }

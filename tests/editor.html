@@ -421,7 +421,7 @@ await check('Nine new point-input tools produce editable SVG and omit unfinished
   click(200,100);click(200,200);click(100,200);key('Enter');
   assert(canvas.querySelector('[data-construction-tool="nurbsCurve"]'),'weighted NURBS');
   const before=canvas.querySelectorAll('[data-construction-tool]').length;
-  tool.weightsText='1,-1,1';click(300,100);click(300,200);click(200,200);key('Enter');
+  tool.weightsText='0,0,0';click(300,100);click(300,200);click(200,200);key('Enter');
   assert(canvas.querySelectorAll('[data-construction-tool]').length===before && tool.implementationError,'invalid weights do not commit');
   key('Escape');
 });
@@ -457,6 +457,64 @@ await check('Workbench implementation picker executes the chosen alternative in 
     assert(Math.abs(result.segments[0].control1.x-1/3)<1e-12,'uniform result rather than default half tangent');
   }finally{other.remove();}
 });
+await check('Discontinuous spline subpaths and source model survive SVG reload and Undo/Redo', async () => {
+  fixture();await tick();activate('bSplineCurve');
+  const tool=w.toolManager.activeTool;tool.degree=1;tool.periodic=false;tool.knotsText='0,0,0.5,0.5,1,1';
+  for(const [x,y] of [[50,50],[100,100],[300,200],[350,250]])click(x,y);
+  key('Enter');await tick();
+  let curve=canvas.querySelector('[data-construction-tool="bSplineCurve"]');
+  assert(curve.getAttribute('d').match(/M/g).length===2,'separate SVG moves');
+  const model=curve.getAttribute('data-vector-spline');
+  assert(JSON.parse(model).model.knots.filter(k=>k===0.5).length===2,'original repeated knot retained');
+  key('z',{ctrlKey:true});await tick();assert(!canvas.querySelector('[data-construction-tool]'),'undo');
+  key('Z',{ctrlKey:true,shiftKey:true});await tick();
+  curve=canvas.querySelector('[data-construction-tool="bSplineCurve"]');
+  assert(curve.getAttribute('data-vector-spline')===model,'redo model');
+  w.DrawingDocument.open(w.DrawingDocument.serialize());
+  assert(canvas.querySelector('[data-construction-tool]').getAttribute('data-vector-spline')===model,'SVG round trip');
+  tool.knotsText='';tool.degree=3;
+});
+
+await check('Periodic spline properties close the curve with wrapped controls and weights', async () => {
+  for(const name of ['bSplineCurve','nurbsCurve']){
+    fixture();await tick();activate(name);
+    const tool=w.toolManager.activeTool;tool.degree=3;tool.weightsText='';tool.periodic=false;tool.knotsText='';w.toolPropertiesPanel.updatePanel();
+    const checkbox=doc.querySelector('input[aria-label="周期曲線"]');
+    checkbox.checked=true;checkbox.dispatchEvent(new w.Event('change'));
+    assert(tool.periodic && !doc.querySelector('input[aria-label^="ノット列"]'),'uniform periodic mode selected');
+    for(const [x,y] of [[100,100],[250,100],[250,250],[100,250]])click(x,y);
+    key('Enter');
+    const curve=canvas.querySelector('[data-construction-tool="'+name+'"]'),model=JSON.parse(curve.getAttribute('data-vector-spline')).model;
+    assert(curve.getAttribute('d').endsWith('Z') && model.periodic && model.controlCount===4 && model.points.length===7,'wrapped closed model');
+    const record=JSON.parse(curve.getAttribute('data-vector-implementation'));
+    assert(record.parameters.periodic && record.sampling.complete,'mode and complete result recorded');
+    tool.periodic=false;
+  }
+});
+
+await check('Negative-weight NURBS isolate poles, show omissions and retain sampling limits in saved SVG', async () => {
+  fixture();await tick();activate('nurbsCurve');
+  const tool=w.toolManager.activeTool;tool.degree=2;tool.periodic=false;tool.weightsText='';tool.knotsText='';tool.poleMaxDepth=0;
+  w.toolPropertiesPanel.updatePanel();
+  let weights=doc.querySelector('input[aria-label^="重み"]');weights.value='1,-1,1';weights.dispatchEvent(new w.Event('change'));
+  click(100,100);click(150,200);click(200,100);key('Enter');
+  assert(!canvas.querySelector('[data-construction-tool]') && tool.implementationError.includes('描画できる区間'),'unclassified result not committed');
+  const depth=doc.querySelector('input[aria-label="分母検査の最大深さ"]');depth.value=18;depth.dispatchEvent(new w.Event('change'));
+  assert(doc.querySelector('[data-implementation-panel]').textContent.includes('省略'),'preview warns about missing ranges');
+  key('Enter');
+  let curve=canvas.querySelector('[data-construction-tool="nurbsCurve"]');
+  assert(curve.getAttribute('d').match(/M/g).length===2 && !/NaN|Infinity/.test(curve.getAttribute('d')),'finite split branches');
+  assert(curve.getAttribute('fill')==='none','partial branches are not implicitly filled');
+  let record=JSON.parse(curve.getAttribute('data-vector-implementation'));
+  assert(!record.sampling.complete && record.sampling.omitted.some(g=>g.from<=0.5&&g.to>=0.5) && record.sampling.maxDepth===18,'pole and limits recorded');
+  const saved=w.DrawingDocument.serialize();w.DrawingDocument.open(saved);
+  curve=canvas.querySelector('[data-construction-tool="nurbsCurve"]');
+  assert(JSON.parse(curve.getAttribute('data-vector-spline')).model.weights[1]===-1,'signed source weights survive load');
+  w.selectedObject=curve;w.selectedObjects=[curve];w.toolPropertiesPanel.updatePanel();
+  assert(doc.querySelector('[data-recorded-implementation]').textContent.includes('省略区間'),'selected saved drawing explains missing ranges');
+  tool.weightsText='';tool.degree=3;
+});
+
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
 </script>

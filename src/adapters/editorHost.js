@@ -34,12 +34,20 @@ export function createEditorHost({
     render(shape, target, options = {}) {
       const prepared = render ? shape : drawing.prepare(options.toolName, shape, options);
       const element = render ? render(prepared, target, options) : renderGeometry(prepared, target, options, encodePath);
+      if (element && shape?.kind === 'splineCurve') {
+        element.setAttribute('data-vector-spline', JSON.stringify({version: 1, model: shape}));
+        if (prepared?.sampling?.complete === false) element.setAttribute('data-vector-partial', 'true');
+        else element.removeAttribute('data-vector-partial');
+      }
       return annotate(element, options.toolName, {
         rendering: {...describeRendering(options.toolName), options: {
           ...Object.fromEntries(Object.entries(options).filter(([key]) => key !== 'toolName')),
           ...describeRendering(options.toolName).options,
         }},
         ...(prepared?.withinTolerance === false ? {warning: '最大深さに達し、許容差を満たしていません。'} : {}),
+        ...(prepared?.warning ? {warning: prepared.warning} : {}),
+        ...(prepared?.sampling ? {sampling: prepared.sampling} : {}),
+        ...(shape?.kind === 'splineCurve' ? {parameters: {degree: shape.degree, periodic: !!shape.periodic, controlCount: shape.controlCount ?? shape.points.length}} : {}),
       });
     },
   };

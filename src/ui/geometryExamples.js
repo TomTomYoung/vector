@@ -20,8 +20,8 @@ const curves = {points, t: 0.5};
 const sites = [...square, p(2, 1)];
 const groups = {
   "作図・編集・計測": {
-    bSplineCurve: ['B-spline曲線データ', {points, degree: 3}],
-    nurbsCurve: ['NURBS曲線データ', {points: [p(1,0),p(1,1),p(0,1)], degree: 2, weights: [1, Math.SQRT1_2, 1]}],
+    bSplineCurve: ['B-spline曲線データ（periodicで周期指定）', {points, degree: 3, periodic: false}],
+    nurbsCurve: ['NURBS曲線データ（零・負の重みに対応）', {points: [p(1,0),p(1,1),p(0,1)], degree: 2, periodic: false, weights: [1, Math.SQRT1_2, 1]}],
     select: ["範囲選択", {bounds: box, candidates: [{id: "A", box: {...box, width: 2}}]}],
     line: ["線分", {start, end}], rectangle: ["矩形", {start, end: p(4, 3)}],
     circle: ["中心と通過点から円", {center, point}], arc: ["3点を通る円弧", {start: p(3, 0), through: p(0, 3), end: p(-3, 0)}],

@@ -1,6 +1,6 @@
 import {sampleBezierPoints} from '../model/bezier.js';
 import {flattenBezier, arcToCubics} from '../model/curveAnalysis.js';
-import {sampleSplineCurve} from '../model/splineCurves.js';
+import {sampleSplineBranches} from '../model/splineCurves.js';
 
 export function bernsteinPoint(points, t) {
   const n = points.length - 1;
@@ -25,7 +25,15 @@ const chain = (points, extra = {}) => ({kind: 'path', start: points[0], segments
 export function prepareGeometry(shape, mode = 'default', options = {}) {
   if (!shape) return shape;
   if (shape.kind === 'group') return {...shape, children: shape.children.map(s => prepareGeometry(s, mode, options))};
-  if (shape.kind === 'splineCurve') return chain(sampleSplineCurve(shape, intervals(options)));
+  if (shape.kind === 'splineCurve') {
+    const result = sampleSplineBranches(shape, {...options, sampleCount: intervals(options)});
+    if (!result.branches.length) return null;
+    const path = chain(result.branches[0].points, {closed: result.closed});
+    for (const branch of result.branches.slice(1)) path.segments.push({kind: 'move', end: branch.points[0]}, ...chain(branch.points).segments);
+    path.sampling = {complete: result.complete, branches: result.branches.length, omitted: result.omitted, ...result.settings, nodes: result.nodes};
+    if (!result.complete) path.warning = `分母零付近・未確定の${result.omitted.length}区間を省略し、枝を分離しました。省略範囲は記録のsampling.omittedで確認できます。`;
+    return path;
+  }
   if (mode === 'default') return shape;
   if (shape.kind === 'circle' || shape.kind === 'arc') {
     const arc = shape.kind === 'arc' ? shape : {kind: 'arc', center: shape.center, radius: shape.radius,
@@ -68,7 +76,7 @@ const arcTools = ['arc', 'circle', 'fillet', 'fitCircle', 'minimumEnclosingCircl
 const source = 'src/adapters/renderStrategies.js';
 export function defaultRenderDescription(name) {
   if (name === 'nthBezier') return 'de Casteljau等間隔評価 → SVG M/L（既定80区間）';
-  if (name === 'bSplineCurve' || name === 'nurbsCurve') return 'de Boor等間隔評価＋ノット位置 → SVG M/L';
+  if (name === 'bSplineCurve' || name === 'nurbsCurve') return '同次de Boorの極形式で区間ベジェ化・分母のBernstein係数範囲で再分割 → SVG M/L（不連続・分母零付近で枝を分離）';
   if (name === 'quadraticBezier') return 'SVG Q（二次ベジェ）';
   if (name === 'cubicBezier' || name === 'spline') return 'SVG C（三次ベジェ）';
   if (name === 'arc' || name === 'fillet') return 'SVG A（円弧）';
@@ -96,13 +104,17 @@ export function createRenderRegistry({renderers = [], rendering = {}} = {}) {
     if (!registry.get(id)?.supports(name)) throw new RangeError('対象ツールに対応しない描画実装です。');
     if (options.sampleCount !== undefined) intervals(options);
     if (options.tolerance !== undefined && !(Number.isFinite(options.tolerance) && options.tolerance > 0)) throw new RangeError('許容差は正の有限数です。');
-    if (options.maxDepth !== undefined && (!Number.isInteger(options.maxDepth) || options.maxDepth < 0 || options.maxDepth > 18)) throw new RangeError('最大深さは0〜18です。');
+    const spline = ['bSplineCurve', 'nurbsCurve'].includes(name), depthLimit = spline ? 24 : 18;
+    if (options.maxDepth !== undefined && (!Number.isInteger(options.maxDepth) || options.maxDepth < 0 || options.maxDepth > depthLimit)) throw new RangeError('最大深さは0〜' + depthLimit + 'です。');
+    if (spline && options.poleTolerance !== undefined && (!Number.isFinite(options.poleTolerance) || options.poleTolerance < 1e-14 || options.poleTolerance > 0.1)) throw new RangeError('分母の除外幅は1e-14〜0.1です。');
+    if (spline && options.maxNodes !== undefined && (!Number.isInteger(options.maxNodes) || options.maxNodes < 1 || options.maxNodes > 200000)) throw new RangeError('処理上限は1〜200000です。');
     chosen.set(name, id); settings.set(name, {...settings.get(name), ...options});
   }
   for (const [name, value] of Object.entries(rendering)) select(name, typeof value === 'string' ? value : value.id, typeof value === 'string' ? {} : value.options);
   const info = (entry, name) => {
     const {prepare, supports, ...rest} = entry;
-    return {...rest, algorithm: entry.id === 'default' ? defaultRenderDescription(name) : entry.algorithm};
+    return {...rest, ...(entry.id === 'default' && ['bSplineCurve', 'nurbsCurve'].includes(name) ? {source: 'src/model/splineCurves.js'} : {}),
+      algorithm: entry.id === 'default' ? defaultRenderDescription(name) : entry.algorithm};
   };
   return {register, select,
     list: name => [...registry.values()].filter(e => e.supports(name)).map(e => info(e, name)),

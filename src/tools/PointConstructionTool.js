@@ -4,12 +4,15 @@ class PointConstructionTool extends BaseTool {
     super(canvas, manager);
     this.method = method; this.title = title; this.points = [];
     this.degree = 3; this.sampleCount = 80; this.weightsText = ''; this.knotsText = '';
+    this.periodic = false; this.poleTolerance = 1e-8; this.poleMaxDepth = 18;
     this.previewElement = null; this.handles = null; this.implementationError = '';
   }
   getTitle() { return this.title; }
   getInstructions() {
     return ['クリックで点を追加', 'Enterで確定、Backspaceで最後の点を削除、Escで取り消し',
       this.isSpline() ? `次数${this.degree}には制御点${this.degree + 1}個以上が必要です（現在${this.points.length}個）` : `入力順の点列を使用します（現在${this.points.length}個）`,
+      ...(this.isSpline() ? [this.periodic ? '周期曲線：先頭の制御点と重みを循環させ、一様ノットで閉じます' : '内部ノットを次数+1回重ねると、そこで別の枝に分かれます'] : []),
+      ...(this.method === 'nurbsCurve' ? ['零・負の重みも使用できます。分母零付近と検査未完了の区間は省略します'] : []),
       ...(this.method === 'voronoiCells' ? ['Voronoiの切り取り範囲は図面全体です'] : [])];
   }
   isSpline() { return ['bSplineCurve', 'nurbsCurve'].includes(this.method); }
@@ -21,14 +24,24 @@ class PointConstructionTool extends BaseTool {
       input.addEventListener('change', () => {this[key] = input.value; this.redraw(); this.refreshPanel();}); group.append(input);
     }});
     return [
+      {type: 'checkbox', label: '周期曲線', checkLabel: '一様ノットで閉じる', value: this.periodic, onChange: value => {
+        this.periodic = value; this.redraw(); this.refreshPanel();
+      }},
       {type: 'number', label: '次数', value: this.degree, min: 1, max: 12, step: 1, onChange: value => {
-        if (Number.isInteger(value) && value >= 1 && value <= 12) {this.degree = value; this.redraw();}
+        if (Number.isInteger(value) && value >= 1 && value <= 12) {this.degree = value; this.redraw(); this.refreshPanel();}
       }},
       {type: 'number', label: '描画の分割数', value: this.sampleCount, min: 2, max: 10000, step: 1, onChange: value => {
-        if (Number.isInteger(value) && value >= 2 && value <= 10000) {this.sampleCount = value; this.redraw();}
+        if (Number.isInteger(value) && value >= 2 && value <= 10000) {this.sampleCount = value; this.redraw(); this.refreshPanel();}
       }},
-      text('ノット列（カンマ区切り、空欄で一様）', 'knotsText'),
-      ...(this.method === 'nurbsCurve' ? [text('重み（各制御点に1個、空欄で全て1）', 'weightsText')] : []),
+      ...(!this.periodic ? [text('ノット列（カンマ区切り、空欄で一様）', 'knotsText')] : []),
+      ...(this.method === 'nurbsCurve' ? [text('重み（各制御点に1個、零・負も可）', 'weightsText'),
+        {type: 'number', label: '分母の除外幅（最大重みで正規化）', value: this.poleTolerance, min: 1e-14, max: 0.1, step: 'any', onChange: value => {
+          if (Number.isFinite(value) && value >= 1e-14 && value <= 0.1) {this.poleTolerance = value; this.redraw(); this.refreshPanel();}
+        }},
+        {type: 'number', label: '分母検査の最大深さ', value: this.poleMaxDepth, min: 0, max: 24, step: 1, onChange: value => {
+          if (Number.isInteger(value) && value >= 0 && value <= 24) {this.poleMaxDepth = value; this.redraw(); this.refreshPanel();}
+        }},
+      ] : []),
     ];
   }
   refreshPanel() { window.toolPropertiesPanel?.updatePanel(); }
@@ -57,7 +70,7 @@ class PointConstructionTool extends BaseTool {
     const points = this.points;
     if (this.isSpline()) {
       const parse = text => text.trim().split(/[\s,]+/).map(Number);
-      return {points, degree: this.degree, ...(this.knotsText.trim() ? {knots: parse(this.knotsText)} : {}),
+      return {points, degree: this.degree, periodic: this.periodic, ...(!this.periodic && this.knotsText.trim() ? {knots: parse(this.knotsText)} : {}),
         ...(this.method === 'nurbsCurve' && this.weightsText.trim() ? {weights: parse(this.weightsText)} : {})};
     }
     if (this.method === 'voronoiCells') {
@@ -87,8 +100,13 @@ class PointConstructionTool extends BaseTool {
     if (!result) {this.implementationError = '入力条件を満たしません。点の配置・次数・ノット・重みを確認してください。'; return null;}
     const shape = this.geometry(result);
     if (!shape) {this.implementationError = 'この配置では図形を作成できません。'; return null;}
-    const element = this.toolManager.host.render(shape, null, {toolName: this.method, sampleCount: this.sampleCount});
+    const element = this.toolManager.host.render(shape, null, {toolName: this.method, sampleCount: this.sampleCount,
+      ...(this.isSpline() ? {poleTolerance: this.poleTolerance, maxDepth: this.poleMaxDepth} : {})});
+    if (!element) {this.implementationError = '指定した検査条件では描画できる区間がありません。分母の除外幅・最大深さ・重みを確認してください。'; return null;}
     this.applyDefaultAttributes(element);
+    if (element.hasAttribute('data-vector-partial')) element.setAttribute('fill', 'none');
+    const record = element.getAttribute('data-vector-implementation');
+    if (record) this.implementationError = JSON.parse(record).warning ?? '';
     return element;
   }
   redraw() {
