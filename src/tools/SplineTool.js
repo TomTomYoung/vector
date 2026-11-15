@@ -15,7 +15,15 @@ class SplineTool extends BaseTool {
     this.currentSpline = null;
     this.isDrawing = false;
     this.previewPoints = [];
+    this.tension = 0.5;
   }
+
+  getToolProperties() {
+    return [{type: 'number', label: '標準実装の接線倍率', value: this.tension, min: 0, max: 4, step: 0.1, onChange: value => {
+      if (Number.isFinite(value) && value >= 0 && value <= 4) {this.tension = value; this.updateSpline();}
+    }}];
+  }
+  onImplementationChanged() { this.updateSpline(); }
 
   getTitle() {
     return "スプライン";
@@ -97,7 +105,7 @@ class SplineTool extends BaseTool {
 
   drawSpline(points, preview) {
     this.currentSpline?.remove();
-    this.currentSpline = this.draw("spline", {points});
+    this.currentSpline = this.draw("spline", {points, tension: this.tension});
     if (!this.currentSpline) return;
     window.SvgUtils.setAttributes(this.currentSpline, {
       stroke: this.currentStyle.stroke, "stroke-width": this.currentStyle.strokeWidth,

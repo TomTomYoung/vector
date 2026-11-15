@@ -1,4 +1,6 @@
 import {geometryExamples} from "./geometryExamples.js";
+import {createToolset} from '../model/tools.js';
+const catalog = createToolset();
 
 const el = id => document.getElementById(id);
 const select = el("tool"), input = el("input"), output = el("output"), status = el("status");
@@ -24,7 +26,18 @@ function reset() {
   input.value = JSON.stringify(geometryExamples[select.value].input, null, 2);
   output.textContent = "";
   status.textContent = "";
+  const picker = el('implementation');
+  picker.replaceChildren(...catalog.list(select.value).map(item => new Option(item.label, item.id)));
+  picker.value = catalog.describe(select.value).id;
+  showAlgorithm();
 }
+function showAlgorithm() {
+  const info = catalog.describe(select.value);
+  el('algorithm').textContent = info.algorithm + ' / 実装: ' + info.source;
+}
+el('implementation').onchange = () => {
+  stop(); catalog.select(select.value, el('implementation').value); output.textContent = ''; status.textContent = ''; showAlgorithm();
+};
 function finish(message, value = "") {
   stop();
   output.textContent = value;
@@ -50,7 +63,7 @@ function execute() {
     current.onerror = event => { if (worker === current) finish("演算を実行できません。 " + event.message); };
     status.textContent = "計算中…";
     el("stop").disabled = false;
-    current.postMessage({name: select.value, input: data});
+    current.postMessage({name: select.value, input: data, implementation: el('implementation').value});
   } catch (error) { finish("演算を開始できません。 " + error.message); }
 }
 select.onchange = reset;

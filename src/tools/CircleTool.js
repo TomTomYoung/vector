@@ -98,6 +98,7 @@ class CircleTool extends BaseTool {
 
     this.saveState();
     this.isDrawing = true;
+    this.lastCircleGeometry = null;
 
     this.drawingObject = window.SvgUtils.createElement("circle", {
       cx: this.startPoint.x,
@@ -121,7 +122,8 @@ class CircleTool extends BaseTool {
       return;
     }
 
-    this.draw("circle", {center: this.startPoint, point: this.currentPoint}, this.drawingObject);
+    this.lastCircleGeometry = this.run('circle', {center: this.startPoint, point: this.currentPoint});
+    this.drawingObject = this.toolManager.host.render(this.lastCircleGeometry, this.drawingObject, {toolName: 'circle'});
   }
 
   handleMouseUp(event) {
@@ -164,14 +166,15 @@ class CircleTool extends BaseTool {
       return null;
     }
 
-    const radius = parseFloat(this.drawingObject.getAttribute("r"));
+    const radius = this.lastCircleGeometry?.radius ?? parseFloat(this.drawingObject.getAttribute("r"));
     let finishedCircle = null;
 
     if (!Number.isFinite(radius) || radius < 1) {
       this.canvas.removeChild(this.drawingObject);
     } else {
       this.drawingObject.setAttribute("data-layer", window.currentLayerId);
-      this.initializeCircleMetadata(this.drawingObject);
+      if (this.drawingObject.tagName === 'circle') this.initializeCircleMetadata(this.drawingObject);
+      else this.drawingObject.removeAttribute('data-circle-tool');
       finishedCircle = this.drawingObject;
     }
 
@@ -188,7 +191,7 @@ class CircleTool extends BaseTool {
         });
       }
 
-      this.selectCircle(finishedCircle);
+      if (finishedCircle.tagName === 'circle') this.selectCircle(finishedCircle);
       if (this.selectTool) {
         this.selectTool.selectObject(finishedCircle, false);
       }

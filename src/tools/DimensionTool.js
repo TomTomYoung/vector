@@ -242,6 +242,7 @@ class DimensionTool extends BaseTool {
     text.textContent = length.toFixed(1);
     group.appendChild(text);
 
+    this.toolManager.host.annotate?.(group, 'dimension');
     this.canvas.appendChild(group);
 
     if (this.currentDimension) {
@@ -303,6 +304,7 @@ class DimensionTool extends BaseTool {
     text.textContent = angleDeg.toFixed(1) + "°";
     group.appendChild(text);
 
+    this.toolManager.host.annotate?.(group, 'dimension');
     this.canvas.appendChild(group);
   }
 

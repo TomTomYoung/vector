@@ -21,6 +21,9 @@
   <main><h1>平面幾何の演算室</h1>
     <p>演算を選び、例の座標や条件を書き換えて実行できます。角度はラジアンです。</p>
     <label for="tool">演算</label><select id="tool"></select>
+    <label for="implementation">計算の実装</label><select id="implementation"></select>
+    <p id="algorithm"></p>
+    <p>描画: この画面は計算結果をJSON表示します。<a href="https://github.com/TomTomYoung/vector/blob/master/doc/implementation-options.md" target="_blank" rel="noopener">換装方法・参照資料</a></p>
     <div class="panes">
       <section><label for="input">入力 JSON</label><textarea id="input" spellcheck="false"></textarea></section>
       <section><h2>出力 JSON</h2><pre id="output" tabindex="0" aria-label="出力 JSON"></pre></section>

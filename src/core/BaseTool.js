@@ -30,12 +30,14 @@ class BaseTool {
   }
 
   draw(name, input, target, options) {
-    return this.toolManager.host.render(this.run(name, input), target, options);
+    return this.toolManager.host.render(this.run(name, input), target, {...options, toolName: name});
   }
 
   editOutline(name, element, edges, point) {
     const host = this.toolManager.host;
-    return host.editOutline(name, element, this.canvas, edges, point, host.execute, () => this.saveState());
+    const edited = host.editOutline(name, element, this.canvas, edges, point, host.execute, () => this.saveState());
+    if (Array.isArray(edited)) edited.forEach(el => host.annotate?.(el, name, {note: '既存輪郭を線分として編集'}));
+    return edited;
   }
 
   editCorner(name, lines, params) {
@@ -44,13 +46,16 @@ class BaseTool {
     if (shapes.length !== 2 || shapes.some(shape => !shape)) return;
     const edit = this.run(name, {...params, first: shapes[0].points, second: shapes[1].points});
     if (!edit) return;
-    const bridge = this.toolManager.host.render(edit.bridge);
+    const bridge = this.toolManager.host.render(edit.bridge, null, {toolName: name});
     window.SvgUtils.setAttributes(bridge, {
       stroke: lines[0].getAttribute("stroke"), "stroke-width": lines[0].getAttribute("stroke-width"),
       fill: "none", "data-layer": window.currentLayerId,
     });
     this.saveState();
-    edit.segments.forEach((points, i) => writePoints(lines[i], points, shapes[i].inverse));
+    edit.segments.forEach((points, i) => {
+      writePoints(lines[i], points, shapes[i].inverse);
+      this.toolManager.host.annotate?.(lines[i], name, {note: '既存輪郭への編集。描画形状は線分です。'});
+    });
     this.canvas.appendChild(bridge);
   }
 

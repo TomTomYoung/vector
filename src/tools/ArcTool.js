@@ -100,7 +100,7 @@ class ArcTool extends BaseTool {
     const point = this.getMousePosition(event);
 
     if (this.points.length === 1) {
-      if (this.previewCircle) this.draw("circle", {center: this.points[0], point}, this.previewCircle);
+      if (this.previewCircle) this.previewCircle = this.draw("circle", {center: this.points[0], point}, this.previewCircle);
     } else if (this.points.length === 2) {
       // 3点から円弧を計算してプレビュー
       this.updateArcPreview(point);
