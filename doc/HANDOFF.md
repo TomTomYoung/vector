@@ -16,7 +16,7 @@
 
 B-spline・NURBSの内部不連続ノット、零・負の重み、一様ノットの周期曲線を実装しました。分母のBernstein係数の範囲を使って区間を再分割し、分母零付近や処理上限で未確定の区間を描画から外して別サブパスにします。プロパティに周期指定・分母の除外幅・検査深さを追加し、元のスプラインモデルと省略区間をSVGに保存します。機能数119・GUI31は変わりません。
 
-詳細、入力例、参照した一次資料は [spline-branches.md](spline-branches.md)です。数値回帰の構成は66件、ブラウザー操作は22件です。以下に残した旧CIの成功記録はPR #51時点の結果で、追加分の実行結果は本変更のGitHub Actionsを参照してください。
+詳細、入力例、参照した一次資料は [spline-branches.md](spline-branches.md)です。[PR #53](https://github.com/TomTomYoung/vector/pull/53)の実装コミット `5ba9944` に対する[CI](https://github.com/TomTomYoung/vector/actions/runs/43730176808)で、数値回帰66件・ブラウザー操作22件が全て成功しました。以下に残した旧CIの成功記録はPR #51時点の結果です。
 
 ## 入口となる文書と画面
 
