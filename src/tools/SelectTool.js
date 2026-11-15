@@ -601,6 +601,8 @@ class SelectTool extends BaseTool {
   addControlPoints() {
     if (!this.selectedObject) return;
     this.removeControlPoints();
+    const splineEditor=window.toolPropertiesPanel?.splineEditor;
+    if(splineEditor?.draft && splineEditor.element===this.selectedObject)return;
     const bb = this.selectedObject.getBBox();
     const handles = [
       { x: bb.x, y: bb.y, cls: "nw", cursor: "nwse-resize" },

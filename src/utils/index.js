@@ -22,6 +22,7 @@
 import {createEditorHost} from "../adapters/editorHost.js";
 import {readSplineSource} from '../adapters/splineSource.js';
 import {createImplementationPreferences} from '../adapters/implementationPreferences.js';
+import * as splineControlGeometry from '../adapters/splineControlGeometry.js';
 import * as geometry from './geometry.js';
 import * as coordinates from './coordinates.js';
 import * as svg from './svg.js';
@@ -35,6 +36,7 @@ window.VectorUtils = {
   createEditorHost,
   readSplineSource,
   createImplementationPreferences,
+  splineControlGeometry,
   geometry,
   linearEditing,
   coordinates,
