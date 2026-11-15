@@ -130,7 +130,7 @@ class ToolPropertiesPanel {
     if (variants.length > 1) {
       const group = this.createPropertyGroup('計算の実装');
       const select = this.createSelect(variants.map(v => ({value: v.id, label: v.label})), info.id, id => {
-        host.selectImplementation(name, id); this.currentTool.onImplementationChanged?.(); this.updatePanel();
+        host.selectImplementation(name, id); this.saveImplementationPreferences(); this.currentTool.onImplementationChanged?.(); this.updatePanel();
       });
       select.dataset.implementationSelect = 'calculation'; select.setAttribute('aria-label', '計算の実装');
       group.append(select); section.append(group);
@@ -144,7 +144,7 @@ class ToolPropertiesPanel {
     if (renderers.length > 1) {
       const group = this.createPropertyGroup('描画の実装');
       const select = this.createSelect(renderers.map(v => ({value: v.id, label: v.label})), rendering.id, id => {
-        host.selectRenderer(name, id); this.currentTool.onImplementationChanged?.(); this.updatePanel();
+        host.selectRenderer(name, id); this.saveImplementationPreferences(); this.currentTool.onImplementationChanged?.(); this.updatePanel();
       });
       select.dataset.implementationSelect = 'rendering'; select.setAttribute('aria-label', '描画の実装');
       group.append(select); section.append(group);
@@ -152,7 +152,7 @@ class ToolPropertiesPanel {
         const group = this.createPropertyGroup(label);
         const input = this.createNumberInput(value, min, max, step, value => {
           if (!Number.isFinite(value) || value < min || value > max || (step === 1 && !Number.isInteger(value))) return;
-          host.selectRenderer(name, rendering.id, {[key]: value}); this.currentTool.onImplementationChanged?.();
+          host.selectRenderer(name, rendering.id, {[key]: value}); this.saveImplementationPreferences(); this.currentTool.onImplementationChanged?.();
         });
         input.dataset.renderParameter = key; input.setAttribute('aria-label', label); group.append(input); section.append(group);
       };
@@ -163,6 +163,7 @@ class ToolPropertiesPanel {
       }
     }
     show('描画', rendering);
+    this.createPreferenceControls(section);
     if (this.currentTool.implementationError) {
       const p = document.createElement('p'); p.textContent = this.currentTool.implementationError; p.style.color = '#a22'; section.append(p);
     }
@@ -190,6 +191,45 @@ class ToolPropertiesPanel {
       if (selected.length > 10) section.append(document.createTextNode('先頭10図形の記録を表示しています。'));
     }
     this.panel.append(section);
+  }
+
+  saveImplementationPreferences() {
+    this.toolManager.preferences?.save();
+    const status=this.panel.querySelector('[data-preference-status]');
+    if(status) {const state=this.toolManager.preferences.state;status.textContent=state.message;status.style.color=state.warning?'#a22':'';}
+  }
+
+  createPreferenceControls(section) {
+    const preferences=this.toolManager.preferences;
+    if(!preferences)return;
+    const heading=document.createElement('h5');heading.textContent='方式設定の保存・復元（全ツール）';section.append(heading);
+    const status=document.createElement('p');status.dataset.preferenceStatus='';status.textContent=preferences.state.message;
+    status.setAttribute('role','status');status.style.cssText='font-size:12px;line-height:1.6';if(preferences.state.warning)status.style.color='#a22';section.append(status);
+    const refresh=()=>{this.currentTool.onImplementationChanged?.();this.updatePanel();};
+    const button=(label,id,action)=>{
+      const b=document.createElement('button');b.type='button';b.textContent=label;b.dataset.preferenceAction=id;
+      b.style.cssText='margin:3px';b.addEventListener('click',action);section.append(b);
+    };
+    button('現在の方式設定を保存','save',()=>{preferences.save();this.updatePanel();});
+    button('保存した方式設定を復元','load',()=>{preferences.load();refresh();});
+    button('方式設定を初期値へ戻す','reset',()=>{preferences.reset();refresh();});
+    button('方式設定JSONを書き出す','export',()=>{
+      try {
+        const url=URL.createObjectURL(new Blob([preferences.exportText()],{type:'application/json'}));
+        const a=document.createElement('a');a.href=url;a.download='vector-implementation-settings.json';a.click();
+        setTimeout(()=>URL.revokeObjectURL(url),0);
+      } catch(error) {preferences.state.message='方式設定を書き出せません。'+error.message;preferences.state.warning=true;this.updatePanel();}
+    });
+    const input=document.createElement('input');input.type='file';input.accept='.json,application/json';input.hidden=true;input.dataset.preferenceFile='';
+    input.addEventListener('change',async()=>{
+      const file=input.files[0];if(!file)return;
+      try {
+        if(file.size>1024000)throw Error('方式設定ファイルが大きすぎます。');
+        preferences.importText(await file.text());
+      } catch(error) {preferences.state.message='方式設定を読み込めません。'+error.message;preferences.state.warning=true;}
+      input.value='';refresh();
+    });
+    section.append(input);button('方式設定JSONを読み込む','import',()=>input.click());
   }
 
   createInstructionsSection() {

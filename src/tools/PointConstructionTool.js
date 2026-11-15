@@ -18,6 +18,7 @@ class PointConstructionTool extends BaseTool {
   isSpline() { return ['bSplineCurve', 'nurbsCurve'].includes(this.method); }
   getToolProperties() {
     if (!this.isSpline()) return [];
+    const rendering=this.toolManager.host.describeRendering?.(this.method)?.options ?? {};
     const text = (label, key) => ({type: 'custom', label, render: group => {
       const input = document.createElement('input'); input.type = 'text'; input.value = this[key]; input.setAttribute('aria-label', label);
       input.placeholder = '空欄で自動'; input.style.width = '100%'; input.style.boxSizing = 'border-box';
@@ -30,19 +31,27 @@ class PointConstructionTool extends BaseTool {
       {type: 'number', label: '次数', value: this.degree, min: 1, max: 12, step: 1, onChange: value => {
         if (Number.isInteger(value) && value >= 1 && value <= 12) {this.degree = value; this.redraw(); this.refreshPanel();}
       }},
-      {type: 'number', label: '描画の分割数', value: this.sampleCount, min: 2, max: 10000, step: 1, onChange: value => {
-        if (Number.isInteger(value) && value >= 2 && value <= 10000) {this.sampleCount = value; this.redraw(); this.refreshPanel();}
+      {type: 'number', label: '描画の分割数', value: rendering.sampleCount ?? this.sampleCount, min: 2, max: 10000, step: 1, onChange: value => {
+        if (Number.isInteger(value) && value >= 2 && value <= 10000) this.setRenderingPreference('sampleCount',value);
       }},
       ...(!this.periodic ? [text('ノット列（カンマ区切り、空欄で一様）', 'knotsText')] : []),
       ...(this.method === 'nurbsCurve' ? [text('重み（各制御点に1個、零・負も可）', 'weightsText'),
-        {type: 'number', label: '分母の除外幅（最大重みで正規化）', value: this.poleTolerance, min: 1e-14, max: 0.1, step: 'any', onChange: value => {
-          if (Number.isFinite(value) && value >= 1e-14 && value <= 0.1) {this.poleTolerance = value; this.redraw(); this.refreshPanel();}
+        {type: 'number', label: '分母の除外幅（最大重みで正規化）', value: rendering.poleTolerance ?? this.poleTolerance, min: 1e-14, max: 0.1, step: 'any', onChange: value => {
+          if (Number.isFinite(value) && value >= 1e-14 && value <= 0.1) this.setRenderingPreference('poleTolerance',value);
         }},
-        {type: 'number', label: '分母検査の最大深さ', value: this.poleMaxDepth, min: 0, max: 24, step: 1, onChange: value => {
-          if (Number.isInteger(value) && value >= 0 && value <= 24) {this.poleMaxDepth = value; this.redraw(); this.refreshPanel();}
+        {type: 'number', label: '分母検査の最大深さ', value: rendering.maxDepth ?? this.poleMaxDepth, min: 0, max: 24, step: 1, onChange: value => {
+          if (Number.isInteger(value) && value >= 0 && value <= 24) this.setRenderingPreference('maxDepth',value);
         }},
       ] : []),
     ];
+  }
+  setRenderingPreference(key,value) {
+    const host=this.toolManager.host;
+    if(host.renderingConfigurable===false || !host.selectRenderer || !host.describeRendering) {
+      this[key==='maxDepth'?'poleMaxDepth':key]=value;this.redraw();this.refreshPanel();return;
+    }
+    host.selectRenderer(this.method,host.describeRendering(this.method).id,{[key]:value});
+    this.toolManager.preferences?.save();this.redraw();this.refreshPanel();
   }
   refreshPanel() { window.toolPropertiesPanel?.updatePanel(); }
   activate() { super.activate(); this.canvas.style.cursor = 'crosshair'; }

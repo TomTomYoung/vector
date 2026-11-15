@@ -100,7 +100,7 @@ export function createRenderRegistry({renderers = [], rendering = {}} = {}) {
     registry.set(entry.id, {...entry});
   }
   renderers.forEach(register);
-  function select(name, id, options = {}) {
+  function validate(name, id, options = {}) {
     if (!registry.get(id)?.supports(name)) throw new RangeError('対象ツールに対応しない描画実装です。');
     if (options.sampleCount !== undefined) intervals(options);
     if (options.tolerance !== undefined && !(Number.isFinite(options.tolerance) && options.tolerance > 0)) throw new RangeError('許容差は正の有限数です。');
@@ -108,7 +108,12 @@ export function createRenderRegistry({renderers = [], rendering = {}} = {}) {
     if (options.maxDepth !== undefined && (!Number.isInteger(options.maxDepth) || options.maxDepth < 0 || options.maxDepth > depthLimit)) throw new RangeError('最大深さは0〜' + depthLimit + 'です。');
     if (spline && options.poleTolerance !== undefined && (!Number.isFinite(options.poleTolerance) || options.poleTolerance < 1e-14 || options.poleTolerance > 0.1)) throw new RangeError('分母の除外幅は1e-14〜0.1です。');
     if (spline && options.maxNodes !== undefined && (!Number.isInteger(options.maxNodes) || options.maxNodes < 1 || options.maxNodes > 200000)) throw new RangeError('処理上限は1〜200000です。');
-    chosen.set(name, id); settings.set(name, {...settings.get(name), ...options});
+  }
+  function replace(name, id, options = {}) {
+    validate(name,id,options);chosen.set(name,id);settings.set(name,{...options});
+  }
+  function select(name, id, options = {}) {
+    replace(name,id,{...settings.get(name),...options});
   }
   for (const [name, value] of Object.entries(rendering)) select(name, typeof value === 'string' ? value : value.id, typeof value === 'string' ? {} : value.options);
   const info = (entry, name) => {
@@ -116,7 +121,8 @@ export function createRenderRegistry({renderers = [], rendering = {}} = {}) {
     return {...rest, ...(entry.id === 'default' && ['bSplineCurve', 'nurbsCurve'].includes(name) ? {source: 'src/model/splineCurves.js'} : {}),
       algorithm: entry.id === 'default' ? defaultRenderDescription(name) : entry.algorithm};
   };
-  return {register, select,
+  return {register, select, replace, validate,
+    selection: names => Object.fromEntries(names.map(name => [name,{id:chosen.get(name) ?? 'default',options:{...settings.get(name)}}])),
     list: name => [...registry.values()].filter(e => e.supports(name)).map(e => info(e, name)),
     describe: (name, id) => {
       const entry = registry.get(id ?? chosen.get(name) ?? 'default');

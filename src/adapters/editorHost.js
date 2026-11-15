@@ -3,6 +3,7 @@ import {getMousePositionInSVG} from "../utils/coordinates.js";
 import {edit} from "../utils/linearEditing.js";
 import {renderGeometry, pathData, readOffsetShape} from "./svgGeometry.js";
 import {createRenderRegistry} from './renderStrategies.js';
+import {parseImplementationPreferences} from './implementationPreferences.js';
 
 function snapPoint(point, {geometry, exclude, anchor, manager}) {
   if (geometry && window.snapManager) return window.snapManager.snapPoint(point, exclude, anchor);
@@ -25,7 +26,34 @@ export function createEditorHost({
       calculation: describe(name), rendering: describeRendering(name), dependencies: run.trace?.() ?? [], ...extra}));
     return element;
   }
+  function exportPreferences() {
+    const calculation = run.selection?.() ?? {};
+    return parseImplementationPreferences({version:1,calculation,rendering:render ? {} : drawing.selection(Object.keys(calculation))});
+  }
+  function restorePreferences(value) {
+    const data = parseImplementationPreferences(value),pending = [],skipped = [];
+    // Validate all entries before applying any of them. Unavailable plugins stay inactive.
+    for (const type of ['calculation','rendering']) for (const [name,entry] of Object.entries(data[type])) {
+      const id = type === 'calculation' ? entry : entry.id;
+      try {
+        if (!run.list?.(name)?.length) throw Error('対象ツールが未登録です');
+        if (type === 'calculation') {
+          if (!run.select || !run.list(name).some(v=>v.id===id)) throw Error('計算実装が未登録です');
+        } else {
+          if (render) throw Error('外部renderの設定復元には対応していません');
+          drawing.validate(name,id,entry.options);
+        }
+        pending.push({type,name,id,options:entry.options});
+      } catch (error) {skipped.push({type,name,id,reason:error.message});}
+    }
+    for (const item of pending) {
+      if (item.type === 'calculation') run.select(item.name,item.id);
+      else drawing.replace(item.name,item.id,item.options);
+    }
+    return {applied:pending.map(({type,name,id})=>({type,name,id})),skipped};
+  }
   return {operations, execute: run, readPoint, snap, readShape, encodePath, editOutline, save,
+    exportPreferences, restorePreferences, renderingConfigurable: !render,
     describe, implementations: name => run.list?.(name) ?? [describe(name)],
     selectImplementation: (name, id) => {if (!run.select) throw Error('外部executeは方式選択に対応していません。'); run.select(name, id);},
     registerImplementation: (name, implementation) => run.register(name, implementation),
