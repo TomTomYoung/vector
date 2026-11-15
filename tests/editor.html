@@ -1086,14 +1086,17 @@ await check('Arc toolbar saves actual three-point input with every renderer and 
   try {
     for(const renderer of ['default','sampled','cubic']){
       fixture();await tick();host.selectRenderer('arc',renderer,{sampleCount:12});activate('arc');
-      click(240,160);click(208,224);mouse('mousemove',160,240);
+      click(240,160);click(208,224);
+      const acceptedThrough={...w.toolManager.tools.arc.points[1]};
+      assert(Math.hypot(acceptedThrough.x-208,acceptedThrough.y-224)<0.001,'click coordinate conversion: '+JSON.stringify(acceptedThrough));
+      mouse('mousemove',160,240);
       assert(!w.DrawingDocument.capture().querySelector('[data-vector-arc]'),'unfinished arc omitted '+renderer);
       click(160,240);const element=canvas.querySelector('[data-arc-tool]');assert(element,'committed arc '+renderer);
       const source=JSON.parse(element.getAttribute('data-vector-arc'));
-      assert(closePoint(source.input.through,arcPoints[1]) && source.path===element.getAttribute('d'),'actual through point saved');
+      assert(JSON.stringify(source.input.through)===JSON.stringify(acceptedThrough) && source.path===element.getAttribute('d'),'actual through point saved: '+JSON.stringify({source,acceptedThrough}));
       assert(JSON.parse(element.getAttribute('data-vector-implementation')).rendering.id===renderer,'actual renderer recorded');
       w.DrawingDocument.open(w.DrawingDocument.serialize());const loaded=canvas.querySelector('[data-arc-tool]');w.selectTool.selectObject(loaded);arcAction('begin');
-      assert(closePoint(w.toolPropertiesPanel.arcEditor.input().points[1],arcPoints[1]),'source reopens '+renderer);arcAction('cancel');
+      assert(JSON.stringify(w.toolPropertiesPanel.arcEditor.input().points[1])===JSON.stringify(acceptedThrough),'source reopens '+renderer);arcAction('cancel');
     }
   }finally{host.restorePreferences(before);w.snapToGrid=snap;}
 });
