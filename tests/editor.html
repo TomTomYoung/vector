@@ -7,7 +7,13 @@
 const frame = document.querySelector("#app");
 const result = document.querySelector("#result");
 const loaded = new Promise(resolve => frame.addEventListener("load", resolve, {once:true}));
-frame.src = "../index.html";
+const editorURL=new URL('../index.html',location.href);
+const editorHTML=await (await fetch(editorURL)).text();
+function configuredEditor(options) {
+  const setup='<script>document.addEventListener("DOMContentLoaded",()=>{window.vectorEditorOptions='+options+';});<\/script>';
+  return editorHTML.replace('<head>','<head><base href="'+editorURL+'">').replace('<script src="src/main.js">',setup+'<script src="src/main.js">');
+}
+frame.srcdoc=configuredEditor('{preferences:false}');
 await loaded;
 const w = frame.contentWindow, doc = w.document;
 const canvas = doc.querySelector("#canvas");
@@ -253,6 +259,7 @@ await check("A second editor replaces input, dispatch, arithmetic, tool, rendere
       }},
     });
     window.vectorEditorOptions = {
+      preferences: false,
       readPoint: () => new DOMPoint(37,41),
       snap(point) { calls.push("snap"); return point; },
       save() { calls.push("save"); },
@@ -624,6 +631,115 @@ await check('NURBS re-editing preserves pole warnings and invalidates source aft
   assert(!curve.hasAttribute('data-vector-partial'),'complete replacement clears partial marker');
   w.VectorUtils.linearEditing.split(curve,canvas,{x:100,y:130});w.toolPropertiesPanel.updatePanel();
   assert(!curve.hasAttribute('data-vector-spline') && !doc.querySelector('[data-spline-editor]'),'outline split removes obsolete model editor');
+});
+
+async function preferenceEditor(options) {
+  const element=document.createElement('iframe');element.width=1200;element.height=720;
+  const ready=new Promise(resolve=>element.addEventListener('load',resolve,{once:true}));
+  element.srcdoc=configuredEditor(options);document.body.append(element);await ready;
+  return {element,w:element.contentWindow,d:element.contentDocument};
+}
+function preferenceChoose(app,type,value) {
+  const input=app.d.querySelector(`[data-implementation-select="${type}"]`);assert(input,'preference '+type);
+  input.value=value;input.dispatchEvent(new app.w.Event('change'));
+}
+function preferenceNumber(app,label,value) {
+  const input=app.d.querySelector(`input[aria-label="${label}"]`);assert(input,'preference '+label);
+  input.value=value;input.dispatchEvent(new app.w.Event('change'));
+}
+async function preferenceFile(app,text) {
+  const input=app.d.querySelector('[data-preference-file]'),transfer=new app.w.DataTransfer();
+  transfer.items.add(new app.w.File([text],'settings.json',{type:'application/json'}));input.files=transfer.files;
+  const old=app.d.querySelector('[data-preference-status]');input.dispatchEvent(new app.w.Event('change'));
+  const deadline=Date.now()+3000;
+  while(old.isConnected && Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,10));
+  assert(!old.isConnected,'file import completed');
+}
+
+await check('Implementation choices and spline rendering settings survive a fresh editor and reset cleanly',async()=>{
+  const storageKey='vector-test-preferences-'+Date.now(),options='{preferences:{key:'+JSON.stringify(storageKey)+'}}';
+  let app=await preferenceEditor(options);
+  try {
+    app.w.DrawingDocument.open('<svg xmlns="http://www.w3.org/2000/svg"><circle id="kept" cx="20" cy="20" r="10"/></svg>');
+    const original=app.w.DrawingDocument.serialize();
+    app.d.getElementById('spline-tool').click();preferenceChoose(app,'calculation','centripetal');
+    app.d.getElementById('cubicBezier-tool').click();preferenceChoose(app,'rendering','adaptive');
+    preferenceNumber(app,'最大分割深さ',0);preferenceNumber(app,'図面座標での許容差',0.125);
+    app.d.getElementById('nurbsCurve-tool').click();preferenceNumber(app,'描画の分割数',121);
+    preferenceNumber(app,'分母の除外幅（最大重みで正規化）',0.000001);preferenceNumber(app,'分母検査の最大深さ',9);
+    assert(app.w.DrawingDocument.serialize()===original,'preferences leave existing drawing unchanged');
+    const saved=JSON.parse(localStorage.getItem(storageKey));
+    assert(saved.calculation.spline==='centripetal' && saved.rendering.nurbsCurve.options.sampleCount===121,'UI saved effective settings');
+    let exported;
+    const originalURL=app.w.URL.createObjectURL,originalClick=app.w.HTMLAnchorElement.prototype.click;
+    app.w.URL.createObjectURL=blob=>{exported=blob;return originalURL.call(app.w.URL,blob);};
+    app.w.HTMLAnchorElement.prototype.click=function(){assert(this.download==='vector-implementation-settings.json','settings download name');};
+    try {app.d.querySelector('[data-preference-action="export"]').click();}
+    finally {app.w.URL.createObjectURL=originalURL;app.w.HTMLAnchorElement.prototype.click=originalClick;}
+    assert(JSON.parse(await exported.text()).rendering.cubicBezier.options.maxDepth===0,'JSON export actual setting');
+    app.element.remove();app=await preferenceEditor(options);
+    const host=app.w.toolManager.host;
+    assert(host.describe('spline').id==='centripetal' && host.describeRendering('cubicBezier').options.maxDepth===0,'fresh instance restored');
+    app.d.getElementById('nurbsCurve-tool').click();
+    assert(app.d.querySelector('[aria-label="描画の分割数"]').value==='121','restored spline settings visible');
+    assert(app.d.querySelector('[aria-label="分母検査の最大深さ"]').value==='9','restored depth visible');
+    const shape=host.execute('nurbsCurve',{points:[{x:10,y:10},{x:70,y:80},{x:130,y:10}],degree:2});
+    const curve=host.render(shape,null,{toolName:'nurbsCurve'}),record=JSON.parse(curve.getAttribute('data-vector-implementation'));
+    assert(record.sampling.sampleCount===121 && record.sampling.maxDepth===9,'actual drawing uses restored settings');
+    app.d.querySelector('[data-preference-action="reset"]').click();
+    assert(localStorage.getItem(storageKey)===null && host.describe('spline').id==='default','reset clears persisted choices');
+    assert(app.d.querySelector('[aria-label="描画の分割数"]').value==='80' && app.d.querySelector('[aria-label="分母検査の最大深さ"]').value==='18','reset restores effective spline defaults');
+  }finally{app.element.remove();localStorage.removeItem(storageKey);}
+});
+
+await check('Preference JSON import reports unavailable implementations and malformed data without changing the drawing',async()=>{
+  const storageKey='vector-test-import-'+Date.now();const app=await preferenceEditor('{preferences:{key:'+JSON.stringify(storageKey)+'}}');
+  try {
+    app.w.DrawingDocument.open('<svg xmlns="http://www.w3.org/2000/svg"><path id="kept" d="M20 20L50 60"/></svg>');
+    const original=app.w.DrawingDocument.serialize();
+    await preferenceFile(app,JSON.stringify({version:1,calculation:{spline:'chordal',convexHull:'not-installed'},rendering:{circle:{id:'cubic',options:{}}}}));
+    assert(app.w.toolManager.host.describe('spline').id==='chordal','compatible calculation imported');
+    assert(app.d.querySelector('[data-preference-status]').textContent.includes('not-installed'),'unavailable implementation shown');
+    assert(app.w.DrawingDocument.serialize()===original,'import preserves drawing');
+    const previous=localStorage.getItem(storageKey);await preferenceFile(app,'{"version":2}');
+    assert(app.d.querySelector('[data-preference-status]').textContent.includes('読み込めません'),'malformed version reported');
+    assert(localStorage.getItem(storageKey)===previous && app.w.toolManager.host.describe('spline').id==='chordal','invalid import preserves preferences');
+    app.w.toolManager.host.selectImplementation('spline','uniform');app.d.querySelector('[data-preference-action="load"]').click();
+    assert(app.w.toolManager.host.describe('spline').id==='chordal','manual reload restores browser settings');
+  }finally{app.element.remove();localStorage.removeItem(storageKey);}
+});
+
+await check('Explicit startup settings and unavailable browser storage keep the editor operational',async()=>{
+  const storageKey='vector-test-startup-'+Date.now();
+  localStorage.setItem(storageKey,JSON.stringify({version:1,calculation:{spline:'centripetal'},rendering:{circle:{id:'cubic',options:{}}}}));
+  let app=await preferenceEditor('{preferences:{key:'+JSON.stringify(storageKey)+'},selection:{spline:"chordal"}}');
+  try {
+    assert(app.w.toolManager.host.describe('spline').id==='chordal','explicit startup selection wins');
+    assert(app.w.toolManager.host.describeRendering('circle').id==='cubic','unconfigured tools restore saved choice');
+    app.element.remove();
+    app=await preferenceEditor('{preferences:{key:'+JSON.stringify(storageKey)+',storage:()=>{throw Error("blocked storage");}}}');
+    assert(app.d.querySelector('[data-preference-status]').textContent.includes('読み込めません'),'blocked storage at startup reported');
+    app.d.getElementById('spline-tool').click();preferenceChoose(app,'calculation','uniform');
+    assert(app.d.querySelector('[data-preference-status]').textContent.includes('保存できません'),'write failure reported');
+    const host=app.w.toolManager.host;
+    assert(host.describe('spline').id==='uniform' && host.execute('spline',{points:[{x:0,y:0},{x:10,y:20},{x:40,y:0}]}),'calculation remains usable');
+    assert(!doc.querySelector('[data-preference-status]'),'embedded editor can disable persistence');
+  }finally{app.element.remove();localStorage.removeItem(storageKey);}
+});
+
+await check('Per-figure spline implementation replacement never overwrites saved drawing preferences',async()=>{
+  const storageKey='vector-test-edit-'+Date.now(),app=await preferenceEditor('{preferences:{key:'+JSON.stringify(storageKey)+'}}');
+  try {
+    const host=app.w.toolManager.host,model=host.execute('nurbsCurve',{points:[{x:20,y:30},{x:60,y:100},{x:130,y:30}],degree:2});
+    host.registerImplementation('nurbsCurve',{id:'one-figure',label:'One figure',algorithm:'Test model',run:()=>model});
+    const curve=host.render(model,null,{toolName:'nurbsCurve'});app.d.getElementById('canvas').append(curve);
+    app.w.toolManager.preferences.save();const saved=localStorage.getItem(storageKey);
+    app.w.selectTool.selectObject(curve);app.d.querySelector('[data-spline-action="begin"]').click();
+    const select=app.d.querySelector('[aria-label="再計算の実装"]');select.value='one-figure';select.dispatchEvent(new app.w.Event('change'));
+    app.d.querySelector('[data-spline-action="preview"]').click();app.d.querySelector('[data-spline-action="apply"]').click();
+    assert(JSON.parse(curve.getAttribute('data-vector-implementation')).calculation.id==='one-figure','figure implementation replaced');
+    assert(host.describe('nurbsCurve').id==='default' && localStorage.getItem(storageKey)===saved,'global and persisted settings unchanged');
+  }finally{app.element.remove();localStorage.removeItem(storageKey);}
 });
 
 result.textContent = reports.join("\n");

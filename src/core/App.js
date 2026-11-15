@@ -2,9 +2,18 @@
 // アプリケーションの初期化とコンポーネント間の連携を担当
 
 class App {
-  constructor({host,
+  constructor({host, preferences = {},
     createManager = (canvas, host) => new ToolManager(canvas, host), controllers = {}, ...stages} = {}) {
     this.host = host ?? window.VectorUtils.createEditorHost(stages);
+    if (preferences !== false && this.host.exportPreferences && this.host.restorePreferences) {
+      const path = new URL(document.baseURI).pathname.replace(/index\.html$/, '');
+      this.preferences = window.VectorUtils.createImplementationPreferences(this.host, {
+        key: preferences.key ?? 'vector:implementation-preferences:v1:'+path,
+        storage: preferences.storage ?? (() => window.localStorage),
+        preserve: {calculation:Object.keys(stages.selection ?? {}),rendering:Object.keys(stages.rendering ?? {})},
+      });
+      this.preferences.load(true);
+    }
     this.createManager = createManager;
     this.controllers = controllers;
     this.globalVariables = {
@@ -40,6 +49,7 @@ class App {
 
     // ツールマネージャーの初期化
     this.toolManager = this.createManager(canvas, this.host);
+    this.toolManager.preferences = this.preferences;
     window.toolManager = this.toolManager;
     this.setupKeyboardEvents();
 
