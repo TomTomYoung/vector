@@ -14,13 +14,14 @@ const chrome = spawn(process.env.CHROME_BIN ?? "google-chrome", [
 const pending = new Map(), errors = [];
 let sequence = 0, buffer = "", stderr = "", exitError;
 chrome.stderr.on("data", chunk => {stderr = (stderr + chunk).slice(-10000);});
-const exited = new Promise(resolve => chrome.once("exit", resolve));
+const exited = new Promise(resolve => chrome.once("close", resolve));
 function fail(error) {
   exitError = error;
   for (const {reject} of pending.values()) reject(error);
   pending.clear();
 }
 chrome.on("error", fail);
+chrome.stdio[3].on("error", fail);
 chrome.on("exit", (code, signal) => fail(new Error(`Chrome exited (${code ?? signal})`)));
 chrome.stdio[4].on("data", chunk => {
   buffer += chunk;
@@ -72,7 +73,9 @@ try {
   if (exitError) console.error(stderr);
   process.exitCode = 1;
 } finally {
-  chrome.kill("SIGKILL");
+  if (!exitError) await send("Browser.close").catch(() => {});
+  const killTimer = setTimeout(() => chrome.kill("SIGKILL"), 3000);
   await exited;
-  await rm(profile, {recursive: true, force: true});
+  clearTimeout(killTimer);
+  await rm(profile, {recursive: true, force: true, maxRetries: 5, retryDelay: 100});
 }
