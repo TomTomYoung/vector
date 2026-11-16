@@ -1200,6 +1200,110 @@ await check('Arc plugin input is preserved, unavailable implementations are expl
   assert(!doc.querySelector('[data-arc-editor]'),'old external arcs are not assigned invented through points');
 });
 
+const pointsetAction=id=>{const button=doc.querySelector(`[data-pointset-action="${id}"]`);assert(button,'point-set action '+id);button.click();};
+const pointsetField=(label,value,event='input')=>splineField(label,value,event);
+const pointsetHandle=i=>canvas.querySelector(`[data-pointset-control-index="${i}"]`);
+const observations=[{x:100,y:100},{x:200,y:100},{x:180,y:180},{x:120,y:160}];
+function addEditablePointSet(method='fitCircle',renderer='default'){
+  const host=w.toolManager.host,input={points:observations},computed=host.execute(method,input);
+  const element=host.render(w.VectorUtils.pointSetSource.pointSetGeometry(method,input,computed),null,{toolName:method,renderer,sampleCount:16,sourceInput:input,sourceResult:computed});
+  element.id='editable-pointset';element.setAttribute('stroke','#783963');element.setAttribute('stroke-width','4');element.setAttribute('fill','none');element.setAttribute('data-layer',w.layers[0].id);canvas.append(element);return element;
+}
+
+await check('Point-set tools save actual observations and result, including one-point enclosing circles, through SVG roundtrip',async()=>{
+  const host=w.toolManager.host,before=host.exportPreferences(),snap=w.snapToGrid;w.snapToGrid=false;
+  try {
+    for(const method of ['fitLine','fitCircle','minimumEnclosingCircle'])for(const renderer of method==='fitLine'?['default']:['default','sampled','cubic']){
+      fixture();await tick();host.selectRenderer(method,renderer,{sampleCount:16});activate(method);
+      for(const p of observations)click(p.x,p.y);
+      const accepted=w.toolManager.tools[method].points.map(p=>({...p}));assert(!w.DrawingDocument.capture().querySelector('[data-vector-pointset]'),'unfinished source excluded');key('Enter');
+      const element=canvas.querySelector('[data-construction-tool="'+method+'"]'),source=JSON.parse(element.getAttribute('data-vector-pointset'));
+      assert(JSON.stringify(source.input.points)===JSON.stringify(accepted) && source.method===method,'actual observations saved '+method+renderer);
+      assert(JSON.parse(element.getAttribute('data-vector-implementation')).parameters.pointCount===4,'point count');
+      w.DrawingDocument.open(w.DrawingDocument.serialize());w.selectTool.selectObject(canvas.querySelector('[data-construction-tool="'+method+'"]'));pointsetAction('begin');
+      assert(JSON.stringify(w.toolPropertiesPanel.pointSetEditor.input().points)===JSON.stringify(accepted),'saved observations reopened');pointsetAction('cancel');
+    }
+    fixture();await tick();host.selectRenderer('minimumEnclosingCircle','default');activate('minimumEnclosingCircle');click(100,100);key('Enter');
+    const el=canvas.querySelector('[data-vector-pointset]');assert(el && Number(el.getAttribute('r'))===0,'singleton enclosing circle accepted');
+    activate('select');w.selectTool.selectObject(el);pointsetAction('begin');pointsetField('元の点群（1行に x, y）','100,100\n200,100');pointsetAction('apply');assert(Number(el.getAttribute('r'))===50,'zero-radius source can grow');
+  }finally{host.restorePreferences(before);w.snapToGrid=snap;}
+});
+
+await check('Point-set numeric editing adds and removes observations, replaces SVG tags and preserves appearance and single-step history',async()=>{
+  fixture('<g id="pointset-parent" transform="translate(20 10) rotate(13)"/>');await tick();let element=addEditablePointSet();doc.getElementById('pointset-parent').append(element);
+  element.setAttribute('transform','scale(-0.8 1.2) translate(-450 0)');element.setAttribute('style','opacity:0.7');element.setAttribute('data-transform-layers','[]');
+  const title=doc.createElementNS(canvas.namespaceURI,'title');title.textContent='observations';element.append(title);
+  w.saveState();await tick();w.undoStack.length=0;activate('select');w.selectTool.selectObject(element);
+  const source=element.getAttribute('data-vector-pointset'),attrs=['id','transform','style','stroke','stroke-width','data-layer','data-transform-layers'],appearance=attrs.map(k=>element.getAttribute(k));
+  pointsetAction('begin');pointsetField('元の点群（1行に x, y）',arcText([...observations,{x:240,y:150}]));pointsetField('点群の再描画実装','cubic','change');pointsetAction('preview');
+  const preview=canvas.querySelector('[data-vector-preview="pointset-edit"]');assert(preview?.getAttribute('d').includes('C'),'cubic preview');
+  const a=element.getScreenCTM(),b=preview.getScreenCTM();assert(['a','b','c','d','e','f'].every(k=>Math.abs(a[k]-b[k])<1e-5),'preview aligned');
+  assert(element.getAttribute('data-vector-pointset')===source && !w.DrawingDocument.capture().querySelector('[data-vector-preview]'),'original and helper-free save');pointsetAction('apply');await tick();
+  element=doc.getElementById('editable-pointset');assert(element.tagName==='path' && element.parentElement.id==='pointset-parent' && attrs.every((k,i)=>element.getAttribute(k)===appearance[i]) && element.querySelector('title').textContent==='observations','tag replacement preserves appearance');
+  assert(w.selectedObject===element && JSON.parse(element.getAttribute('data-vector-pointset')).input.points.length===5 && w.undoStack.length===1,'selection, input and history');
+  assert(doc.querySelector('[data-recorded-implementation]').textContent.includes('元の生成 fitCircle'),'provenance visible');
+  key('z',{ctrlKey:true});await tick();assert(doc.getElementById('editable-pointset').getAttribute('data-vector-pointset')===source,'undo restores exact source');key('Z',{ctrlKey:true,shiftKey:true});await tick();
+  element=doc.getElementById('editable-pointset');w.selectTool.selectObject(element);pointsetAction('begin');pointsetField('元の点群（1行に x, y）',arcText(observations.slice(0,3)));pointsetField('点群の再描画実装','sampled','change');pointsetField('点群の再描画分割数',24);pointsetAction('apply');
+  assert(element.getAttribute('d').match(/L/g).length===24 && JSON.parse(element.getAttribute('data-vector-pointset')).input.points.length===3,'remove point and change detail');
+  pointsetAction('begin');pointsetField('点群の再描画実装','default','change');pointsetAction('apply');assert(doc.getElementById('editable-pointset').tagName==='circle','native circle restored');
+});
+
+await check('Point-set drag transforms observations, rolls back gestures and recovers from degenerate fitting',async()=>{
+  frame.scrollIntoView();fixture('<g id="pointset-drag-parent" transform="translate(10 20) rotate(11)"/>');await tick();const element=addEditablePointSet();
+  element.setAttribute('transform','scale(-0.7 1.2) translate(-450 0)');doc.getElementById('pointset-drag-parent').append(element);
+  const snap=w.snapToGrid,ortho=w.orthoMode;w.snapToGrid=false;w.orthoMode=false;
+  try{
+    activate('select');w.selectTool.selectObject(element);w.saveState();await tick();w.undoStack.length=0;pointsetAction('begin');const source=element.getAttribute('data-vector-pointset');
+    assert(canvas.querySelectorAll('[data-pointset-control-index]').length===4 && !canvas.querySelector('.control-handle'),'observation handles only');
+    pointer('pointerdown',pointsetHandle(0),localScreen(element,{x:102,y:101}));pointer('pointerup',doc,localScreen(element,{x:122,y:111}));
+    assert(closePoint(w.toolPropertiesPanel.pointSetEditor.input().points[0],{x:120,y:110}),'local point and grab offset');
+    for(const cancel of ['Escape','pointercancel','blur']){
+      const before=w.toolPropertiesPanel.pointSetEditor.draft.pointsText,p=w.toolPropertiesPanel.pointSetEditor.input().points[0];
+      pointer('pointerdown',pointsetHandle(0),localScreen(element,p));pointer('pointermove',doc,localScreen(element,{x:150,y:140}));await paint();
+      if(cancel==='Escape')key('Escape');else if(cancel==='blur')w.dispatchEvent(new w.Event('blur'));else pointer('pointercancel',doc,localScreen(element,p));
+      assert(w.toolPropertiesPanel.pointSetEditor.draft.pointsText===before,'gesture rollback '+cancel);
+    }
+    pointsetField('元の点群（1行に x, y）','100,100\n150,100\n200,100');pointsetAction('preview');
+    assert(!canvas.querySelector('[data-vector-preview="pointset-edit"]') && pointsetHandle(1),'collinear input stays repairable');
+    pointer('pointerdown',pointsetHandle(1),localScreen(element,{x:150,y:100}));pointer('pointerup',doc,localScreen(element,{x:150,y:160}));
+    assert(canvas.querySelector('[data-vector-preview="pointset-edit"]') && element.getAttribute('data-vector-pointset')===source && w.undoStack.length===0,'repair preview without mutation');pointsetAction('apply');await tick();
+    assert(w.undoStack.length===1 && closePoint(JSON.parse(element.getAttribute('data-vector-pointset')).input.points[1],{x:150,y:160}),'recovered point applied once');
+  }finally{w.snapToGrid=snap;w.orthoMode=ortho;}
+});
+
+await check('Point-set line editing rejects invalid, locked, stale and unavailable inputs without altering preferences',async()=>{
+  fixture();await tick();const element=addEditablePointSet('fitLine'),host=w.toolManager.host;activate('select');w.selectTool.selectObject(element);pointsetAction('begin');
+  const original=element.getAttribute('data-vector-pointset'),before=JSON.stringify(host.exportPreferences());
+  for(const text of ['0,0','0,0\n0,0','NaN,0\n2,2',Array(1001).fill('1,2').join('\n')]){
+    pointsetField('元の点群（1行に x, y）',text);pointsetAction('apply');assert(element.getAttribute('data-vector-pointset')===original,'invalid point set rejected');
+  }
+  pointsetField('元の点群（1行に x, y）','150,80\n150,200');pointsetAction('apply');assert(Number(element.getAttribute('x1'))===150 && Number(element.getAttribute('x2'))===150,'vertical fit');
+  pointsetAction('begin');const layer=w.layers.find(l=>l.id===Number(element.getAttribute('data-layer')));layer.locked=true;pointsetAction('apply');assert(w.toolPropertiesPanel.pointSetEditor.draft,'locked target refuses apply');layer.locked=false;pointsetAction('cancel');pointsetAction('begin');
+  element.setAttribute('x1','999');pointsetAction('apply');assert(element.getAttribute('x1')==='999','concurrent native change preserved');pointsetAction('cancel');pointsetAction('begin');assert(!w.toolPropertiesPanel.pointSetEditor.draft && doc.querySelector('[data-pointset-edit-status]').textContent.includes('一致しません'),'stale source refuses reload');
+  element.setAttribute('x1','150');const record=JSON.parse(element.getAttribute('data-vector-implementation'));record.calculation.id='missing-pointset';element.setAttribute('data-vector-implementation',JSON.stringify(record));pointsetAction('begin');pointsetAction('apply');assert(doc.querySelector('[data-pointset-edit-status]').textContent.includes('計算実装がありません'),'unknown id explicit');
+  pointsetField('点群の再計算実装','default','change');pointsetAction('apply');assert(JSON.stringify(host.exportPreferences())===before,'next-drawing preferences unchanged');
+});
+
+await check('Point-set and center-radius editing are exclusive and direct circle or outline edits detach observations',async()=>{
+  fixture();await tick();let element=addEditablePointSet();activate('select');w.selectTool.selectObject(element);pointsetAction('begin');circleAction('begin');
+  assert(!w.toolPropertiesPanel.pointSetEditor.draft && w.toolPropertiesPanel.circleEditor.draft && !pointsetHandle(0),'circle mode closes point draft');pointsetAction('begin');
+  assert(!w.toolPropertiesPanel.circleEditor.draft && w.toolPropertiesPanel.pointSetEditor.draft,'point mode closes circle draft');pointsetAction('cancel');
+  circleAction('begin');circleField('円の半径',70);circleAction('apply');element=doc.getElementById('editable-pointset');assert(!element.hasAttribute('data-vector-pointset') && !doc.querySelector('[data-pointset-editor]'),'center-radius edit detaches source');
+  fixture();await tick();element=addEditablePointSet();w.VectorUtils.circleSource.recordCircleAttributeEdit(element);assert(!element.hasAttribute('data-vector-pointset'),'direct attributes detach');
+  fixture();await tick();element=addEditablePointSet('fitCircle','sampled');const middle=element.getPointAtLength(element.getTotalLength()/2);w.VectorUtils.linearEditing.split(element,canvas,{x:middle.x,y:middle.y});
+  assert(!element.hasAttribute('data-vector-pointset') && !element.nextElementSibling.hasAttribute('data-vector-pointset'),'split detaches both parts');
+});
+
+await check('Point-set plugins preserve actual results, restore failed selections and clear helpers on tool changes',async()=>{
+  fixture();await tick();const element=addEditablePointSet('fitLine'),host=w.toolManager.host;
+  host.registerImplementation('fitLine',{id:'test-pointset-fail',label:'Fail points',algorithm:'Intentional failure',run:()=>{throw Error('point fit failure');}});
+  host.registerImplementation('fitLine',{id:'test-pointset-line',label:'Vertical plugin',algorithm:'Vertical line with nonunit direction',run:()=>({kind:'line',point:{x:150,y:0},direction:{x:0,y:10},rms:2})});
+  const before=JSON.stringify(host.exportPreferences()),source=element.getAttribute('data-vector-pointset');activate('select');w.selectTool.selectObject(element);pointsetAction('begin');
+  pointsetField('点群の再計算実装','test-pointset-fail','change');pointsetAction('apply');assert(element.getAttribute('data-vector-pointset')===source && JSON.stringify(host.exportPreferences())===before,'failure leaves document and selection');
+  pointsetField('点群の再計算実装','test-pointset-line','change');pointsetAction('apply');let saved=JSON.parse(element.getAttribute('data-vector-pointset'));assert(saved.result.direction.y===10 && saved.result.rms===2 && Number(element.getAttribute('y2'))===180,'actual plugin result and normalized projection');
+  assert(JSON.stringify(host.exportPreferences())===before,'successful plugin leaves preferences');pointsetAction('begin');pointsetAction('preview');activate('line');assert(!pointsetHandle(0) && !canvas.querySelector('[data-vector-preview]'),'switch clears source helpers');
+});
+
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
 </script>

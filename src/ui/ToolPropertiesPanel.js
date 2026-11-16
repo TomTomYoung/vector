@@ -9,6 +9,7 @@ class ToolPropertiesPanel {
     this.splineEditor = new SplineEditor(toolManager, () => this.updatePanel());
     this.circleEditor = new CircleEditor(toolManager, () => this.updatePanel());
     this.arcEditor = new ArcEditor(toolManager, () => this.updatePanel());
+    this.pointSetEditor = new PointSetEditor(toolManager, () => this.updatePanel());
 
     // デフォルトの共通プロパティ
     this.commonProperties = {
@@ -69,6 +70,7 @@ class ToolPropertiesPanel {
     this.splineEditor.select(this.toolManager.activeToolName === 'select' && selected?.hasAttribute('data-vector-spline') ? selected : null);
     this.circleEditor.select(this.toolManager.activeToolName === 'select' && (selected?.tagName === 'circle' || selected?.hasAttribute('data-vector-circle')) ? selected : null);
     this.arcEditor.select(this.toolManager.activeToolName === 'select' && selected?.hasAttribute('data-vector-arc') ? selected : null);
+    this.pointSetEditor.select(this.toolManager.activeToolName === 'select' && selected?.hasAttribute('data-vector-pointset') ? selected : null);
     if (!this.currentTool) {
       this.panel.innerHTML = "<p style='color: #666;'>ツールが選択されていません</p>";
       return;
@@ -91,6 +93,10 @@ class ToolPropertiesPanel {
     this.createInstructionsSection();
 
     this.createImplementationSection();
+    if (this.pointSetEditor.element) {
+      const section = this.createSection('元の点群から再計算', {emphasize: true});
+      section.dataset.pointsetEditor = '';this.pointSetEditor.render(section);this.panel.append(section);
+    }
     if (this.arcEditor.element) {
       const section = this.createSection('円弧の元データを編集', {emphasize: true});
       section.dataset.arcEditor = '';this.arcEditor.render(section);this.panel.append(section);
@@ -197,6 +203,7 @@ class ToolPropertiesPanel {
             (record.parameters ? ' / 図形設定 ' + JSON.stringify(record.parameters) : '') +
             (record.circleEdit?.origin ? ` / 元の生成 ${record.circleEdit.origin.tool}: ${record.circleEdit.origin.calculation?.algorithm ?? '不明'} / 元の描画 ${record.circleEdit.origin.rendering?.algorithm ?? '不明'}` : '') +
             (record.arcEdit?.origin ? ` / 元の生成 ${record.arcEdit.origin.tool}: ${record.arcEdit.origin.calculation?.algorithm ?? '不明'} / 元の描画 ${record.arcEdit.origin.rendering?.algorithm ?? '不明'}` : '') +
+            (record.pointSetEdit?.origin ? ` / 元の生成 ${record.pointSetEdit.origin.tool}: ${record.pointSetEdit.origin.calculation?.algorithm ?? '不明'} / 元の描画 ${record.pointSetEdit.origin.rendering?.algorithm ?? '不明'}` : '') +
             (record.sampling ? ` / 描画枝 ${record.sampling.branches}、省略区間 ${record.sampling.omitted.length}` : '') +
             (record.warning ? ' / ' + record.warning : '') + (record.note ? ' / ' + record.note : '') : '方式の記録なし（旧データ・外部SVG等）';
         } catch { text.textContent = '方式の記録を読めません。'; }

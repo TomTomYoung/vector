@@ -61,6 +61,7 @@ export function recordCircleAttributeEdit(element, note = '中心・半径のSVG
   let origin = null;
   try { origin = circleOrigin(readRecord(element.getAttribute('data-vector-implementation'))); } catch { /* keep the direct edit usable */ }
   element.removeAttribute('data-vector-circle');
+  element.removeAttribute('data-vector-pointset');
   element.setAttribute('data-vector-implementation', JSON.stringify({version:1,tool:'circle',
     calculation:{id:'direct-attributes',label:'円の属性編集',algorithm:note,source:'src/tools/CircleTool.js'},
     rendering:{id:'default',label:'標準SVG',algorithm:'SVG circleのcx・cy・r',source:'src/tools/CircleTool.js',options:{}},

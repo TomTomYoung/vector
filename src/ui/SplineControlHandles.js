@@ -27,7 +27,7 @@ class SplineControlHandles {
       const element=this.editor.element;
       if(!element?.isConnected || records.some(r=>r.target===element || r.target===this.canvas || r.target.contains(element)))this.scheduleSync();
     });
-    this.observer.observe(this.canvas,{attributes:true,subtree:true,childList:true,attributeFilter:['transform','style','viewBox','width','height','d','data-vector-'+this.namespace,'data-vector-implementation','data-layer']});
+    this.observer.observe(this.canvas,{attributes:true,subtree:true,childList:true,attributeFilter:['transform','style','viewBox','width','height','d','x1','y1','x2','y2','cx','cy','r','data-vector-'+this.namespace,'data-vector-implementation','data-layer']});
     this.layerObserver=new MutationObserver(()=>this.scheduleSync());
     const layers=document.getElementById('layer-list');if(layers)this.layerObserver.observe(layers,{subtree:true,childList:true});
     this.resizeObserver=new ResizeObserver(()=>this.scheduleSync());this.resizeObserver.observe(this.canvas);

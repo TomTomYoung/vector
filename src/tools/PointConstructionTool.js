@@ -95,21 +95,18 @@ class PointConstructionTool extends BaseTool {
     if (this.method === 'triangulatePolygon') return result.length ? {kind: 'group', children: result.map(polygon)} : null;
     if (this.method === 'delaunayTriangles') return result.length ? {kind: 'group', children: result.map(ids => polygon(ids.map(i => this.points[i])))} : null;
     if (this.method === 'voronoiCells') return {kind: 'group', children: result.filter(c => c.points.length > 2).map(c => polygon(c.points))};
-    if (this.method === 'fitLine') {
-      const p = result.point, d = result.direction;
-      const t = this.points.map(q => (q.x - p.x) * d.x + (q.y - p.y) * d.y);
-      const point = t => ({x: p.x + t * d.x, y: p.y + t * d.y});
-      return {kind: 'segment', start: point(Math.min(...t)), end: point(Math.max(...t))};
-    }
+    if (window.VectorUtils.pointSetSource.pointSetMethods.includes(this.method))
+      return window.VectorUtils.pointSetSource.pointSetGeometry(this.method,this.input(),result);
     return result;
   }
   build() {
-    if (this.points.length < (this.isSpline() ? this.degree + 1 : this.method === 'fitLine' ? 2 : 3)) return null;
+    if (this.points.length < (this.isSpline() ? this.degree + 1 : this.method === 'fitLine' ? 2 : this.method === 'minimumEnclosingCircle' ? 1 : 3)) return null;
     const result = this.run(this.method, this.input());
     if (!result) {this.implementationError = '入力条件を満たしません。点の配置・次数・ノット・重みを確認してください。'; return null;}
     const shape = this.geometry(result);
     if (!shape) {this.implementationError = 'この配置では図形を作成できません。'; return null;}
     const element = this.toolManager.host.render(shape, null, {toolName: this.method, sampleCount: this.sampleCount,
+      ...(window.VectorUtils.pointSetSource.pointSetMethods.includes(this.method) ? {sourceInput:this.input(),sourceResult:result} : {}),
       ...(this.isSpline() ? {poleTolerance: this.poleTolerance, maxDepth: this.poleMaxDepth} : {})});
     if (!element) {this.implementationError = '指定した検査条件では描画できる区間がありません。分母の除外幅・最大深さ・重みを確認してください。'; return null;}
     this.applyDefaultAttributes(element);

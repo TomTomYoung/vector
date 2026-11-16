@@ -63,6 +63,7 @@ export function writePoints(el, points, inverse) {
   el.removeAttribute('data-vector-spline');
   el.removeAttribute('data-vector-circle');
   el.removeAttribute('data-vector-arc');
+  el.removeAttribute('data-vector-pointset');
   el.removeAttribute('data-vector-partial');
   const local = points.map(p => transformPoint(inverse, p));
   if (el.tagName === "line") {

@@ -18,6 +18,7 @@ class CircleEditor {
         this.element.getAttribute('data-vector-implementation')!==this.originalRecord))throw Error('編集中に元図形が変更されました。取消してから読み直してください。');
   }
   begin() {
+    window.toolPropertiesPanel?.pointSetEditor?.cancel(false);
     try {
       this.assertTarget();
       const source=window.VectorUtils.circleSource.readCircleSource(this.element.getAttribute('data-vector-circle'),
@@ -88,7 +89,7 @@ class CircleEditor {
   apply() {
     try {
       const result=this.build(),old=this.element;
-      const generated=['cx','cy','r','d','data-vector-circle','data-vector-implementation'];
+      const generated=['cx','cy','r','d','data-vector-circle','data-vector-pointset','data-vector-implementation'];
       let target=old;
       if(result.tagName!==old.tagName) {
         target=result;
@@ -123,7 +124,7 @@ class CircleEditor {
     if(!this.draft){button('円を再編集','begin',()=>this.begin());container.append(status);return;}
     const d=this.draft;
     const hint=document.createElement('p');hint.style.fontSize='12px';
-    hint.textContent='中心と半径のハンドルをドラッグできます。Shift・直交モードでは図面の縦横方向へ拘束します。Escはドラッグ中ならその移動、それ以外は編集全体を取り消します。点群への当てはめ等の元の作図入力は再実行しません。';container.append(hint);
+    hint.textContent='中心と半径のハンドルをドラッグできます。Shift・直交モードでは図面の縦横方向へ拘束します。Escはドラッグ中ならその移動、それ以外は編集全体を取り消します。適用すると元の点群との関連を解除し、中心・半径で構成した円になります。';container.append(hint);
     const field=(label,value,change,min,max,step='any')=>{
       const wrapper=document.createElement('label');wrapper.textContent=label;wrapper.style.cssText='display:block;font-size:12px;margin:10px 0';
       const input=document.createElement('input');input.type='number';input.value=value;input.step=step;
