@@ -50,6 +50,10 @@
 
 描画登録は既存の `registerRenderer` を使用し、`fillet` を対象に円弧からSVG `path` を返す実装を受け付けます。計算・描画・保存の準備と照合は [filletSource.js](../src/adapters/filletSource.js)、新規作図接続は [BaseTool.js](../src/core/BaseTool.js)、再編集UIは [FilletEditor.js](../src/ui/FilletEditor.js) です。
 
+## 検証
+
+[filletSource.test.mjs](../tests/filletSource.test.mjs) と [filletControl.test.mjs](../tests/filletControl.test.mjs) で元入力・要素参照・座標変換・半径逆算・接点規則を検証し、[editor.html](../tests/editor.html) で3要素の再編集、ドラッグ、取消、異常条件、SVG往復、Undo/Redoを検証します。[PR #62](https://github.com/TomTomYoung/vector/pull/62) の実装コミット `31a3dc7` に対する[CI](https://github.com/TomTomYoung/vector/actions/runs/43783802145)で、数値・モデル119件と実Chrome操作68件が全て成功しました。
+
 ## 残る範囲
 
 元の線分端点の直接編集、複数フィレットの連鎖更新、継続的接線拘束、半径の自動上限、任意曲線同士のフィレット、面取りの元モデル保存、外部SVGからの関連復元は未導入です。既存の交点計算の絶対閾値や退化配置に対する数値精度保証も変更していません。
