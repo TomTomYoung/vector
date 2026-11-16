@@ -2299,6 +2299,117 @@ await check('Input presets work despite denied storage and real SVG downloads re
   }finally{app.element.remove();}
 });
 
+const parameterPresetValues={spline:{tension:2},fillet:{radius:30},chamfer:{distance1:20,distance2:35},offset:{offsetDistance:15,miterLimit:2}};
+const parameterPresetLabels={tension:'標準実装の接線倍率',radius:'半径',distance1:'距離1',distance2:'距離2',offsetDistance:'オフセット距離',miterLimit:'Miter実装の上限比'};
+function parameterPresetRecord(app,name){app.d.getElementById(name+'-tool').click();for(const [key,value] of Object.entries(parameterPresetValues[name]))preferenceNumber(app,parameterPresetLabels[key],value);inputPresetAction(app,'record');}
+function parameterMouse(app,type,x,y,target=app.d.getElementById('canvas')){const p=new app.w.DOMPoint(x,y).matrixTransform(app.d.getElementById('canvas').getScreenCTM());target.dispatchEvent(new app.w.MouseEvent(type,{clientX:p.x,clientY:p.y,button:0,bubbles:true}));}
+function parameterClick(app,x,y,target){parameterMouse(app,'mousedown',x,y,target);parameterMouse(app,'mouseup',x,y,target);}
+const parameterCornerSVG='<svg xmlns="http://www.w3.org/2000/svg"><line id="parameter-h" x1="100" y1="100" x2="260" y2="100" stroke="black"/><line id="parameter-v" x1="100" y1="100" x2="100" y2="260" stroke="black"/></svg>';
+
+await check('Four drawing parameter presets survive SVG transfer, show recorded values and restore fields without changing artwork or methods',async()=>{
+  const source=await preferenceEditor('{preferences:false}');let target;
+  try{
+    source.w.DrawingDocument.open(parameterCornerSVG);inputDraft(source,'convexHull');inputPresetAction(source,'record');source.d.getElementById('select-tool').click();presetAction(source,'record');
+    for(const name of Object.keys(parameterPresetValues))parameterPresetRecord(source,name);
+    const saved=inputPresetState(source),methods=documentSettings(source),xml=source.w.DrawingDocument.serialize();target=await preferenceEditor('{preferences:false}');target.w.DrawingDocument.open(xml);
+    assert(target.w.toolManager.tools.spline.tension===0.5&&target.w.toolManager.tools.fillet.radius===10&&target.w.toolManager.tools.offset.offsetDistance===10,'opening does not apply parameters');
+    const before=target.w.DrawingDocument.serialize(),selections=JSON.stringify(target.w.toolManager.host.exportPreferences());
+    for(const [name,values] of Object.entries(parameterPresetValues)){
+      target.d.getElementById(name+'-tool').click();const text=target.d.querySelector('[data-construction-input-record]').textContent;
+      for(const [key,value] of Object.entries(values))assert(text.includes(parameterPresetLabels[key]+' '+value),'recorded value '+name+'/'+key);
+      assert(!target.d.querySelector('[data-construction-input-presets]').textContent.includes('Enter'),'parameter instructions do not require Enter');inputPresetAction(target,'restore');
+      for(const [key,value] of Object.entries(values))assert(target.w.toolManager.tools[name][key]===value&&Number(target.d.querySelector(`input[aria-label="${parameterPresetLabels[key]}"]`).value)===value,'restored field '+name+'/'+key);
+    }
+    assert(target.w.DrawingDocument.serialize()===before&&JSON.stringify(target.w.toolManager.host.exportPreferences())===selections,'artwork and methods unchanged');
+    assert(JSON.stringify(inputPresetState(target))===JSON.stringify(saved)&&JSON.stringify(documentSettings(target))===JSON.stringify(methods),'point-input and implementation records preserved');
+  }finally{source.element.remove();target?.element.remove();}
+});
+
+await check('Restored spline tension updates the existing draft and actual curve while preserving points and selected algorithm',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    parameterPresetRecord(app,'spline');await tick();const tool=app.w.toolManager.tools.spline,host=app.w.toolManager.host;tool.tension=0.5;
+    for(const p of [{x:80,y:100},{x:160,y:220},{x:280,y:110}])parameterClick(app,p.x,p.y);
+    const points=tool.points,before=tool.currentSpline.getAttribute('d'),history=app.w.undoStack.length;inputPresetAction(app,'restore');
+    assert(tool.points===points&&tool.isDrawing&&tool.tension===2&&tool.currentSpline.getAttribute('d')!==before,'same live input with changed tangents');
+    const expected=host.encodePath(host.execute('spline',{points,tension:2}));assert(tool.currentSpline.getAttribute('d')===expected&&app.w.undoStack.length===history,'actual restored tangent calculation without commit');
+    constructionEnter(app);await tick();assert(app.d.querySelector('[data-spline-tool]').getAttribute('d')===expected&&app.w.undoStack.length===history+1,'explicit curve commit');
+    host.selectImplementation('spline','uniform');for(const p of [{x:320,y:100},{x:370,y:220},{x:450,y:110}])parameterClick(app,p.x,p.y);const uniform=tool.currentSpline.getAttribute('d');tool.tension=0;inputPresetAction(app,'restore');
+    assert(host.describe('spline').id==='uniform'&&tool.currentSpline.getAttribute('d')===uniform,'uniform implementation keeps its own tangent rule');app.d.dispatchEvent(new app.w.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+  }finally{app.element.remove();}
+});
+
+await check('Fillet and chamfer restore numeric parameters without losing the first selected line and use them in atomic corner edits',async()=>{
+  for(const name of ['fillet','chamfer']){
+    const app=await preferenceEditor('{preferences:false}');
+    try{
+      app.w.DrawingDocument.open(parameterCornerSVG);parameterPresetRecord(app,name);await tick();const tool=app.w.toolManager.tools[name],h=app.d.getElementById('parameter-h'),v=app.d.getElementById('parameter-v');
+      if(name==='fillet')tool.radius=10;else{tool.distance1=10;tool.distance2=10;}
+      parameterClick(app,180,100,h);const selected=tool.selectedLines,original=[h.outerHTML,v.outerHTML],history=app.w.undoStack.length;inputPresetAction(app,'restore');
+      assert(tool.selectedLines===selected&&tool.selectedLines[0]===h&&h.outerHTML===original[0]&&v.outerHTML===original[1],'restore keeps first pick and original lines '+name);
+      assert(!app.d.querySelector('[data-vector-'+name+']')&&app.w.undoStack.length===history,'restore does not perform edit '+name);parameterClick(app,100,200,v);await tick();
+      const bridge=app.d.querySelector('[data-vector-'+name+']');assert(bridge,'corner created '+name+': '+tool.implementationError);const input=JSON.parse(bridge.getAttribute('data-vector-'+name)).input;
+      for(const [key,value] of Object.entries(parameterPresetValues[name]))assert(input[key]===value,'actual corner parameter '+key);
+      assert(app.w.undoStack.length===history+1,'corner is one history step');app.w.undo();assert(!app.d.querySelector('[data-vector-'+name+']')&&Number(app.d.getElementById('parameter-h').getAttribute('x1'))===100,'undo corner');app.w.redo();assert(app.d.querySelector('[data-vector-'+name+']'),'redo corner');
+    }finally{app.element.remove();}
+  }
+});
+
+await check('Offset restoration retains the selected source and passes restored distance and miter limit to the actual interchangeable calculation',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    app.w.DrawingDocument.open('<svg xmlns="http://www.w3.org/2000/svg"><polyline id="parameter-offset" points="100,200 200,200 200,300" stroke="black" fill="none"/></svg>');parameterPresetRecord(app,'offset');await tick();
+    const tool=app.w.toolManager.tools.offset,host=app.w.toolManager.host,source=app.d.getElementById('parameter-offset');let actual;
+    host.registerImplementation('offset',{id:'parameter-offset-observer',label:'Observed miter',algorithm:'Explicit miter delegation',run:(input,ops,execute)=>{actual=JSON.parse(JSON.stringify(input));return execute('offset',input,{implementation:'miter'});}});host.selectImplementation('offset','parameter-offset-observer');tool.offsetDistance=5;tool.miterLimit=10;
+    parameterClick(app,150,200,source);const before=source.outerHTML,history=app.w.undoStack.length;inputPresetAction(app,'restore');assert(tool.selectedElement===source&&source.outerHTML===before&&!actual,'source retained and calculation deferred');
+    parameterClick(app,180,230);await tick();const copy=app.d.querySelector('polyline:not(#parameter-offset)');assert(copy&&actual.amount===15&&actual.miterLimit===2,'restored parameters used');
+    const expected=host.execute('offset',actual,{implementation:'miter'});assert(copy.points.length===expected.points.length&&Array.from(copy.points).every((p,i)=>Math.hypot(p.x-expected.points[i].x,p.y-expected.points[i].y)<0.001),'rendered miter geometry matches restored values');
+    assert(JSON.parse(copy.getAttribute('data-vector-implementation')).calculation.id==='parameter-offset-observer'&&app.w.undoStack.length===history+1,'actual implementation and one edit');
+    source.setAttribute('points','100,200 200,200 110,210');app.w.saveState();await tick();const count=app.d.querySelectorAll('polyline').length,limitedHistory=app.w.undoStack.length;
+    parameterClick(app,150,200,source);inputPresetAction(app,'restore');parameterClick(app,180,230);await tick();
+    assert(actual.amount===15&&actual.miterLimit===2&&app.d.querySelectorAll('polyline').length===count&&app.w.undoStack.length===limitedHistory,'restored miter limit refuses an excessive corner without creating geometry');
+  }finally{app.element.remove();}
+});
+
+await check('Parameter record update and removal undo without resetting current values and preserve storage-independent SVG output',async()=>{
+  const app=await preferenceEditor('{preferences:{storage:()=>{throw Error("blocked");}}}');
+  try{
+    parameterPresetRecord(app,'chamfer');await tick();const tool=app.w.toolManager.tools.chamfer;app.w.undoStack.length=0;preferenceNumber(app,'距離1',0);inputPresetAction(app,'record');await tick();
+    assert(app.w.undoStack.length===1&&inputPresetState(app).entries.chamfer.input.distance1===0,'zero distance recorded');app.w.undo();assert(inputPresetState(app).entries.chamfer.input.distance1===20&&tool.distance1===0,'undo metadata only');app.w.redo();assert(inputPresetState(app).entries.chamfer.input.distance1===0,'redo zero');
+    app.d.getElementById('chamfer-tool').click();inputPresetAction(app,'remove');await tick();assert(!inputPresetState(app)&&tool.distance1===0,'remove does not reset values');app.w.undo();assert(inputPresetState(app).entries.chamfer.input.distance2===35,'undo deletion');
+    const xml=app.w.DrawingDocument.serialize();app.w.DrawingDocument.open(xml);app.d.getElementById('chamfer-tool').click();tool.distance1=8;inputPresetAction(app,'restore');assert(tool.distance1===0&&tool.distance2===35,'restore without browser storage');
+    let blob;const create=app.w.URL.createObjectURL,revoke=app.w.URL.revokeObjectURL,click=app.w.HTMLAnchorElement.prototype.click;
+    app.w.URL.createObjectURL=value=>{blob=value;return 'blob:parameter-preset-test';};app.w.URL.revokeObjectURL=()=>{};app.w.HTMLAnchorElement.prototype.click=function(){};
+    try{app.d.getElementById('save-btn').click();const text=await blob.text();inputPresetAction(app,'remove');app.w.DrawingDocument.open(text);assert(inputPresetState(app).entries.chamfer.input.distance1===0,'real SVG download retains parameters');}
+    finally{app.w.URL.createObjectURL=create;app.w.URL.revokeObjectURL=revoke;app.w.HTMLAnchorElement.prototype.click=click;}
+  }finally{app.element.remove();}
+});
+
+await check('Malformed parameter metadata refuses the whole SVG and failed recording leaves old values available for restoration',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    app.w.DrawingDocument.open(parameterCornerSVG);parameterPresetRecord(app,'chamfer');await tick();const tool=app.w.toolManager.tools.chamfer,h=app.d.getElementById('parameter-h');parameterClick(app,180,100,h);
+    const before=app.w.DrawingDocument.serialize(),selected=tool.selectedLines,history=app.w.undoStack.length;
+    for(const [name,input] of [['chamfer',{distance1:20,distance2:-1}],['fillet',{radius:0}],['offset',{offsetDistance:15,miterLimit:0}],['spline',{tension:5}],['spline',{tension:1,points:[]}]] ){
+      let failed=false;try{app.w.DrawingDocument.open(inputPresetSVG(app,{version:1,entries:{[name]:{version:1,input}}}));}catch{failed=true;}
+      assert(failed&&app.w.DrawingDocument.serialize()===before&&tool.selectedLines===selected&&selected[0]===h&&app.w.undoStack.length===history,'atomic parameter refusal '+name);
+    }
+    tool.distance2=NaN;inputPresetAction(app,'record');assert(inputPresetState(app).entries.chamfer.input.distance2===35&&app.d.querySelector('[data-construction-input-status]').textContent.includes('記録できません'),'invalid live input retains saved entry');inputPresetAction(app,'restore');assert(tool.distance2===35&&tool.selectedLines===selected,'valid restoration recovers without losing picks');
+    const future={version:1,entries:{chamfer:{version:2,input:{future:true}}}};app.w.DrawingDocument.open(inputPresetSVG(app,future));app.d.getElementById('chamfer-tool').click();assert(app.d.querySelector('[data-construction-input-action="restore"]').disabled,'future version is inert');app.w.DrawingDocument.open(app.w.DrawingDocument.serialize());assert(JSON.stringify(inputPresetState(app))===JSON.stringify(future),'future version preserved');
+  }finally{app.element.remove();}
+});
+
+await check('Spline parameter restoration keeps a failed preview editable and recovers under a working selected implementation',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    parameterPresetRecord(app,'spline');await tick();for(const p of [{x:80,y:100},{x:170,y:200},{x:280,y:100}])parameterClick(app,p.x,p.y);
+    const tool=app.w.toolManager.tools.spline,host=app.w.toolManager.host,points=tool.points,history=app.w.undoStack.length,saved=JSON.stringify(inputPresetState(app));
+    host.registerImplementation('spline',{id:'parameter-spline-failure',label:'Failure',algorithm:'Explicit test failure',run:()=>{throw Error('parameter spline preview failure');}});host.selectImplementation('spline','parameter-spline-failure');tool.tension=0.5;inputPresetAction(app,'restore');
+    assert(tool.points===points&&tool.isDrawing&&tool.tension===2&&!tool.currentSpline&&app.d.querySelector('[data-construction-input-status]').textContent.includes('parameter spline preview failure'),'failure leaves editable input and restored setting');
+    assert(app.w.undoStack.length===history&&JSON.stringify(inputPresetState(app))===saved&&!app.d.querySelector('[data-spline-tool]'),'no committed shape or record change');host.selectImplementation('spline','default');inputPresetAction(app,'restore');assert(tool.currentSpline&&!tool.implementationError,'preview recovers');constructionEnter(app);assert(app.d.querySelector('[data-spline-tool]'),'recovered curve commits');
+  }finally{app.element.remove();}
+});
+
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
 </script>

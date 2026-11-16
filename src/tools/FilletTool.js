@@ -16,11 +16,18 @@ class FilletTool extends BaseTool {
     super(canvas, toolManager);
     this.selectedLines = [];
     this.radius = 10;
+    this.inputPresetVersion = 1; this.inputPresetMode = 'parameters';
     this.implementationError = "";
   }
 
   getTitle() {
     return "フィレット";
+  }
+
+  exportInputPreset() {return window.VectorUtils.exportConstructionParameters('fillet',this);}
+  restoreInputPreset(entry) {
+    window.VectorUtils.restoreConstructionParameters('fillet',entry,this);
+    this.implementationError = '';
   }
 
   getInstructions() {

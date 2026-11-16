@@ -16,11 +16,18 @@ class ChamferTool extends BaseTool {
     this.selectedLines = [];
     this.distance1 = 10;
     this.distance2 = 10;
+    this.inputPresetVersion = 1; this.inputPresetMode = 'parameters';
     this.implementationError = "";
   }
 
   getTitle() {
     return "面取り";
+  }
+
+  exportInputPreset() {return window.VectorUtils.exportConstructionParameters('chamfer',this);}
+  restoreInputPreset(entry) {
+    window.VectorUtils.restoreConstructionParameters('chamfer',entry,this);
+    this.implementationError = '';
   }
 
   getInstructions() {
