@@ -66,10 +66,10 @@ export function createEditorHost({
       const arcSource = shape?.kind === 'arc' && options.toolName === 'arc' && (sourceInput || shape.through) ?
         {version:1,input:arcInput(sourceInput ?? shape),model:arcModel(shape)} : null;
       const pointSource=pointSetMethods.includes(options.toolName) && sourceInput && sourceResult ?
-        {version:1,method:options.toolName,input:pointSetInput(options.toolName,sourceInput),result:pointSetResult(options.toolName,sourceResult)} : null;
+        {version:1,method:options.toolName,input:pointSetInput(options.toolName,sourceInput),result:pointSetResult(options.toolName,sourceResult,sourceInput)} : null;
       const prepared = render ? shape : drawing.prepare(options.toolName, shape, options, options.renderer);
       const element = render ? render(prepared, target, options) : renderGeometry(prepared, target, options, encodePath);
-      if(pointSource && element && ['line','circle','path','polygon'].includes(element.tagName.toLowerCase()))
+      if(pointSource && element && ['line','circle','path','polygon','g'].includes(element.tagName.toLowerCase()))
         element.setAttribute('data-vector-pointset',JSON.stringify({...pointSource,geometry:pointSetGeometrySnapshot(element)}));
       if (arcSource && element?.tagName === 'path') {
         element.setAttribute('data-vector-arc',JSON.stringify({...arcSource,path:element.getAttribute('d')}));
@@ -90,7 +90,7 @@ export function createEditorHost({
         ...(prepared?.withinTolerance === false ? {warning: '最大深さに達し、許容差を満たしていません。'} : {}),
         ...(prepared?.warning ? {warning: prepared.warning} : {}),
         ...(prepared?.sampling ? {sampling: prepared.sampling} : {}),
-        ...(pointSource ? {parameters:{pointCount:pointSource.input.points.length,...(pointSource.method==='convexHull'?{hullVertexCount:pointSource.result.length}:{}),...(pointSource.result.rms!==undefined?{rms:pointSource.result.rms}:{})}} : {}),
+        ...(pointSource ? {parameters:{pointCount:pointSource.input.points.length,...(pointSource.method==='convexHull'?{hullVertexCount:pointSource.result.length}:{}),...(pointSource.method==='delaunayTriangles'?{triangleCount:pointSource.result.length}:{}),...(pointSource.result.rms!==undefined?{rms:pointSource.result.rms}:{})}} : {}),
         ...(shape?.kind === 'splineCurve' ? {parameters: {degree: shape.degree, periodic: !!shape.periodic, controlCount: shape.controlCount ?? shape.points.length}} : {}),
       });
     },

@@ -81,6 +81,7 @@ export function defaultRenderDescription(name) {
   if (name === 'cubicBezier' || name === 'spline') return 'SVG C（三次ベジェ）';
   if (name === 'chamfer') return 'SVG line（面取りの接続線分）';
   if (name === 'convexHull') return 'SVG polygon（計算した凸包の外周頂点を閉じる）';
+  if (name === 'delaunayTriangles') return '三角形インデックスを入力座標へ戻し、SVG g内のpolygonで描画';
   if (name === 'arc' || name === 'fillet') return 'SVG A（円弧）';
   if (name === 'vertices') return '指定方式に対応するSVG要素・Q/C、任意次数はde Casteljau → M/L';
   if (name === 'dimension') return 'DimensionToolのSVG線・円弧・矢印・文字';

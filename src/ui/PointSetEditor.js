@@ -13,6 +13,7 @@ class PointSetEditor {
   snapshot() {return JSON.stringify(window.VectorUtils.pointSetSource.pointSetGeometrySnapshot(this.element));}
   assertTarget() {
     if(!this.element?.isConnected || !this.manager.tools.select.canSelect(this.element))throw Error('編集対象が削除されたか、非表示・ロック中です。');
+    if(this.element.tagName==='g'&&[...this.element.children].some(el=>['polygon','path'].includes(el.tagName)&&!this.manager.tools.select.canSelect(el)))throw Error('三角形が非表示・ロック中です。');
     if(this.manager.activeToolName!=='select' || window.selectedObjects?.length!==1 || window.selectedObjects[0]!==this.element)throw Error('編集対象の選択が変更されました。');
     if(this.draft && (this.snapshot()!==this.originalGeometry || this.element.getAttribute('data-vector-pointset')!==this.originalSource ||
       this.element.getAttribute('data-vector-implementation')!==this.originalRecord))throw Error('編集中に元図形が変更されました。取消してから読み直してください。');
@@ -46,7 +47,7 @@ class PointSetEditor {
     if(d.options.sampleCount!==undefined&&(!Number.isInteger(d.options.sampleCount) || d.options.sampleCount<2 || d.options.sampleCount>10000))throw Error('再描画の分割数は2〜10000の整数で指定してください。');
     const previous=host.describe(method).id;
     try {
-      host.selectImplementation(method,d.implementation);const computed=host.execute(method,api.pointSetInput(method,input));
+      host.selectImplementation(method,d.implementation);const computed=host.execute(method,api.pointSetExecutionInput(method,input));
       if(!computed)throw Error('この点群では計算できません。重複・一直線・方向が定まらない配置を確認してください。');
       const shape=api.pointSetGeometry(method,input,computed);
       const result=host.render(shape,null,{...d.options,toolName:method,renderer:d.renderer,sourceInput:input,sourceResult:computed});
@@ -62,6 +63,7 @@ class PointSetEditor {
       result.setAttribute('transform',window.VectorUtils.splineControlGeometry.splineMatrixText(frame.localCanvas));
       result.setAttribute('data-vector-preview','pointset-edit');result.setAttribute('pointer-events','none');result.setAttribute('fill','none');
       result.setAttribute('stroke','#1265d6');result.setAttribute('stroke-width','2');result.setAttribute('stroke-dasharray','6 3');result.setAttribute('vector-effect','non-scaling-stroke');
+      if(result.tagName==='g')for(const face of result.children){face.style.pointerEvents='none';face.style.fill='none';face.style.stroke='#1265d6';face.style.strokeWidth='2';face.style.strokeDasharray='6 3';face.setAttribute('vector-effect','non-scaling-stroke');}
       this.manager.canvas.append(result);this.preview=result;this.message='青い破線が再計算結果です。「適用」で元図形を更新します。';
     } catch(error){this.message=error.message;}
     this.controls.sync();if(refresh)this.refresh();else this.updateStatus();
@@ -69,6 +71,7 @@ class PointSetEditor {
   apply() {
     try {
       const result=this.build(),old=this.element,method=this.draft.method;
+      const meshChildren=method==='delaunayTriangles'?window.VectorUtils.pointSetSource.meshReplacementChildren(old,result):null;
       const generated=['x1','y1','x2','y2','cx','cy','r','d','points','data-vector-circle','data-vector-pointset','data-vector-implementation'];
       let target=old;
       if(result.tagName!==old.tagName) {
@@ -82,6 +85,7 @@ class PointSetEditor {
         if(result.hasAttribute(name))target.setAttribute(name,result.getAttribute(name));else target.removeAttribute(name);
       }
       else old.replaceWith(target);
+      if(meshChildren)target.replaceChildren(...meshChildren);
       if(target.tagName==='circle') {
         target.setAttribute('data-circle-tool','true');circleTool.initializeCircleMetadata(target);
         circleTool.selectedCircleId=target.dataset.circleId;circleTool.observeSelectedCircle(target);
@@ -104,7 +108,7 @@ class PointSetEditor {
     const wrapper=document.createElement('label');wrapper.textContent='元の点群（1行に x, y）';wrapper.style.cssText='display:block;font-size:12px';
     const textarea=document.createElement('textarea');textarea.rows=6;textarea.value=d.pointsText;textarea.setAttribute('aria-label',wrapper.textContent);textarea.style.cssText='display:block;width:100%;box-sizing:border-box';
     textarea.addEventListener('input',()=>{d.pointsText=textarea.value;this.changed();status.textContent=this.message;});wrapper.append(textarea);container.append(wrapper);
-    if(d.method!=='convexHull'){
+    if(!['convexHull','delaunayTriangles'].includes(d.method)){
     const label=document.createElement('label');label.textContent='点群の再描画分割数';label.style.cssText='display:block;font-size:12px;margin:10px 0';
     const number=document.createElement('input');number.type='number';number.min=2;number.max=10000;number.step=1;number.value=d.options.sampleCount;number.setAttribute('aria-label',label.textContent);number.style.width='100%';
     number.addEventListener('input',()=>{d.options.sampleCount=number.value.trim()?Number(number.value):NaN;this.changed();status.textContent=this.message;});label.append(number);container.append(label);

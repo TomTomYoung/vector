@@ -1786,6 +1786,89 @@ await check('Convex hull missing plugins, failed calculations and unsupported re
   }finally{host.restorePreferences(before);}
 });
 
+const meshObservations=[{x:150,y:150},{x:100,y:100},{x:220,y:100},{x:220,y:220},{x:100,y:220},{x:150,y:150},{x:160,y:100}];
+async function addEditableMesh(content=''){
+  fixture(content);await tick();const host=w.toolManager.host,input={points:meshObservations};host.selectImplementation('delaunayTriangles','default');host.selectRenderer('delaunayTriangles','default');const computed=host.execute('delaunayTriangles',input);
+  const el=host.render(w.VectorUtils.pointSetSource.pointSetGeometry('delaunayTriangles',input,computed),null,{toolName:'delaunayTriangles',sourceInput:input,sourceResult:computed});
+  el.id='editable-mesh';el.setAttribute('stroke','#456789');el.setAttribute('stroke-width','4');el.setAttribute('fill','#ddeeff');el.setAttribute('data-layer',w.layers[0].id);canvas.append(el);return el;
+}
+const meshFaces=el=>[...el.children].filter(c=>['polygon','path'].includes(c.tagName));
+const meshState=el=>JSON.stringify({source:el.getAttribute('data-vector-pointset'),record:el.getAttribute('data-vector-implementation'),geometry:w.VectorUtils.pointSetSource.pointSetGeometrySnapshot(el)});
+const openMesh=el=>{activate('select');w.selectTool.selectObject(el);pointsetAction('begin');};
+
+await check('Delaunay toolbar stores both algorithms, duplicate observations and index topology and selects the whole mesh from a face',async()=>{
+  const host=w.toolManager.host,before=host.exportPreferences(),snap=w.snapToGrid;w.snapToGrid=false;
+  try{
+    for(const implementation of ['default','exact']){
+      fixture();await tick();host.selectImplementation('delaunayTriangles',implementation);host.selectRenderer('delaunayTriangles','default');activate('delaunayTriangles');for(const p of meshObservations)click(p.x,p.y);
+      const accepted=w.toolManager.tools.delaunayTriangles.points.map(p=>({...p}));assert(!w.DrawingDocument.capture().querySelector('[data-vector-pointset]'),'uncommitted mesh excluded');key('Enter');let el=canvas.querySelector('[data-construction-tool="delaunayTriangles"]');const source=hullRecord(el),record=JSON.parse(el.getAttribute('data-vector-implementation'));
+      assert(el.tagName==='g'&&JSON.stringify(source.input.points)===JSON.stringify(accepted)&&source.result.length===meshFaces(el).length,'observations and triangles');
+      assert(record.calculation.id===implementation&&record.parameters.pointCount===7&&record.parameters.triangleCount===meshFaces(el).length&&record.rendering.algorithm.includes('SVG g'),'actual methods and counts');
+      activate('select');click(130,130,meshFaces(el)[0]);assert(w.selectedObject===el&&!meshFaces(el).some(f=>f.hasAttribute('data-vector-selected')),'triangle click selects the entire mesh');pointsetAction('begin');assert(canvas.querySelectorAll('[data-pointset-control-index]').length===7&&!doc.querySelector('[aria-label="点群の再描画分割数"]'),'all inputs editable');pointsetAction('cancel');
+      w.DrawingDocument.open(w.DrawingDocument.serialize());el=canvas.querySelector('[data-construction-tool="delaunayTriangles"]');openMesh(el);assert(JSON.stringify(w.toolPropertiesPanel.pointSetEditor.input().points)===JSON.stringify(accepted),'SVG roundtrip retains original index order');pointsetAction('cancel');
+    }
+  }finally{host.restorePreferences(before);w.snapToGrid=snap;}
+});
+
+await check('Delaunay replaces all generated faces atomically while preserving the group, root metadata and one-step history',async()=>{
+  const host=w.toolManager.host,before=host.exportPreferences();
+  try{
+    let el=await addEditableMesh('<g id="mesh-parent" transform="translate(20 10) rotate(13)"/>');doc.getElementById('mesh-parent').append(el);el.setAttribute('transform','scale(-0.8 1.2) translate(-450 0)');el.setAttribute('style','opacity:0.7');el.setAttribute('stroke-dasharray','7 2');
+    const title=w.SvgUtils.createElement('title'),desc=w.SvgUtils.createElement('desc'),metadata=w.SvgUtils.createElement('metadata');title.textContent='mesh title';desc.textContent='mesh description';metadata.textContent='mesh notes';el.prepend(title);el.append(desc,metadata);
+    w.saveState();await tick();w.undoStack.length=0;const original=meshState(el),attrs=['id','transform','style','stroke','stroke-width','stroke-dasharray','fill','data-layer'],appearance=attrs.map(k=>el.getAttribute(k)),preferences=JSON.stringify(host.exportPreferences()),oldFace=meshFaces(el)[0];openMesh(el);
+    pointsetField('元の点群（1行に x, y）',arcText([...meshObservations,{x:300,y:160}]));pointsetField('点群の再計算実装','exact','change');pointsetAction('preview');const preview=canvas.querySelector('[data-vector-preview="pointset-edit"]'),a=el.getScreenCTM(),b=preview.getScreenCTM();
+    assert(preview.tagName==='g'&&meshFaces(preview).length>0&&['a','b','c','d','e','f'].every(k=>Math.abs(a[k]-b[k])<1e-5),'aligned group preview');assert(meshState(el)===original&&!w.DrawingDocument.capture().querySelector('[data-vector-preview]'),'preview does not alter source');pointsetAction('apply');await tick();
+    assert(doc.getElementById('editable-mesh')===el&&w.selectedObject===el&&attrs.every((k,i)=>el.getAttribute(k)===appearance[i])&&el.querySelector('title')===title&&el.querySelector('desc')===desc&&el.querySelector('metadata')===metadata,'group identity and metadata retained');
+    assert(!oldFace.isConnected&&hullRecord(el).input.points.length===8&&meshFaces(el).length===hullRecord(el).result.length&&w.undoStack.length===1&&JSON.stringify(host.exportPreferences())===preferences,'all faces replaced in one history entry');const saved=meshState(el);
+    key('z',{ctrlKey:true});await tick();el=doc.getElementById('editable-mesh');assert(meshState(el)===original,'undo exact topology and original input');key('Z',{ctrlKey:true,shiftKey:true});await tick();el=doc.getElementById('editable-mesh');assert(meshState(el)===saved,'redo exact topology');openMesh(el);pointsetField('元の点群（1行に x, y）',arcText(meshObservations.slice(1,5)));pointsetAction('apply');assert(meshFaces(el).length===2,'point removal updates face count');
+  }finally{host.restorePreferences(before);}
+});
+
+await check('Delaunay input dragging works through affine transforms and repairs collinear drafts without committing preview geometry',async()=>{
+  frame.scrollIntoView();const host=w.toolManager.host,before=host.exportPreferences(),viewport=w.zoomPanManager.getTransform(),snap=w.snapToGrid,ortho=w.orthoMode;w.snapToGrid=false;w.orthoMode=false;
+  try{
+    const el=await addEditableMesh('<g id="mesh-drag-parent" transform="matrix(-0.8 0.3 0.2 1.2 500 20)"/>');doc.getElementById('mesh-drag-parent').append(el);w.zoomPanManager.setTransform(1.3,20,10);openMesh(el);const original=meshState(el);
+    pointer('pointerdown',pointsetHandle(0),localScreen(el,{x:152,y:151}));pointer('pointermove',doc,localScreen(el,{x:282,y:171}));await paint();pointer('pointerup',doc,localScreen(el,{x:302,y:171}));assert(closePoint(w.toolPropertiesPanel.pointSetEditor.input().points[0],{x:300,y:170})&&canvas.querySelector('[data-vector-preview="pointset-edit"]'),'transformed input and final pointer');assert(meshState(el)===original,'original mesh unchanged');
+    pointer('pointerdown',pointsetHandle(1),localScreen(el,{x:100,y:100}));pointer('pointermove',doc,localScreen(el,{x:80,y:80}));await paint();key('Escape');assert(closePoint(w.toolPropertiesPanel.pointSetEditor.input().points[1],{x:100,y:100})&&closePoint(w.toolPropertiesPanel.pointSetEditor.input().points[0],{x:300,y:170}),'current gesture only rolls back');
+    pointsetField('元の点群（1行に x, y）','100,100\n150,150\n200,200');pointsetAction('preview');assert(!canvas.querySelector('[data-vector-preview="pointset-edit"]')&&pointsetHandle(1),'degenerate draft keeps repair handles');pointer('pointerdown',pointsetHandle(1),localScreen(el,{x:150,y:150}));pointer('pointerup',doc,localScreen(el,{x:170,y:140}));pointsetAction('apply');assert(meshFaces(el).length===1,'recovered single triangle applies');
+  }finally{host.restorePreferences(before);w.zoomPanManager.setTransform(viewport.zoom,viewport.panX,viewport.panY);w.snapToGrid=snap;w.orthoMode=ortho;}
+});
+
+await check('Delaunay detects face edits, styles, reordering, deletion and locks before any mesh replacement',async()=>{
+  const host=w.toolManager.host,before=host.exportPreferences();
+  try{
+    for(const action of ['points','style','transform','order','delete','add']){
+      const el=await addEditableMesh();openMesh(el);pointsetAction('preview');const source=el.getAttribute('data-vector-pointset'),face=meshFaces(el)[0];
+      if(action==='points')face.setAttribute('points','0,0 1,0 0,1');if(action==='style')face.setAttribute('fill','red');if(action==='transform')face.setAttribute('transform','translate(1 0)');if(action==='order')el.append(face);if(action==='delete')face.remove();if(action==='add')el.append(face.cloneNode(true));
+      const edited=el.innerHTML;await paint();await paint();assert(!pointsetHandle(0)&&!canvas.querySelector('[data-vector-preview]'),'child change clears helpers '+action);pointsetAction('apply');assert(el.innerHTML===edited&&el.getAttribute('data-vector-pointset')===source,'edited mesh preserved '+action);pointsetAction('cancel');pointsetAction('begin');assert(!w.toolPropertiesPanel.pointSetEditor.draft,'stale mesh refuses reopen '+action);
+    }
+    const el=await addEditableMesh();openMesh(el);const face=meshFaces(el)[0],original=meshState(el);w.layers.push({id:2,name:'locked face',visible:true,locked:true});face.setAttribute('data-layer','2');pointsetAction('apply');assert(doc.querySelector('[data-pointset-edit-status]').textContent.includes('ロック'),'locked child blocks group update');face.removeAttribute('data-layer');pointsetAction('cancel');pointsetAction('begin');assert(meshState(el)===original,'lock leaves source intact');
+    el.setAttribute('transform','scale(0 1)');await paint();await paint();assert(!pointsetHandle(0),'singular group hides handles');el.removeAttribute('transform');await paint();await paint();assert(pointsetHandle(0),'group frame recovers');activate('line');assert(!w.toolPropertiesPanel.pointSetEditor.draft&&!canvas.querySelector('[data-vector-preview]'),'tool switch clears edit');
+    fixture('<g id="legacy-mesh"><polygon points="100,100 200,100 100,200"/></g>');await tick();activate('select');w.selectTool.selectObject(doc.getElementById('legacy-mesh'));assert(!doc.querySelector('[data-pointset-editor]'),'legacy mesh has no invented input');
+  }finally{host.restorePreferences(before);}
+});
+
+await check('Delaunay can switch to grouped closed paths and back with SVG roundtrip and unchanged drawing preferences',async()=>{
+  const host=w.toolManager.host,before=host.exportPreferences();
+  try{
+    let el=await addEditableMesh();host.registerRenderer({id:'test-mesh-paths',label:'Triangle paths',algorithm:'One closed M/L/Z per triangle',supports:n=>n==='delaunayTriangles',prepare:s=>({...s,children:s.children.map(p=>({kind:'path',start:p.points[0],segments:p.points.slice(1).map(end=>({kind:'segment',end})),closed:true}))})});const preferences=JSON.stringify(host.exportPreferences());openMesh(el);
+    pointsetField('点群の再描画実装','test-mesh-paths','change');pointsetAction('apply');assert(meshFaces(el).every(f=>f.tagName==='path')&&JSON.parse(el.getAttribute('data-vector-implementation')).rendering.id==='test-mesh-paths'&&JSON.stringify(host.exportPreferences())===preferences,'closed paths and actual metadata');
+    w.DrawingDocument.open(w.DrawingDocument.serialize());el=doc.getElementById('editable-mesh');activate('select');click(130,130,meshFaces(el)[0]);assert(w.selectedObject===el,'path face selects loaded mesh');pointsetAction('begin');pointsetField('点群の再描画実装','default','change');pointsetAction('apply');assert(meshFaces(el).every(f=>f.tagName==='polygon')&&hullRecord(el).input.points.length===7,'restore native polygon faces');
+  }finally{host.restorePreferences(before);}
+});
+
+await check('Delaunay rejects invalid indices, mutating plugins and incompatible renderers atomically and recovers missing implementations explicitly',async()=>{
+  const host=w.toolManager.host,before=host.exportPreferences();
+  try{
+    const el=await addEditableMesh();host.registerImplementation('delaunayTriangles',{id:'test-mesh-bad-indices',label:'Invalid',algorithm:'Invalid indices',run:()=>[[0,1,999]]});host.registerImplementation('delaunayTriangles',{id:'test-mesh-mutating',label:'Mutating',algorithm:'Mutates input order',run:input=>{input.points.reverse();return [[0,1,2]];}});
+    host.registerRenderer({id:'test-mesh-single',label:'Single polygon',algorithm:'Drops group',supports:n=>n==='delaunayTriangles',prepare:s=>s.children[0]});host.registerRenderer({id:'test-mesh-open',label:'Open paths',algorithm:'Unclosed face paths',supports:n=>n==='delaunayTriangles',prepare:s=>({...s,children:s.children.map(p=>({kind:'path',start:p.points[0],segments:p.points.slice(1).map(end=>({kind:'segment',end}))}))})});
+    const original=meshState(el),preferences=JSON.stringify(host.exportPreferences());openMesh(el);
+    for(const id of ['test-mesh-bad-indices','test-mesh-mutating']){pointsetField('点群の再計算実装',id,'change');pointsetAction('apply');assert(meshState(el)===original&&JSON.stringify(host.exportPreferences())===preferences,'bad calculation leaves original '+id);}
+    pointsetField('点群の再計算実装','default','change');for(const id of ['test-mesh-single','test-mesh-open']){pointsetField('点群の再描画実装',id,'change');pointsetAction('apply');assert(meshState(el)===original,'bad renderer leaves all faces '+id);}pointsetAction('cancel');
+    const record=JSON.parse(el.getAttribute('data-vector-implementation'));record.calculation.id='missing-mesh';record.rendering.id='missing-mesh-renderer';el.setAttribute('data-vector-implementation',JSON.stringify(record));pointsetAction('begin');pointsetAction('apply');assert(doc.querySelector('[data-pointset-edit-status]').textContent.includes('計算実装がありません'),'missing calculation explicit');pointsetField('点群の再計算実装','exact','change');pointsetAction('apply');assert(doc.querySelector('[data-pointset-edit-status]').textContent.includes('描画実装がありません'),'missing renderer explicit');pointsetField('点群の再描画実装','default','change');pointsetAction('apply');assert(JSON.parse(el.getAttribute('data-vector-implementation')).calculation.id==='exact','explicit recovery');
+  }finally{host.restorePreferences(before);}
+});
+
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
 </script>
