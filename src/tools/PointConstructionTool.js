@@ -91,7 +91,6 @@ class PointConstructionTool extends BaseTool {
   }
   geometry(result) {
     const polygon = points => ({kind: 'polygon', points});
-    if (this.method === 'convexHull') return result.length >= 3 ? polygon(result) : null;
     if (this.method === 'triangulatePolygon') return result.length ? {kind: 'group', children: result.map(polygon)} : null;
     if (this.method === 'delaunayTriangles') return result.length ? {kind: 'group', children: result.map(ids => polygon(ids.map(i => this.points[i])))} : null;
     if (this.method === 'voronoiCells') return {kind: 'group', children: result.filter(c => c.points.length > 2).map(c => polygon(c.points))};
@@ -101,14 +100,17 @@ class PointConstructionTool extends BaseTool {
   }
   build() {
     if (this.points.length < (this.isSpline() ? this.degree + 1 : this.method === 'fitLine' ? 2 : this.method === 'minimumEnclosingCircle' ? 1 : 3)) return null;
-    const result = this.run(this.method, this.input());
+    const source=window.VectorUtils.pointSetSource;
+    const input=source.pointSetMethods.includes(this.method)?source.pointSetInput(this.method,this.input()):this.input();
+    const result = this.run(this.method, source.pointSetMethods.includes(this.method)?source.pointSetInput(this.method,input):input);
     if (!result) {this.implementationError = '入力条件を満たしません。点の配置・次数・ノット・重みを確認してください。'; return null;}
     const shape = this.geometry(result);
     if (!shape) {this.implementationError = 'この配置では図形を作成できません。'; return null;}
-    const element = this.toolManager.host.render(shape, null, {toolName: this.method, sampleCount: this.sampleCount,
-      ...(window.VectorUtils.pointSetSource.pointSetMethods.includes(this.method) ? {sourceInput:this.input(),sourceResult:result} : {}),
+    const element = this.toolManager.host.render(shape, null, {toolName: this.method,...(this.method==='convexHull'?{}:{sampleCount:this.sampleCount}),
+      ...(source.pointSetMethods.includes(this.method) ? {sourceInput:input,sourceResult:result} : {}),
       ...(this.isSpline() ? {poleTolerance: this.poleTolerance, maxDepth: this.poleMaxDepth} : {})});
     if (!element) {this.implementationError = '指定した検査条件では描画できる区間がありません。分母の除外幅・最大深さ・重みを確認してください。'; return null;}
+    if(this.method==='convexHull')source.readPointSetSource(element.getAttribute('data-vector-pointset'),element.getAttribute('data-vector-implementation'),source.pointSetGeometrySnapshot(element));
     this.applyDefaultAttributes(element);
     if (element.hasAttribute('data-vector-partial')) element.setAttribute('fill', 'none');
     const record = element.getAttribute('data-vector-implementation');

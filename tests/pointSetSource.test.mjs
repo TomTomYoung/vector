@@ -17,7 +17,7 @@ test('point-set input preserves observations, order and duplicates, and bounds f
   const copy=pointSetInput('fitCircle',input);assert.deepEqual(copy,input);copy.points[0].x=99;assert.equal(input.points[0].x,0);
   for(const method of pointSetMethods){assert.throws(()=>pointSetInput(method,{points:[]}));assert.throws(()=>pointSetInput(method,{points:Array(1001).fill({x:0,y:0})}));assert.throws(()=>pointSetInput(method,{points:[...input.points,{x:Infinity,y:0}]}));}
   assert.equal(pointSetInput('minimumEnclosingCircle',{points:[{x:0,y:0}]}).points.length,1);
-  assert.throws(()=>pointSetInput('convexHull',input));
+  assert.throws(()=>pointSetInput('delaunayTriangles',input));
 });
 
 test('line projection handles vertical and nonunit plugin directions independently of their magnitude',()=>{
@@ -30,7 +30,7 @@ test('line projection handles vertical and nonunit plugin directions independent
 
 test('host saves observations, result and renderer snapshot and keeps source metadata out of rendering options',()=>withDOM(()=>{
   const host=createEditorHost();host.selectRenderer('fitCircle','sampled',{sampleCount:33});
-  for(const method of pointSetMethods)for(const renderer of method==='fitLine'?['default']:['default','sampled','cubic']){
+  for(const method of pointSetMethods)for(const renderer of ['fitLine','convexHull'].includes(method)?['default']:['default','sampled','cubic']){
     const element=make(host,method,renderer),source=read(element),record=JSON.parse(element.getAttribute('data-vector-implementation'));
     assert.deepEqual(source.input,input);assert.equal(source.method,method);assert.equal(source.renderer,renderer);assert.equal(source.options.sampleCount,16);
     assert.equal(record.rendering.options.sourceInput,undefined);assert.equal(record.rendering.options.sourceResult,undefined);assert.equal(record.parameters.pointCount,4);

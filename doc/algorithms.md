@@ -115,7 +115,7 @@ $$
 | `pointBounds`, `boxIntersection`, `boxUnion` | 成分ごとの最小・最大、区間の共通部分・包含箱 |
 | `polygonCentroid` | 符号付き三角形面積による重心の加重平均 |
 | `classifyPointInPolygon` | 境界判定後、水平線を横切る辺の向きを加算する winding number。`evenOdd` / `nonzero` の意味は [S1](#s1) |
-| `convexHull` | 辞書順ソートと上下の鎖を構築する Andrew の monotone chain [R5](#r5) |
+| `convexHull` | 辞書順ソートと上下の鎖を構築する Andrew の monotone chain [R5](#r5)。[元入力の保存・再編集](convex-hull-editing.md)に対応 |
 | `polygonCrossings`, `isSimplePolygon`, `isConvexPolygon` | 辺の全組み合わせの交差、符号付き面積、連続する辺の向きを検査。交差列挙は走査線法ではない |
 | `triangulatePolygon` | 内部に他頂点のない凸の耳を除く ear clipping（耳切り法）[R7](#r7)。共線頂点を除去する場合がある |
 | `intersectConvexPolygons` | `clipCell` で各辺の内側半平面を順次適用する Sutherland–Hodgman型クリッピング [R6](#r6) |
