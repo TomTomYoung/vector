@@ -500,6 +500,10 @@ class PolygonTool extends BaseTool {
       return;
     }
     const pointsStr = points.map((p) => `${p.x},${p.y}`).join(" ");
+    if(polygon.hasAttribute('data-vector-pointset')){
+      polygon.removeAttribute('data-vector-pointset');
+      this.toolManager.host.annotate?.(polygon,'polygon',{note:'多角形の頂点を直接変更したため、元の点群との関連を解除'});
+    }
     polygon.setAttribute("points", pointsStr);
   }
 

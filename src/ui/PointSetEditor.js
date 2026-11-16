@@ -43,10 +43,10 @@ class PointSetEditor {
     this.assertTarget();const host=this.manager.host,d=this.draft,input=this.input(),method=d.method,api=window.VectorUtils.pointSetSource;
     if(!host.implementations(method).some(v=>v.id===d.implementation))throw Error('記録された計算実装がありません。使用する実装を選び直してください。');
     if(!host.renderers(method).some(v=>v.id===d.renderer))throw Error('記録された描画実装がありません。使用する実装を選び直してください。');
-    if(!Number.isInteger(d.options.sampleCount) || d.options.sampleCount<2 || d.options.sampleCount>10000)throw Error('再描画の分割数は2〜10000の整数で指定してください。');
+    if(d.options.sampleCount!==undefined&&(!Number.isInteger(d.options.sampleCount) || d.options.sampleCount<2 || d.options.sampleCount>10000))throw Error('再描画の分割数は2〜10000の整数で指定してください。');
     const previous=host.describe(method).id;
     try {
-      host.selectImplementation(method,d.implementation);const computed=host.execute(method,input);
+      host.selectImplementation(method,d.implementation);const computed=host.execute(method,api.pointSetInput(method,input));
       if(!computed)throw Error('この点群では計算できません。重複・一直線・方向が定まらない配置を確認してください。');
       const shape=api.pointSetGeometry(method,input,computed);
       const result=host.render(shape,null,{...d.options,toolName:method,renderer:d.renderer,sourceInput:input,sourceResult:computed});
@@ -69,7 +69,7 @@ class PointSetEditor {
   apply() {
     try {
       const result=this.build(),old=this.element,method=this.draft.method;
-      const generated=['x1','y1','x2','y2','cx','cy','r','d','data-vector-circle','data-vector-pointset','data-vector-implementation'];
+      const generated=['x1','y1','x2','y2','cx','cy','r','d','points','data-vector-circle','data-vector-pointset','data-vector-implementation'];
       let target=old;
       if(result.tagName!==old.tagName) {
         target=result;
@@ -104,9 +104,11 @@ class PointSetEditor {
     const wrapper=document.createElement('label');wrapper.textContent='元の点群（1行に x, y）';wrapper.style.cssText='display:block;font-size:12px';
     const textarea=document.createElement('textarea');textarea.rows=6;textarea.value=d.pointsText;textarea.setAttribute('aria-label',wrapper.textContent);textarea.style.cssText='display:block;width:100%;box-sizing:border-box';
     textarea.addEventListener('input',()=>{d.pointsText=textarea.value;this.changed();status.textContent=this.message;});wrapper.append(textarea);container.append(wrapper);
+    if(d.method!=='convexHull'){
     const label=document.createElement('label');label.textContent='点群の再描画分割数';label.style.cssText='display:block;font-size:12px;margin:10px 0';
     const number=document.createElement('input');number.type='number';number.min=2;number.max=10000;number.step=1;number.value=d.options.sampleCount;number.setAttribute('aria-label',label.textContent);number.style.width='100%';
     number.addEventListener('input',()=>{d.options.sampleCount=number.value.trim()?Number(number.value):NaN;this.changed();status.textContent=this.message;});label.append(number);container.append(label);
+    }
     const choice=(caption,key,items)=>{
       const label=document.createElement('label');label.textContent=caption;label.style.cssText='display:block;font-size:12px;margin:10px 0';
       const select=document.createElement('select');select.setAttribute('aria-label',caption);select.style.width='100%';

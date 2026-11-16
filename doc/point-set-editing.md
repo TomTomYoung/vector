@@ -1,6 +1,6 @@
 # 点群の保存と再編集
 
-更新日: 2026-11-16（日本時間）。対象は `fitLine`（直線当てはめ）、`fitCircle`（円当てはめ）、`minimumEnclosingCircle`（最小包含円）です。
+更新日: 2026-11-16（日本時間）。対象は `fitLine`（直線当てはめ）、`fitCircle`（円当てはめ）、`minimumEnclosingCircle`（最小包含円）、`convexHull`（凸包）です。凸包の操作・方式切替・保存形式の詳細は [convex-hull-editing.md](convex-hull-editing.md) を参照してください。
 
 ## 画面操作
 
@@ -8,7 +8,7 @@
 
 選択ツールで図形を選び、ツールプロパティの「元の点群から再計算」から「点群を再編集」を押します。座標欄の1行を1点として扱い、行を追加・削除できます。座標は図形のローカル座標です。番号付きハンドルはドラッグで移動できます。親グループ・図形のアフィン変換・ズームを反映し、ハンドルの大きさは画面上で一定です。グリッドスナップとShift・直交モードは図面座標で作用します。
 
-計算実装と描画実装を選んでプレビューし、「適用」で元図形を更新します。各選択肢のアルゴリズムを表示します。描画実装は直線が標準SVG線分、円が標準SVG円・折れ線・三次ベジェです。登録済みの外部実装も契約を満たす場合に選べます。標準の計算実装は各方式1つで、別の当てはめ法を新規実装したものではありません。点群の処理方法そのもの（直線・円・最小包含円）は生成時のものを維持します。
+計算実装と描画実装を選んでプレビューし、「適用」で元図形を更新します。各選択肢のアルゴリズムを表示します。描画実装は直線が標準SVG線分、円が標準SVG円・折れ線・三次ベジェです。登録済みの外部実装も契約を満たす場合に選べます。直線・円の計算実装は各方式1つで、別の当てはめ法を新規実装したものではありません。凸包はAndrew・Jarvis・BigInt厳密符号版の既存3方式から選択できます。点群の処理方法そのもの（直線・円・最小包含円・凸包）は生成時のものを維持します。
 
 ドラッグ中のEsc・ポインター取消・フォーカス喪失はその移動だけを戻します。それ以外のEsc・取消は再編集全体を終了します。元図形は適用まで変えず、補助表示をSVG保存へ含めません。適用1回をUndoの1段階にし、Redo・SVG保存と読込にも点群を引き継ぎます。外観・変形・レイヤー・親内順序・子要素・選択を保持します。計算不能な一直線の円当てはめ等では、有限な点のハンドルを残して修正できます。
 
@@ -24,13 +24,13 @@
 
 ## 保存形式と換装契約
 
-`data-vector-pointset` のJSONは `version: 1`、`method`、`input.points`、`result`、`geometry` を持ちます。`result` は直線の `kind: line / point / direction`、または円の `kind: circle / center / radius` と、実装が返した場合の `rms` です。`geometry` は実際に出力したSVGのタグと幾何属性の文字列です。元の点の重複を除去したり並べ替えたりしません。
+`data-vector-pointset` のJSONは `version: 1`、`method`、`input.points`、`result`、`geometry` を持ちます。`result` は直線の `kind: line / point / direction`、円の `kind: circle / center / radius` と任意の `rms`、または凸包の外周頂点配列です。`geometry` は実際に出力したSVGのタグと幾何属性の文字列です。元の点の重複を除去したり並べ替えたりしません。
 
 `data-vector-implementation` には実際の計算・描画ID、アルゴリズム、実装元、委譲履歴、描画設定、`parameters.pointCount` と任意の `parameters.rms` を記録します。再編集後の `pointSetEdit.origin` は最初の生成方式を保持し、履歴を入れ子に蓄積しません。円の中心・半径編集も可能にするため、円の出力には既存の `data-vector-circle` も保存します。
 
-計算登録は既存の `registerImplementation(method, {id, label, algorithm, run})` を使用し、入力は `{points}`、出力は上記の直線・円の契約です。座標・半径・RMSと描画範囲は有限、方向は零でないことが必要です。円の半径は0以上、RMSは0以上です。計算が `null` を返す場合は適用しません。実装を選んだ再計算が失敗しても、元の計算選択へ戻します。再編集用の選択・分割数は次の作図用設定へ保存しません。
+計算登録は既存の `registerImplementation(method, {id, label, algorithm, run})` を使用し、入力は `{points}`、出力は上記の直線・円・凸包の契約です。座標・半径・RMSと描画範囲は有限、方向は零でないことが必要です。円の半径は0以上、RMSは0以上です。計算が `null` を返す場合は適用しません。実装を選んだ再計算が失敗しても、元の計算選択へ戻します。再編集用の選択・分割数は次の作図用設定へ保存しません。
 
-`editorHost.render(shape, target, options)` に `sourceInput: {points}` と `sourceResult` を渡すと点群を記録します。`shape` への変換は `pointSetGeometry(method, input, result)` を使います。この2つの予約オプションは描画実装の設定に渡さず、図形の再計算用データにだけ使います。元入力のない既存の呼出しには架空の点群を追加しません。再編集で受け付けるSVG表現は直線が `line` または `path`、円が `circle` または `path` です。
+`editorHost.render(shape, target, options)` に `sourceInput: {points}` と `sourceResult` を渡すと点群を記録します。`shape` への変換は `pointSetGeometry(method, input, result)` を使います。この2つの予約オプションは描画実装の設定に渡さず、図形の再計算用データにだけ使います。元入力のない既存の呼出しには架空の点群を追加しません。再編集で受け付けるSVG表現は直線が `line` または `path`、円が `circle` または `path`、凸包が `polygon` または閉じた `path` です。
 
 保存・照合・投影は [pointSetSource.js](../src/adapters/pointSetSource.js)、UIは [PointSetEditor.js](../src/ui/PointSetEditor.js)、ドラッグは既存の [SplineControlHandles.js](../src/ui/SplineControlHandles.js)、作図は [PointConstructionTool.js](../src/tools/PointConstructionTool.js) です。
 
