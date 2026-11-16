@@ -301,4 +301,3 @@ $$
 
 <a id="r14"></a>
 **R14 — Ceres Solver, Solving Non-linear Least Squares.** [公式ドキュメント](https://ceres-solver.readthedocs.io/latest/nnls_solving.html)、特にLevenberg–Marquardtの節。寸法拘束の実装時参照資料。
-
