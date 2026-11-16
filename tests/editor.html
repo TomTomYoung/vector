@@ -2410,6 +2410,139 @@ await check('Spline parameter restoration keeps a failed preview editable and re
   }finally{app.element.remove();}
 });
 
+
+const linearDraftNames=['line','polyline','quadraticBezier','cubicBezier','nthBezier'];
+const linearDraftPoints=[{x:80,y:100},{x:180,y:90},{x:220,y:180},{x:120,y:220},{x:300,y:240}];
+const linearDraftCount={line:2,polyline:3,quadraticBezier:2,cubicBezier:3,nthBezier:4};
+const linearDraftAttribute={line:'data-line-tool',polyline:'data-polyline-tool',quadraticBezier:'data-quadratic-bezier-tool',cubicBezier:'data-cubic-bezier-tool',nthBezier:'data-nth-bezier-tool'};
+const draftKey=(app,key)=>app.d.dispatchEvent(new app.w.KeyboardEvent('keydown',{key,bubbles:true,cancelable:true}));
+function makeLinearDraft(app,name){
+  app.d.getElementById(name+'-tool').click();const tool=app.w.toolManager.tools[name];
+  if(name==='line'){tool.operationMode='twoClick';parameterClick(app,80,100);parameterMouse(app,'mousemove',180,90);}
+  else {if(name==='nthBezier')preferenceNumber(app,'次数 (n)',4);for(const p of linearDraftPoints.slice(0,linearDraftCount[name]))parameterClick(app,p.x,p.y);}
+  return tool;
+}
+// MouseEvent client coordinates can be quantized; compare against the event actually dispatched.
+function draftClickPoint(app,x,y){
+  const canvas=app.d.getElementById('canvas'),matrix=canvas.getScreenCTM(),screen=new app.w.DOMPoint(x,y).matrixTransform(matrix);
+  const event=new app.w.MouseEvent('mousedown',{clientX:screen.x,clientY:screen.y,button:0,bubbles:true});
+  const point=new app.w.DOMPoint(event.clientX,event.clientY).matrixTransform(matrix.inverse());
+  canvas.dispatchEvent(event);parameterMouse(app,'mouseup',x,y);return point;
+}
+function finishLinearDraft(app,name){
+  if(name==='line'||name==='polyline')constructionEnter(app);
+  else {const p=linearDraftPoints[linearDraftCount[name]];parameterClick(app,p.x,p.y);}
+}
+
+await check('Five line and Bezier drafts roundtrip into a fresh editor and commit with original points, current methods and atomic undo',async()=>{
+  const source=await preferenceEditor('{preferences:false}');let target;
+  try{
+    source.w.DrawingDocument.open('<svg xmlns="http://www.w3.org/2000/svg"><rect id="draft-kept" x="10" y="10" width="20" height="20"/></svg>');
+    for(const name of linearDraftNames){makeLinearDraft(source,name);inputPresetAction(source,'record');await tick();assert(!source.w.DrawingDocument.capture().querySelector('['+linearDraftAttribute[name]+']'),'preview excluded '+name);draftKey(source,'Escape');}
+    const saved=inputPresetState(source),xml=source.w.DrawingDocument.serialize();assert(Object.keys(saved.entries).length===5,'five records');
+    target=await preferenceEditor('{preferences:false}');const host=target.w.toolManager.host,execute=host.execute;let calls=0;host.execute=(...args)=>{calls++;return execute(...args);};
+    target.w.DrawingDocument.open(xml);target.w.saveState();await tick();assert(calls===0&&target.w.toolManager.activeToolName==='select','load performs no calculation');
+    for(const name of linearDraftNames){
+      target.d.getElementById(name+'-tool').click();if(name.includes('Bezier'))host.selectRenderer(name,'sampled',{sampleCount:16});
+      const methods=JSON.stringify(host.exportPreferences()),history=target.w.undoStack.length;inputPresetAction(target,'restore');
+      const tool=target.w.toolManager.tools[name];assert(JSON.stringify(tool.exportInputPreset())===JSON.stringify(saved.entries[name]),'input restored '+name);
+      assert(!target.w.DrawingDocument.capture().querySelector('['+linearDraftAttribute[name]+']')&&target.w.undoStack.length===history,'restore remains a draft '+name);
+      finishLinearDraft(target,name);await tick();const el=target.w.DrawingDocument.capture().querySelector('['+linearDraftAttribute[name]+']');assert(el,'committed '+name);
+      if(name.includes('Bezier'))assert(JSON.parse(el.getAttribute('data-vector-implementation')).rendering.id==='sampled','selected rendering used '+name);
+      assert(target.w.undoStack.length===history+1&&JSON.stringify(host.exportPreferences())===methods,'one step, unchanged methods '+name);
+      target.w.undo();assert(!target.w.DrawingDocument.capture().querySelector('['+linearDraftAttribute[name]+']'),'undo '+name);target.w.redo();assert(target.w.DrawingDocument.capture().querySelector('['+linearDraftAttribute[name]+']'),'redo '+name);
+    }
+    assert(target.d.getElementById('draft-kept')&&JSON.stringify(inputPresetState(target))===JSON.stringify(saved),'artwork and saved drafts retained');
+  }finally{source.element.remove();target?.element.remove();}
+});
+
+await check('Restored straight lines retain drag preference, ignore mouse release and leave, and allow explicit endpoint confirmation or cancellation',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    const tool=makeLinearDraft(app,'line');inputPresetAction(app,'record');await tick();draftKey(app,'Escape');tool.operationMode='drag';inputPresetAction(app,'restore');
+    const history=app.w.undoStack.length,preview=tool.currentLine;parameterMouse(app,'mouseup',260,230);parameterMouse(app,'mouseleave',260,230);
+    assert(tool.currentLine===preview&&tool.restoredDraft&&tool.operationMode==='drag'&&app.w.undoStack.length===history,'release and leave do not commit');
+    const end=draftClickPoint(app,300,240);await tick();const el=app.w.DrawingDocument.capture().querySelector('[data-line-tool]');assert(el&&Number(el.getAttribute('x1'))===80&&Math.abs(Number(el.getAttribute('x2'))-end.x)<1e-5&&Math.abs(Number(el.getAttribute('y2'))-end.y)<1e-5,'explicit click endpoint '+JSON.stringify({coords:el&&['x1','y1','x2','y2'].map(k=>el.getAttribute(k)),active:app.w.toolManager.activeToolName,restored:tool.restoredDraft}));
+    assert(tool.operationMode==='drag'&&!tool.restoredDraft,'preference retained after finish');inputPresetAction(app,'restore');draftKey(app,'Escape');assert(!tool.currentLine&&!tool.restoredDraft,'escape clears draft');
+    inputPresetAction(app,'restore');app.d.getElementById('select-tool').click();assert(app.w.DrawingDocument.capture().querySelectorAll('[data-line-tool]').length===1,'switch cancels restored line');
+    app.d.getElementById('line-tool').click();parameterMouse(app,'mousedown',350,100);parameterMouse(app,'mouseup',450,160);await tick();assert(app.w.DrawingDocument.capture().querySelectorAll('[data-line-tool]').length===2,'normal drag still works');
+  }finally{app.element.remove();}
+});
+
+await check('Bezier partial and complete drafts support correction, explicit Enter, cancellation, degree limits and independent rendering settings',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    for(const name of ['quadraticBezier','cubicBezier','nthBezier']){
+      const tool=makeLinearDraft(app,name);inputPresetAction(app,'record');await tick();draftKey(app,'Escape');inputPresetAction(app,'restore');const before=tool.points.length,history=app.w.undoStack.length;
+      constructionEnter(app);assert(tool.points.length===before&&tool.implementationError&&app.w.undoStack.length===history,'incomplete Enter keeps points '+name);
+      draftKey(app,'Backspace');assert(tool.points.length===before-1,'backspace '+name);const p=linearDraftPoints[before-1];parameterClick(app,p.x,p.y);
+      finishLinearDraft(app,name);await tick();assert(app.w.DrawingDocument.capture().querySelector('['+linearDraftAttribute[name]+']'),'corrected draw '+name);
+      const count=name==='quadraticBezier'?3:name==='cubicBezier'?4:5;
+      const entry={version:1,input:{points:linearDraftPoints.slice(0,count),...(name==='nthBezier'?{degree:4}:{})}};
+      app.w.toolManager.inputPresets.open({version:1,entries:{[name]:entry}});app.w.toolPropertiesPanel.updatePanel();inputPresetAction(app,'restore');
+      assert(tool.points.length===count,'complete input not auto committed');draftKey(app,'Escape');assert(tool.points.length===0&&!tool.previewElement&&!tool.draftHandles,'cancel helper cleanup');
+      inputPresetAction(app,'restore');constructionEnter(app);await tick();assert(app.w.DrawingDocument.capture().querySelectorAll('['+linearDraftAttribute[name]+']').length===2,'explicit full draft commit');
+    }
+    app.d.getElementById('nthBezier-tool').click();const n=app.w.toolManager.tools.nthBezier;preferenceNumber(app,'次数 (n)',99);assert(n.degree===12,'degree bounded');n.sampleCount=125;inputPresetAction(app,'restore');assert(n.degree===4&&n.sampleCount===125,'input restores degree only');
+    assert(!app.d.querySelector('[data-construction-input-record]').textContent.includes('周期'),'nth does not claim periodic setting');
+  }finally{app.element.remove();}
+});
+
+await check('Polyline restored drafts cancel on tool change and support duplicate vertices, continuation, Backspace and double click',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    const tool=makeLinearDraft(app,'polyline');inputPresetAction(app,'record');await tick();draftKey(app,'Escape');inputPresetAction(app,'restore');const history=app.w.undoStack.length;
+    app.d.getElementById('select-tool').click();await tick();assert(!app.w.DrawingDocument.capture().querySelector('[data-polyline-tool]')&&app.w.undoStack.length===history,'switch never commits restored draft');
+    app.d.getElementById('polyline-tool').click();inputPresetAction(app,'restore');parameterClick(app,120,220);draftKey(app,'Backspace');assert(tool.points.length===3,'continuation can be removed');
+    const canvas=app.d.getElementById('canvas'),end=draftClickPoint(app,300,240);parameterClick(app,300,240);canvas.dispatchEvent(new app.w.MouseEvent('dblclick',{bubbles:true,cancelable:true}));await tick();
+    const el=app.w.DrawingDocument.capture().querySelector('[data-polyline-tool]');const drawn=el?.getAttribute('points').split(' ').map(p=>p.split(',').map(Number));assert(drawn?.length===4&&Math.abs(drawn[3][0]-end.x)<1e-5&&Math.abs(drawn[3][1]-end.y)<1e-5&&app.w.undoStack.length===history+1,'double click commits final point once '+JSON.stringify({points:el?.getAttribute('points'),history,before:app.w.undoStack.length,live:tool.points}));
+    app.d.getElementById('polyline-tool').click();const entry={version:1,input:{points:[{x:80,y:100},{x:80,y:100},{x:180,y:90}]}};app.w.toolManager.inputPresets.open({version:1,entries:{polyline:entry}});app.w.toolPropertiesPanel.updatePanel();inputPresetAction(app,'restore');assert(tool.points.length===3&&tool.points[0].x===tool.points[1].x,'duplicate input retained');
+    inputPresetAction(app,'record');draftKey(app,'Escape');app.w.undo();assert(!tool.isDrawing,'metadata undo never restores live draft');
+  }finally{app.element.remove();}
+});
+
+await check('Line and Bezier malformed SVG refuses atomically, future versions stay inert, and metadata edits undo independently',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    const tool=makeLinearDraft(app,'cubicBezier');inputPresetAction(app,'record');await tick();const before=app.w.DrawingDocument.serialize(),points=tool.points,preview=tool.previewElement,history=app.w.undoStack.length;
+    const bad={line:{points:[{x:1,y:2}]},polyline:{points:[{x:'1',y:2}]},quadraticBezier:{points:linearDraftPoints},cubicBezier:{points:[],extra:1},nthBezier:{points:[],degree:13}};
+    for(const [name,input] of Object.entries(bad)){let failed=false;try{app.w.DrawingDocument.open(inputPresetSVG(app,{version:1,entries:{[name]:{version:1,input}}}));}catch{failed=true;}assert(failed&&app.w.DrawingDocument.serialize()===before&&tool.points===points&&tool.previewElement===preview&&app.w.undoStack.length===history,'atomic refusal '+name);}
+    draftKey(app,'Backspace');inputPresetAction(app,'record');await tick();assert(inputPresetState(app).entries.cubicBezier.input.points.length===2,'update stored draft');app.w.undo();assert(inputPresetState(app).entries.cubicBezier.input.points.length===3,'undo update');app.w.redo();assert(inputPresetState(app).entries.cubicBezier.input.points.length===2,'redo update');
+    app.d.getElementById('cubicBezier-tool').click();inputPresetAction(app,'remove');await tick();assert(!inputPresetState(app),'delete record');app.w.undo();assert(inputPresetState(app).entries.cubicBezier,'undo delete');
+    const future={version:1,entries:{line:{version:2,input:{future:true}}}};app.w.DrawingDocument.open(inputPresetSVG(app,future));app.d.getElementById('line-tool').click();assert(app.d.querySelector('[data-construction-input-action="restore"]').disabled,'future restore disabled');app.w.DrawingDocument.open(app.w.DrawingDocument.serialize());assert(JSON.stringify(inputPresetState(app))===JSON.stringify(future),'future retained');
+  }finally{app.element.remove();}
+});
+
+await check('Failed line and Bezier calculations and renderers retain editable drafts without artwork or history until retry succeeds',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    const host=app.w.toolManager.host;
+    host.registerRenderer({id:'draft-render-failure',label:'Draft render failure',algorithm:'Explicit test error',supports:()=>true,prepare:()=>{throw Error('draft rendering failure');}});
+    for(const name of linearDraftNames){
+      const draft=makeLinearDraft(app,name);if(name.includes('Bezier')){draft.points.push({...linearDraftPoints[linearDraftCount[name]]});draft.updatePreview();}inputPresetAction(app,'record');await tick();draftKey(app,'Escape');const saved=JSON.stringify(inputPresetState(app)),history=app.w.undoStack.length;
+      host.registerImplementation(name,{id:'draft-calc-failure',label:'Draft failure',algorithm:'Explicit test error',run:()=>{throw Error('draft calculation failure');}});host.selectImplementation(name,'draft-calc-failure');inputPresetAction(app,'restore');
+      const tool=app.w.toolManager.tools[name];assert(tool.implementationError.includes('draft calculation failure')&&JSON.stringify(tool.exportInputPreset())===JSON.stringify(inputPresetState(app).entries[name]),'failed restoration retains input '+name);
+      constructionEnter(app);await tick();assert(!app.w.DrawingDocument.capture().querySelector('['+linearDraftAttribute[name]+']')&&app.w.undoStack.length===history,'failed confirmation no commit '+name);
+      host.selectImplementation(name,'default');host.selectRenderer(name,'draft-render-failure');inputPresetAction(app,'restore');assert(tool.implementationError.includes('draft rendering failure'),'render failure '+name);
+      host.selectRenderer(name,'default');inputPresetAction(app,'restore');assert(!tool.implementationError,'recovered preview '+name);finishLinearDraft(app,name);await tick();assert(app.w.DrawingDocument.capture().querySelector('['+linearDraftAttribute[name]+']')&&JSON.stringify(inputPresetState(app))===saved,'retry commit preserves saved input '+name);
+      if(name==='polyline'){app.d.getElementById('polyline-tool').click();host.selectImplementation(name,'draft-calc-failure');parameterClick(app,350,300);parameterClick(app,450,350);assert(tool.implementationError,'ordinary draft calculation fails');app.d.getElementById('select-tool').click();assert(app.w.DrawingDocument.capture().querySelectorAll('[data-polyline-tool]').length===1&&!tool.currentPolyline,'failed ordinary preview discarded on switch');host.selectImplementation(name,'default');}
+    }
+  }finally{app.element.remove();}
+});
+
+await check('Line draft records work without browser storage and real SVG download excludes previews while retaining records',async()=>{
+  const app=await preferenceEditor('{preferences:{storage:()=>{throw Error("blocked");}}}');
+  try{
+    makeLinearDraft(app,'line');inputPresetAction(app,'record');await tick();const saved=JSON.stringify(inputPresetState(app));let blob;
+    const url=app.w.URL.createObjectURL,revoke=app.w.URL.revokeObjectURL,click=app.w.HTMLAnchorElement.prototype.click;
+    app.w.URL.createObjectURL=value=>{blob=value;return 'blob:linear-draft';};app.w.URL.revokeObjectURL=()=>{};app.w.HTMLAnchorElement.prototype.click=function(){};
+    try{app.d.getElementById('save-btn').click();const xml=await blob.text();assert(!new app.w.DOMParser().parseFromString(xml,'image/svg+xml').querySelector('[data-line-tool]'),'download omits live preview');app.w.DrawingDocument.open(xml);assert(JSON.stringify(inputPresetState(app))===saved,'download contains recorded endpoints');}
+    finally{app.w.URL.createObjectURL=url;app.w.URL.revokeObjectURL=revoke;app.w.HTMLAnchorElement.prototype.click=click;}
+    app.d.getElementById('line-tool').click();inputPresetAction(app,'restore');constructionEnter(app);await tick();assert(app.w.DrawingDocument.capture().querySelector('[data-line-tool]'),'commit without storage');
+    inputPresetAction(app,'record');await tick();assert(inputPresetState(app).entries.line.input.points.length===0,'empty draft can be recorded');inputPresetAction(app,'restore');assert(!app.w.toolManager.tools.line.isDrawing,'empty restore leaves no preview');
+  }finally{app.element.remove();}
+});
+
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
 </script>

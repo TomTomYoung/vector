@@ -11,6 +11,25 @@ class BezierToolBase extends BaseTool {
     this.instructions = options.instructions || null;
     this.options = options;
     this.toolAttribute = options.toolAttribute || 'data-bezier-tool';
+    this.inputPresetVersion = 1;
+    this.inputPresetInstructions = '必要数までクリックして確定します。点数がそろった下書きはEnterで確定、Backspaceで末尾点を削除、Escで取消できます。';
+    this.implementationError = '';
+    this.draftHandles = null;
+  }
+
+  get inputPresetName() { return this.method === 'bezierN' ? 'nthBezier' : this.method; }
+
+  exportInputPreset() {
+    return window.VectorUtils.parseConstructionDraft(this.inputPresetName,{version:1,input:{points:this.points,
+      ...(this.inputPresetName==='nthBezier'?{degree:this.degree}:{})}});
+  }
+
+  restoreInputPreset(entry) {
+    const {input}=window.VectorUtils.parseConstructionDraft(this.inputPresetName,entry);
+    if(!this.isActive)throw Error('復元する作図ツールを先に選択してください。');
+    this.resetDrawing();this.points=input.points;
+    if(this.inputPresetName==='nthBezier')this.degree=input.degree;
+    this.updatePreview();
   }
 
   getTitle() {
@@ -63,6 +82,8 @@ class BezierToolBase extends BaseTool {
   }
 
   handleMouseDown(event) {
+    if(!this.isActive || event.button!==0)return;
+    if(this.points.length>=this.getRequiredPoints()){this.commitCurve();return;}
     super.handleMouseDown(event);
     const point = this.getMousePosition(event);
     this.points.push(point);
@@ -72,6 +93,7 @@ class BezierToolBase extends BaseTool {
     } else {
       this.updatePreview(point);
     }
+    this.requestToolPanelRefresh();
   }
 
   handleMouseMove(event) {
@@ -84,9 +106,14 @@ class BezierToolBase extends BaseTool {
   }
 
   handleKeyDown(event) {
+    if(!this.isActive)return;
     if (event.key === 'Escape') {
+      event.preventDefault();
       this.cancelDrawing();
     }
+    if(event.key==='Backspace'){event.preventDefault();this.points.pop();this.updatePreview();}
+    if(event.key==='Enter'){event.preventDefault();this.commitCurve();}
+    this.requestToolPanelRefresh();
   }
 
   handleDblClick(event) {
@@ -109,6 +136,11 @@ class BezierToolBase extends BaseTool {
       window.SvgUtils.removeElement(this.previewElement);
       this.previewElement = null;
     }
+    this.implementationError = '';
+    this.draftHandles?.remove();
+    this.draftHandles = window.SvgUtils.createElement('g',{'data-tool-layer':'construction-handles','pointer-events':'none'});
+    this.points.forEach(p=>this.draftHandles.appendChild(window.SvgUtils.createCircle(p.x,p.y,3,{fill:'#fff',stroke:'#2673c7'})));
+    this.canvas.appendChild(this.draftHandles);
 
     const targetPoints = pointerPoint
       ? [...this.points, pointerPoint]
@@ -118,7 +150,8 @@ class BezierToolBase extends BaseTool {
       return;
     }
 
-    this.previewElement = this.drawCurve(targetPoints, true);
+    try { this.previewElement = this.drawCurve(targetPoints, true); }
+    catch(error){this.implementationError=error.message;return;}
     if (!this.previewElement) return;
     window.SvgUtils.setAttributes(this.previewElement, {
       stroke: this.currentStyle.stroke,
@@ -131,9 +164,13 @@ class BezierToolBase extends BaseTool {
   }
 
   commitCurve() {
-    const element = this.drawCurve(this.points);
+    let element;
+    this.implementationError='';
+    try { element = this.drawCurve(this.points); }
+    catch(error){this.implementationError=error.message;this.requestToolPanelRefresh();return;}
     if (!element) {
-      this.resetDrawing();
+      this.implementationError='確定に必要な点が不足しているか、選択した実装では作図できません。';
+      this.requestToolPanelRefresh();
       return;
     }
 
@@ -152,6 +189,8 @@ class BezierToolBase extends BaseTool {
 
   resetDrawing() {
     this.points = [];
+    this.implementationError = '';
+    this.draftHandles?.remove();this.draftHandles=null;
     if (this.previewElement) {
       window.SvgUtils.removeElement(this.previewElement);
       this.previewElement = null;

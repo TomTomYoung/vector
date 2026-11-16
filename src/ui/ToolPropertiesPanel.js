@@ -309,7 +309,7 @@ class ToolPropertiesPanel {
     if(!supported&&!stored)return;
     const details=document.createElement('details');details.dataset.constructionInputPresets='';
     const heading=document.createElement('summary');heading.textContent='作図入力のプリセット（SVGに保存）';details.append(heading);
-    const note=document.createElement('p');note.textContent=parameters?'数値設定をツールごとに1組記録できます。復元時は入力点と対象の選択を維持します。作図・加工は通常の確定操作で行います。':'ツールごとに入力を1組記録できます。復元は現在の下書きを置き換えます。図形の確定はEnterで行います。';details.append(note);
+    const note=document.createElement('p');note.textContent=parameters?'数値設定をツールごとに1組記録できます。復元時は入力点と対象の選択を維持します。作図・加工は通常の確定操作で行います。':'ツールごとに入力を1組記録できます。復元は現在の下書きを置き換えます。'+(tool.inputPresetInstructions??'図形の確定はEnterで行います。');details.append(note);
     if(stored){const list=document.createElement('p');list.textContent='記録のあるツール: '+Object.keys(stored.entries).map(n=>this.toolManager.tools[n]?.getTitle()??n).join('、');details.append(list);}
     const status=document.createElement('p');status.dataset.constructionInputStatus='';status.setAttribute('role','status');status.textContent=presets.state.message;
     status.style.cssText='font-size:12px;line-height:1.6';if(presets.state.warning)status.style.color='#a22';details.append(status);
@@ -317,7 +317,8 @@ class ToolPropertiesPanel {
       const p=document.createElement('p');p.dataset.constructionInputRecord='';p.textContent=name+' / 入力形式 '+saved.version;
       if(saved.version===1&&supported){
         if(Array.isArray(saved.input.points))p.textContent+=' / 点数 '+saved.input.points.length;
-        if(saved.input.degree!==undefined)p.textContent+=' / 次数 '+saved.input.degree+' / 周期 '+(saved.input.periodic?'あり':'なし');
+        if(saved.input.degree!==undefined)p.textContent+=' / 次数 '+saved.input.degree;
+        if(saved.input.periodic!==undefined)p.textContent+=' / 周期 '+(saved.input.periodic?'あり':'なし');
         if(saved.input.box)p.textContent+=' / 切り取り範囲 '+JSON.stringify(saved.input.box);
         if(parameters&&Object.hasOwn(window.VectorUtils.constructionParameterFields,name))for(const [key,label] of window.VectorUtils.constructionParameterFields[name])p.textContent+=' / '+label+' '+saved.input[key];
       }
