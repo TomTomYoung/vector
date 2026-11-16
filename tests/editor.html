@@ -1290,7 +1290,8 @@ await check('Point-set and center-radius editing are exclusive and direct circle
   assert(!w.toolPropertiesPanel.circleEditor.draft && w.toolPropertiesPanel.pointSetEditor.draft,'point mode closes circle draft');pointsetAction('cancel');
   circleAction('begin');circleField('円の半径',70);circleAction('apply');element=doc.getElementById('editable-pointset');assert(!element.hasAttribute('data-vector-pointset') && !doc.querySelector('[data-pointset-editor]'),'center-radius edit detaches source');
   fixture();await tick();element=addEditablePointSet();w.VectorUtils.circleSource.recordCircleAttributeEdit(element);assert(!element.hasAttribute('data-vector-pointset'),'direct attributes detach');
-  fixture();await tick();element=addEditablePointSet('fitCircle','sampled');const middle=element.getPointAtLength(element.getTotalLength()/2);w.VectorUtils.linearEditing.split(element,canvas,{x:middle.x,y:middle.y});
+  fixture();await tick();element=addEditablePointSet('fitLine');const middle={x:(Number(element.getAttribute('x1'))+Number(element.getAttribute('x2')))/2,y:(Number(element.getAttribute('y1'))+Number(element.getAttribute('y2')))/2};const parts=w.VectorUtils.linearEditing.split(element,canvas,middle);
+  assert(parts?.length===2,'supported line outline split');
   assert(!element.hasAttribute('data-vector-pointset') && !element.nextElementSibling.hasAttribute('data-vector-pointset'),'split detaches both parts');
 });
 
@@ -1298,9 +1299,11 @@ await check('Point-set plugins preserve actual results, restore failed selection
   fixture();await tick();const element=addEditablePointSet('fitLine'),host=w.toolManager.host;
   host.registerImplementation('fitLine',{id:'test-pointset-fail',label:'Fail points',algorithm:'Intentional failure',run:()=>{throw Error('point fit failure');}});
   host.registerImplementation('fitLine',{id:'test-pointset-line',label:'Vertical plugin',algorithm:'Vertical line with nonunit direction',run:()=>({kind:'line',point:{x:150,y:0},direction:{x:0,y:10},rms:2})});
+  host.registerRenderer({id:'test-pointset-wrong',label:'Wrong shape',algorithm:'Circle instead of line',supports:name=>name==='fitLine',prepare:()=>({kind:'circle',center:{x:100,y:100},radius:40})});
   const before=JSON.stringify(host.exportPreferences()),source=element.getAttribute('data-vector-pointset');activate('select');w.selectTool.selectObject(element);pointsetAction('begin');
   pointsetField('点群の再計算実装','test-pointset-fail','change');pointsetAction('apply');assert(element.getAttribute('data-vector-pointset')===source && JSON.stringify(host.exportPreferences())===before,'failure leaves document and selection');
-  pointsetField('点群の再計算実装','test-pointset-line','change');pointsetAction('apply');let saved=JSON.parse(element.getAttribute('data-vector-pointset'));assert(saved.result.direction.y===10 && saved.result.rms===2 && Number(element.getAttribute('y2'))===180,'actual plugin result and normalized projection');
+  pointsetField('点群の再計算実装','test-pointset-line','change');pointsetField('点群の再描画実装','test-pointset-wrong','change');pointsetAction('apply');assert(element.getAttribute('data-vector-pointset')===source,'incompatible renderer refused');
+  pointsetField('点群の再描画実装','default','change');pointsetAction('apply');let saved=JSON.parse(element.getAttribute('data-vector-pointset'));assert(saved.result.direction.y===10 && saved.result.rms===2 && Number(element.getAttribute('y2'))===180,'actual plugin result and normalized projection');
   assert(JSON.stringify(host.exportPreferences())===before,'successful plugin leaves preferences');pointsetAction('begin');pointsetAction('preview');activate('line');assert(!pointsetHandle(0) && !canvas.querySelector('[data-vector-preview]'),'switch clears source helpers');
 });
 

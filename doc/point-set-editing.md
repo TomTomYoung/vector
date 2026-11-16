@@ -20,7 +20,7 @@
 
 円当てはめは中心化した座標によるKåsa型代数的最小二乗です。`rms` は当てはめ後の幾何距離から測った値で、最適化する代数的目的関数とは区別します。最小包含円は入力順の逐次追加と1点・2点・3点の支点の更新です。入力をランダム化せず、Welzl法や期待線形時間の実装とは記載しません。計算本体は [pointSets.js](../src/model/pointSets.js) を使用しています。
 
-論文・一次資料・参照履歴は [algorithms.mdの点群](algorithms.md#点群の当てはめ最小包含円)、[R11](algorithms.md#r11)、[R12](algorithms.md#r12) にあります。既存実装と文献の照合結果を継承したもので、今回の編集UIに新しい計算論文を適用したわけではありません。円の描画方式は [implementation-options.md](implementation-options.md) を参照してください。
+論文・一次資料・参照履歴は [algorithms.mdの点群](algorithms.md)、[R11](algorithms.md#r11)、[R12](algorithms.md#r12) にあります。既存実装と文献の照合結果を継承したもので、今回の編集UIに新しい計算論文を適用したわけではありません。円の描画方式は [implementation-options.md](implementation-options.md) を参照してください。
 
 ## 保存形式と換装契約
 
