@@ -6,6 +6,7 @@ import {createRenderRegistry} from './renderStrategies.js';
 import {parseImplementationPreferences} from './implementationPreferences.js';
 import {circleModel, circleGeometrySnapshot} from './circleSource.js';
 import {arcInput, arcModel} from './arcSource.js';
+import {pointSetMethods,pointSetInput,pointSetResult,pointSetGeometrySnapshot} from './pointSetSource.js';
 
 function snapPoint(point, {geometry, exclude, anchor, manager}) {
   if (geometry && window.snapManager) return window.snapManager.snapPoint(point, exclude, anchor);
@@ -61,11 +62,15 @@ export function createEditorHost({
     registerImplementation: (name, implementation) => run.register(name, implementation),
     renderers: name => render ? [describeRendering(name)] : drawing.list(name),
     selectRenderer: drawing.select, registerRenderer: drawing.register, describeRendering, annotate,
-    render(shape, target, {sourceInput, ...options} = {}) {
+    render(shape, target, {sourceInput, sourceResult, ...options} = {}) {
       const arcSource = shape?.kind === 'arc' && options.toolName === 'arc' && (sourceInput || shape.through) ?
         {version:1,input:arcInput(sourceInput ?? shape),model:arcModel(shape)} : null;
+      const pointSource=pointSetMethods.includes(options.toolName) && sourceInput && sourceResult ?
+        {version:1,method:options.toolName,input:pointSetInput(options.toolName,sourceInput),result:pointSetResult(options.toolName,sourceResult)} : null;
       const prepared = render ? shape : drawing.prepare(options.toolName, shape, options, options.renderer);
       const element = render ? render(prepared, target, options) : renderGeometry(prepared, target, options, encodePath);
+      if(pointSource && element && ['line','circle','path'].includes(element.tagName.toLowerCase()))
+        element.setAttribute('data-vector-pointset',JSON.stringify({...pointSource,geometry:pointSetGeometrySnapshot(element)}));
       if (arcSource && element?.tagName === 'path') {
         element.setAttribute('data-vector-arc',JSON.stringify({...arcSource,path:element.getAttribute('d')}));
       }
@@ -85,6 +90,7 @@ export function createEditorHost({
         ...(prepared?.withinTolerance === false ? {warning: '最大深さに達し、許容差を満たしていません。'} : {}),
         ...(prepared?.warning ? {warning: prepared.warning} : {}),
         ...(prepared?.sampling ? {sampling: prepared.sampling} : {}),
+        ...(pointSource ? {parameters:{pointCount:pointSource.input.points.length,...(pointSource.result.rms!==undefined?{rms:pointSource.result.rms}:{})}} : {}),
         ...(shape?.kind === 'splineCurve' ? {parameters: {degree: shape.degree, periodic: !!shape.periodic, controlCount: shape.controlCount ?? shape.points.length}} : {}),
       });
     },
