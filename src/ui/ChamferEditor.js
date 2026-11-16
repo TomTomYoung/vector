@@ -1,11 +1,11 @@
 // Edit both setbacks and all three segments together from the original corner.
 class ChamferEditor {
-  constructor(manager,refresh){this.manager=manager;this.refresh=refresh;this.element=null;this.draft=null;this.preview=null;this.message='';}
+  constructor(manager,refresh){this.manager=manager;this.refresh=refresh;this.element=null;this.draft=null;this.preview=null;this.message='';this.controls=new ChamferDistanceHandles(this);}
   get api(){return window.VectorUtils.chamferSource;}
   snapshot(){return JSON.stringify(this.api.chamferGeometry(this.element));}
   select(element){if(this.element!==element){this.cancel(false);this.element=element;}}
   cancel(refresh=true){
-    this.events?.abort();this.observer?.disconnect();this.layerObserver?.disconnect();this.resizeObserver?.disconnect();cancelAnimationFrame(this.frame);
+    this.controls.close();
     this.preview?.remove();this.preview=null;this.draft=null;this.message='';
     if(this.manager.activeToolName==='select')this.manager.tools.select.refreshHandles();if(refresh)this.refresh();
   }
@@ -25,19 +25,8 @@ class ChamferEditor {
       this.originalGeometry=this.snapshot();this.originalSource=this.element.getAttribute('data-vector-chamfer');this.originalRecord=this.element.getAttribute('data-vector-implementation');
       this.lines=lines;this.draft={...source,distance1:String(source.input.distance1),distance2:String(source.input.distance2)};
       this.message='距離は面取り線のローカル座標です。元の2線分から再計算し、3要素を一緒に更新します。';
-      this.events=new AbortController();document.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();this.cancel();}},{capture:true,signal:this.events.signal});
-      const schedule=()=>{cancelAnimationFrame(this.frame);this.frame=requestAnimationFrame(()=>this.sync());};
-      this.observer=new MutationObserver(records=>{const nodes=[this.element,...this.lines];if(nodes.some(el=>!el.isConnected)||records.some(r=>nodes.some(el=>r.target===el||r.target.contains(el))))schedule();});
-      this.observer.observe(this.manager.canvas,{subtree:true,childList:true,attributes:true,attributeFilter:['transform','style','viewBox','width','height','x1','y1','x2','y2','data-layer','data-vector-chamfer','data-vector-chamfer-line-id','data-vector-implementation']});
-      this.layerObserver=new MutationObserver(schedule);const layers=document.getElementById('layer-list');if(layers)this.layerObserver.observe(layers,{subtree:true,childList:true});
-      this.resizeObserver=new ResizeObserver(schedule);this.resizeObserver.observe(this.manager.canvas);window.addEventListener('resize',schedule,{signal:this.events.signal});this.manager.tools.select.removeControlPoints();
     }catch(error){this.message=error.message;}
-    this.refresh();
-  }
-  sync(){
-    if(!this.draft)return;
-    try{this.assertTarget();if(this.preview)this.preview.setAttribute('transform',this.previewTransform());}
-    catch(error){this.preview?.remove();this.preview=null;this.message=error.message;this.updateStatus();}
+    this.refresh();if(this.draft)this.controls.open();
   }
   input(){const d=this.draft,number=s=>s.trim()?Number(s):NaN;return this.api.chamferInput({...d.input,distance1:number(d.distance1),distance2:number(d.distance2)});}
   previewTransform(){const frame=window.VectorUtils.splineControlGeometry.splineControlFrame(this.manager.canvas.getScreenCTM(),this.element.getScreenCTM());return window.VectorUtils.splineControlGeometry.splineMatrixText(frame.localCanvas);}
@@ -51,7 +40,7 @@ class ChamferEditor {
       return this.api.prepareChamferOutput(host,input,result,this.lines,d.bindings.map(b=>b.matrix),d.bindings.map(b=>b.id),{...d.options,renderer:d.renderer},d.origin);
     }finally{host.selectImplementation('chamfer',previous);}
   }
-  showPreview(){
+  showPreview(refresh=true){
     this.preview?.remove();this.preview=null;
     try{
       const prepared=this.build(),group=window.SvgUtils.createElement('g',{'data-vector-preview':'chamfer-edit',transform:this.previewTransform(),'pointer-events':'none',fill:'none',stroke:'#1265d6','stroke-width':2,'stroke-dasharray':'6 3'});
@@ -59,7 +48,7 @@ class ChamferEditor {
       for(const [start,end] of result.segments)group.append(window.SvgUtils.createElement('line',{x1:start.x,y1:start.y,x2:end.x,y2:end.y}));
       for(const el of group.children)el.setAttribute('vector-effect','non-scaling-stroke');this.manager.canvas.append(group);this.preview=group;this.message='青い破線が3線分の再計算結果です。「適用」で元図形を更新します。';
     }catch(error){this.message=error.message;}
-    this.refresh();
+    this.controls.sync();if(refresh)this.refresh();else this.updateStatus();return !!this.preview;
   }
   apply(){
     try{
@@ -69,13 +58,14 @@ class ChamferEditor {
     }catch(error){this.message=error.message;}
     this.refresh();
   }
-  changed(){this.preview?.remove();this.preview=null;this.message='入力を変更しました。プレビューまたは適用で再計算します。';this.updateStatus();}
+  changed(){this.controls.stop(false);this.preview?.remove();this.preview=null;this.message='入力を変更しました。プレビューまたは適用で再計算します。';this.controls.sync();this.updateStatus();}
+  updateFields(){for(const i of [1,2]){const el=document.querySelector('[aria-label="面取りの距離'+i+'"]');if(el&&this.draft)el.value=this.draft['distance'+i];}}
   updateStatus(){const el=document.querySelector('[data-chamfer-edit-status]');if(el)el.textContent=this.message;}
   render(container){
     const status=document.createElement('p');status.dataset.chamferEditStatus='';status.setAttribute('role','status');status.style.cssText='font-size:12px;line-height:1.6';status.textContent=this.message;
     const button=(label,id,action)=>{const b=document.createElement('button');b.type='button';b.textContent=label;b.dataset.chamferAction=id;b.style.margin='4px';b.addEventListener('click',action);container.append(b);};
     if(!this.draft){button('面取りを再編集','begin',()=>this.begin());container.append(status);return;}
-    const d=this.draft,hint=document.createElement('p');hint.style.fontSize='12px';hint.textContent='元の角の交点から第一線分・第二線分に沿った距離を指定します。一方の距離は0にできます。各要素を別々に変更した場合は停止します。Escで取消します。';container.append(hint);
+    const d=this.draft,hint=document.createElement('p');hint.style.fontSize='12px';hint.textContent='距離1・距離2の接続点をドラッグすると、対応する距離だけを変更します。グリッド・Shift・直交モードの拘束後に、各線分方向へ投影します。一方の距離は0にできます。Escはドラッグ中ならその移動、それ以外は再編集全体を取り消します。各要素を別々に変更した場合は停止します。';container.append(hint);
     const original=document.createElement('p');original.style.fontSize='11px';original.textContent='元の線分: '+JSON.stringify({first:d.input.first,second:d.input.second});container.append(original);
     for(const [label,key] of [['面取りの距離1','distance1'],['面取りの距離2','distance2']]){
       const wrapper=document.createElement('label');wrapper.textContent=label;wrapper.style.cssText='display:block;font-size:12px;margin:10px 0';
