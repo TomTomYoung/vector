@@ -195,6 +195,7 @@ class ToolPropertiesPanel {
     show('描画', rendering);
     this.createPreferenceControls(section);
     this.createDocumentPresetControls(section, name);
+    this.createConstructionInputControls(section, name);
     if (this.currentTool.implementationError) {
       const p = document.createElement('p'); p.textContent = this.currentTool.implementationError; p.style.color = '#a22'; section.append(p);
     }
@@ -297,6 +298,41 @@ class ToolPropertiesPanel {
     button('図面の方式を次の作図に適用','apply',!!saved&&preset.canApply,()=>{if(preset.apply())this.currentTool.onImplementationChanged?.();});
     button('図面の方式記録を削除','clear',!!saved,()=>{preset.clear();host.save();});
     const link=document.createElement('a');link.textContent='図面プリセットの仕様と保存範囲';link.href='https://github.com/TomTomYoung/vector/blob/master/doc/document-implementation-presets.md';link.target='_blank';link.rel='noopener';details.append(link);
+    section.append(details);
+  }
+
+  createConstructionInputControls(section, name) {
+    const presets=this.toolManager.inputPresets,tool=this.currentTool;
+    if(!presets)return;
+    const stored=presets.snapshot(),saved=presets.entry(name),supported=typeof tool.exportInputPreset==='function'&&typeof tool.restoreInputPreset==='function';
+    if(!supported&&!stored)return;
+    const details=document.createElement('details');details.dataset.constructionInputPresets='';
+    const heading=document.createElement('summary');heading.textContent='作図入力のプリセット（SVGに保存）';details.append(heading);
+    const note=document.createElement('p');note.textContent='ツールごとに入力を1組記録できます。復元は現在の下書きを置き換えます。図形の確定はEnterで行います。';details.append(note);
+    if(stored){const list=document.createElement('p');list.textContent='記録のあるツール: '+Object.keys(stored.entries).map(n=>this.toolManager.tools[n]?.getTitle()??n).join('、');details.append(list);}
+    const status=document.createElement('p');status.dataset.constructionInputStatus='';status.setAttribute('role','status');status.textContent=presets.state.message;
+    status.style.cssText='font-size:12px;line-height:1.6';if(presets.state.warning)status.style.color='#a22';details.append(status);
+    if(saved){
+      const p=document.createElement('p');p.dataset.constructionInputRecord='';p.textContent=name+' / 入力形式 '+saved.version;
+      if(saved.version===1&&supported){
+        if(Array.isArray(saved.input.points))p.textContent+=' / 点数 '+saved.input.points.length;
+        if(saved.input.degree!==undefined)p.textContent+=' / 次数 '+saved.input.degree+' / 周期 '+(saved.input.periodic?'あり':'なし');
+        if(saved.input.box)p.textContent+=' / 切り取り範囲 '+JSON.stringify(saved.input.box);
+      }
+      if(!supported||saved.version!==tool.inputPresetVersion)p.textContent+=' / このツール・版は復元に未対応です。記録はSVGに保持します。';
+      details.append(p);
+    }
+    const button=(label,id,enabled,action)=>{
+      const b=document.createElement('button');b.type='button';b.textContent=label;b.dataset.constructionInputAction=id;b.disabled=!enabled;b.style.margin='3px';
+      b.onclick=()=>{action();this.updatePanel();const next=this.panel.querySelector('[data-construction-input-presets]');if(next)next.open=true;};details.append(b);
+    };
+    if(supported)button(saved?'現在の入力で図面の記録を更新':'現在の入力を図面に記録','record',true,()=>{if(presets.record(name,tool))this.toolManager.host.save();});
+    if(saved){
+      button('記録した入力を下書きへ復元','restore',supported&&saved.version===tool.inputPresetVersion,()=>presets.restore(name,tool));
+      button('このツールの入力記録を削除','remove',true,()=>{if(presets.remove(name))this.toolManager.host.save();});
+    }
+    if(!supported){const p=document.createElement('p');p.textContent='記録した点入力ツールを選択すると復元できます。';details.append(p);}
+    const link=document.createElement('a');link.textContent='作図入力の保存範囲と復元方法';link.href='https://github.com/TomTomYoung/vector/blob/master/doc/construction-input-presets.md';link.target='_blank';link.rel='noopener';details.append(link);
     section.append(details);
   }
 
