@@ -301,3 +301,5 @@ $$
 
 <a id="r14"></a>
 **R14 — Ceres Solver, Solving Non-linear Least Squares.** [公式ドキュメント](https://ceres-solver.readthedocs.io/latest/nnls_solving.html)、特にLevenberg–Marquardtの節。寸法拘束の実装時参照資料。
+
+フィレットの元の2線分・半径の保存と、計算・描画実装を選んで3要素を再計算する操作・制約は [fillet-editing.md](fillet-editing.md) に記載しています。

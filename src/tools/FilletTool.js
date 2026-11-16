@@ -16,6 +16,7 @@ class FilletTool extends BaseTool {
     super(canvas, toolManager);
     this.selectedLines = [];
     this.radius = 10;
+    this.implementationError = "";
   }
 
   getTitle() {
@@ -116,7 +117,9 @@ class FilletTool extends BaseTool {
   }
 
   createFillet() {
-    this.editCorner("fillet", this.selectedLines, {radius: this.radius});
+    this.implementationError = "";
+    try {this.editCorner("fillet", this.selectedLines, {radius: this.radius});}
+    catch (error) {this.implementationError = error.message;}
     this.clearSelection();
   }
 

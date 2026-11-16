@@ -24,6 +24,7 @@ import {readSplineSource} from '../adapters/splineSource.js';
 import * as circleSource from '../adapters/circleSource.js';
 import * as arcSource from '../adapters/arcSource.js';
 import * as pointSetSource from '../adapters/pointSetSource.js';
+import * as filletSource from '../adapters/filletSource.js';
 import {createImplementationPreferences} from '../adapters/implementationPreferences.js';
 import * as splineControlGeometry from '../adapters/splineControlGeometry.js';
 import * as circleControlGeometry from '../adapters/circleControlGeometry.js';
@@ -42,6 +43,7 @@ window.VectorUtils = {
   circleSource,
   arcSource,
   pointSetSource,
+  filletSource,
   createImplementationPreferences,
   splineControlGeometry,
   circleControlGeometry,

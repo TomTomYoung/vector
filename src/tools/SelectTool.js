@@ -605,6 +605,8 @@ class SelectTool extends BaseTool {
     if(splineEditor?.draft && splineEditor.element===this.selectedObject)return;
     const circleEditor=window.toolPropertiesPanel?.circleEditor;
     if(circleEditor?.draft && circleEditor.element===this.selectedObject)return;
+    const filletEditor=window.toolPropertiesPanel?.filletEditor;
+    if(filletEditor?.draft && filletEditor.element===this.selectedObject)return;
     const pointSetEditor=window.toolPropertiesPanel?.pointSetEditor;
     if(pointSetEditor?.draft && pointSetEditor.element===this.selectedObject)return;
     const arcEditor=window.toolPropertiesPanel?.arcEditor;
