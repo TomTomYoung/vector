@@ -1477,11 +1477,12 @@ await check('Fillet drag stops on linked-line changes and lock, handles singular
 await check('Fillet gestures ignore panning and other pointers and rollback nonpositive radii or failing calculations',async()=>{
   frame.scrollIntoView();const host=w.toolManager.host,preferences=host.exportPreferences(),snap=w.snapToGrid,ortho=w.orthoMode;w.snapToGrid=false;w.orthoMode=false;
   try{
-    const bridge=await addEditableFillet();openFillet(bridge);const original=JSON.stringify(filletState());
+    const bridge=await addEditableFillet();
+    host.registerImplementation('fillet',{id:'test-fillet-drag-limit',label:'Limited fillet',algorithm:'Fails above radius 15',run:(input,ops,execute)=>{if(input.radius>15)throw Error('radius plugin limit');return execute('fillet',input,{implementation:'default'});}});
+    openFillet(bridge);const original=JSON.stringify(filletState());
     w.zoomPanManager.spacePressed=true;pointer('pointerdown',filletHandle(),localScreen(bridge,{x:230,y:160}));assert(!w.toolPropertiesPanel.filletEditor.controls.drag,'panning wins');w.zoomPanManager.spacePressed=false;
     pointer('pointerdown',filletHandle(),localScreen(bridge,{x:230,y:160}));pointer('pointerup',doc,localScreen(bridge,{x:210,y:160}),{pointerId:99});assert(w.toolPropertiesPanel.filletEditor.controls.drag && filletRadius()===10,'other pointer ignored');
     pointer('pointerup',doc,localScreen(bridge,{x:245,y:160}));assert(filletRadius()===10 && !w.toolPropertiesPanel.filletEditor.controls.drag,'negative radius rolls back');
-    host.registerImplementation('fillet',{id:'test-fillet-drag-limit',label:'Limited fillet',algorithm:'Fails above radius 15',run:(input,ops,execute)=>{if(input.radius>15)throw Error('radius plugin limit');return execute('fillet',input,{implementation:'default'});}});
     filletField('フィレットの再計算実装','test-fillet-drag-limit','change');const selected=JSON.stringify(host.exportPreferences());pointer('pointerdown',filletHandle(),localScreen(bridge,{x:230,y:160}));pointer('pointerup',doc,localScreen(bridge,{x:210,y:160}));await paint();await paint();
     assert(filletRadius()===10 && JSON.stringify(filletState())===original && JSON.stringify(host.exportPreferences())===selected,'failed plugin rolls back without changing document or preferences');
     filletField('フィレットの再計算実装','default','change');pointer('pointerdown',filletHandle(),localScreen(bridge,{x:230,y:160}));pointer('pointerup',doc,localScreen(bridge,{x:215,y:170}));
