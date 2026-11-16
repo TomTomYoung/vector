@@ -194,6 +194,7 @@ class ToolPropertiesPanel {
     }
     show('描画', rendering);
     this.createPreferenceControls(section);
+    this.createDocumentPresetControls(section, name);
     if (this.currentTool.implementationError) {
       const p = document.createElement('p'); p.textContent = this.currentTool.implementationError; p.style.color = '#a22'; section.append(p);
     }
@@ -265,6 +266,38 @@ class ToolPropertiesPanel {
       input.value='';refresh();
     });
     section.append(input);button('方式設定JSONを読み込む','import',()=>input.click());
+  }
+
+  createDocumentPresetControls(section, name) {
+    const preset=this.toolManager.documentPreset;
+    if(!preset)return;
+    const details=document.createElement('details');details.dataset.documentPreset='';
+    const heading=document.createElement('summary');heading.textContent='この図面の方式プリセット（SVGに保存）';details.append(heading);
+    const note=document.createElement('p');note.textContent='現在の全ツールの方式を図面に記録し、別の環境でも適用できます。記録の更新・削除は元に戻せます。';details.append(note);
+    const status=document.createElement('p');status.dataset.documentPresetStatus='';status.textContent=preset.state.message;
+    status.setAttribute('role','status');status.style.cssText='font-size:12px;line-height:1.6';if(preset.state.warning)status.style.color='#a22';details.append(status);
+    const saved=preset.snapshot(), host=this.toolManager.host;
+    if(saved){
+      const count=document.createElement('p');count.textContent='記録済み: 計算 '+Object.keys(saved.calculation).length+'項目、描画 '+Object.keys(saved.rendering).length+'項目';details.append(count);
+      for(const type of ['calculation','rendering']){
+        const entry=saved[type][name],id=type==='calculation'?entry:entry?.id;
+        const p=document.createElement('p');p.dataset.documentPresetMethod=type;
+        const variants=type==='calculation'?host.implementations?.(name):host.renderers?.(name);
+        const info=variants?.find(v=>v.id===id);
+        p.textContent=(type==='calculation'?'記録された計算: ':'記録された描画: ')+(id ? id+' / '+(info?.algorithm??'この環境では未登録') : 'このツールの記録はありません。');
+        if(type==='rendering'&&entry)p.textContent+=' / 設定 '+JSON.stringify(entry.options);
+        p.style.cssText='font-size:12px;line-height:1.6';details.append(p);
+      }
+    }
+    const button=(label,id,enabled,action)=>{
+      const b=document.createElement('button');b.type='button';b.textContent=label;b.dataset.documentPresetAction=id;b.disabled=!enabled;b.style.margin='3px';
+      b.addEventListener('click',()=>{action();this.updatePanel();const reopened=this.panel.querySelector('[data-document-preset]');if(reopened)reopened.open=true;});details.append(b);
+    };
+    button(saved?'現在の方式で図面の記録を更新':'現在の方式を図面に記録','record',preset.canRecord,()=>{if(preset.record())host.save();});
+    button('図面の方式を次の作図に適用','apply',!!saved&&preset.canApply,()=>{if(preset.apply())this.currentTool.onImplementationChanged?.();});
+    button('図面の方式記録を削除','clear',!!saved,()=>{preset.clear();host.save();});
+    const link=document.createElement('a');link.textContent='図面プリセットの仕様と保存範囲';link.href='https://github.com/TomTomYoung/vector/blob/master/doc/document-implementation-presets.md';link.target='_blank';link.rel='noopener';details.append(link);
+    section.append(details);
   }
 
   createInstructionsSection() {
