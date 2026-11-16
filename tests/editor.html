@@ -2422,6 +2422,13 @@ function makeLinearDraft(app,name){
   else {if(name==='nthBezier')preferenceNumber(app,'次数 (n)',4);for(const p of linearDraftPoints.slice(0,linearDraftCount[name]))parameterClick(app,p.x,p.y);}
   return tool;
 }
+// MouseEvent client coordinates can be quantized; compare against the event actually dispatched.
+function draftClickPoint(app,x,y){
+  const canvas=app.d.getElementById('canvas'),matrix=canvas.getScreenCTM(),screen=new app.w.DOMPoint(x,y).matrixTransform(matrix);
+  const event=new app.w.MouseEvent('mousedown',{clientX:screen.x,clientY:screen.y,button:0,bubbles:true});
+  const point=new app.w.DOMPoint(event.clientX,event.clientY).matrixTransform(matrix.inverse());
+  canvas.dispatchEvent(event);parameterMouse(app,'mouseup',x,y);return point;
+}
 function finishLinearDraft(app,name){
   if(name==='line'||name==='polyline')constructionEnter(app);
   else {const p=linearDraftPoints[linearDraftCount[name]];parameterClick(app,p.x,p.y);}
@@ -2455,7 +2462,7 @@ await check('Restored straight lines retain drag preference, ignore mouse releas
     const tool=makeLinearDraft(app,'line');inputPresetAction(app,'record');await tick();draftKey(app,'Escape');tool.operationMode='drag';inputPresetAction(app,'restore');
     const history=app.w.undoStack.length,preview=tool.currentLine;parameterMouse(app,'mouseup',260,230);parameterMouse(app,'mouseleave',260,230);
     assert(tool.currentLine===preview&&tool.restoredDraft&&tool.operationMode==='drag'&&app.w.undoStack.length===history,'release and leave do not commit');
-    parameterClick(app,300,240);await tick();const el=app.w.DrawingDocument.capture().querySelector('[data-line-tool]');assert(el&&Number(el.getAttribute('x1'))===80&&Number(el.getAttribute('x2'))===300&&Number(el.getAttribute('y2'))===240,'explicit click endpoint '+JSON.stringify({coords:el&&['x1','y1','x2','y2'].map(k=>el.getAttribute(k)),active:app.w.toolManager.activeToolName,restored:tool.restoredDraft}));
+    const end=draftClickPoint(app,300,240);await tick();const el=app.w.DrawingDocument.capture().querySelector('[data-line-tool]');assert(el&&Number(el.getAttribute('x1'))===80&&Math.abs(Number(el.getAttribute('x2'))-end.x)<1e-5&&Math.abs(Number(el.getAttribute('y2'))-end.y)<1e-5,'explicit click endpoint '+JSON.stringify({coords:el&&['x1','y1','x2','y2'].map(k=>el.getAttribute(k)),active:app.w.toolManager.activeToolName,restored:tool.restoredDraft}));
     assert(tool.operationMode==='drag'&&!tool.restoredDraft,'preference retained after finish');inputPresetAction(app,'restore');draftKey(app,'Escape');assert(!tool.currentLine&&!tool.restoredDraft,'escape clears draft');
     inputPresetAction(app,'restore');app.d.getElementById('select-tool').click();assert(app.w.DrawingDocument.capture().querySelectorAll('[data-line-tool]').length===1,'switch cancels restored line');
     app.d.getElementById('line-tool').click();parameterMouse(app,'mousedown',350,100);parameterMouse(app,'mouseup',450,160);await tick();assert(app.w.DrawingDocument.capture().querySelectorAll('[data-line-tool]').length===2,'normal drag still works');
@@ -2487,8 +2494,8 @@ await check('Polyline restored drafts cancel on tool change and support duplicat
     const tool=makeLinearDraft(app,'polyline');inputPresetAction(app,'record');await tick();draftKey(app,'Escape');inputPresetAction(app,'restore');const history=app.w.undoStack.length;
     app.d.getElementById('select-tool').click();await tick();assert(!app.w.DrawingDocument.capture().querySelector('[data-polyline-tool]')&&app.w.undoStack.length===history,'switch never commits restored draft');
     app.d.getElementById('polyline-tool').click();inputPresetAction(app,'restore');parameterClick(app,120,220);draftKey(app,'Backspace');assert(tool.points.length===3,'continuation can be removed');
-    const canvas=app.d.getElementById('canvas');parameterClick(app,300,240);parameterClick(app,300,240);canvas.dispatchEvent(new app.w.MouseEvent('dblclick',{bubbles:true,cancelable:true}));await tick();
-    const el=app.w.DrawingDocument.capture().querySelector('[data-polyline-tool]');assert(el&&el.getAttribute('points').includes('300,240')&&app.w.undoStack.length===history+1,'double click commits final point once '+JSON.stringify({points:el?.getAttribute('points'),history,before:app.w.undoStack.length,live:tool.points}));
+    const canvas=app.d.getElementById('canvas'),end=draftClickPoint(app,300,240);parameterClick(app,300,240);canvas.dispatchEvent(new app.w.MouseEvent('dblclick',{bubbles:true,cancelable:true}));await tick();
+    const el=app.w.DrawingDocument.capture().querySelector('[data-polyline-tool]');const drawn=el?.getAttribute('points').split(' ').map(p=>p.split(',').map(Number));assert(drawn?.length===4&&Math.abs(drawn[3][0]-end.x)<1e-5&&Math.abs(drawn[3][1]-end.y)<1e-5&&app.w.undoStack.length===history+1,'double click commits final point once '+JSON.stringify({points:el?.getAttribute('points'),history,before:app.w.undoStack.length,live:tool.points}));
     app.d.getElementById('polyline-tool').click();const entry={version:1,input:{points:[{x:80,y:100},{x:80,y:100},{x:180,y:90}]}};app.w.toolManager.inputPresets.open({version:1,entries:{polyline:entry}});app.w.toolPropertiesPanel.updatePanel();inputPresetAction(app,'restore');assert(tool.points.length===3&&tool.points[0].x===tool.points[1].x,'duplicate input retained');
     inputPresetAction(app,'record');draftKey(app,'Escape');app.w.undo();assert(!tool.isDrawing,'metadata undo never restores live draft');
   }finally{app.element.remove();}
