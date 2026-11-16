@@ -14,6 +14,9 @@
       overflow: auto; tab-size: 2; border: 1px solid GrayText; border-radius: 4px; margin: 0; padding: .65rem; }
     select, button { font: inherit; max-width: 100%; padding: .25rem .55rem; } button { margin: .25rem .4rem .25rem 0; }
     pre { white-space: pre-wrap; overflow-wrap: anywhere; } output { display: block; min-height: 1.6em; }
+    details { margin-top: 1rem; } summary { cursor: pointer; font-weight: 650; }
+    #session-status { font-size: .9rem; margin-top: .5rem; }
+    #session-status[data-warning="true"] { color: light-dark(#a22,#ffb3b3); }
   </style>
 </head>
 <body>
@@ -30,6 +33,17 @@
     </div>
     <button id="run" type="button">実行</button><button id="reset" type="button">入力例に戻す</button><button id="stop" type="button" disabled>中止</button>
     <output id="status" aria-live="polite"></output>
+    <details>
+      <summary>入力・計算方式の保存と復元</summary>
+      <p>演算ごとに入力と方式を記憶します。書きかけのJSONも保存し、再読込後は最後に選んだ演算から再開します。復元だけでは計算しません。</p>
+      <button id="session-save" type="button">現在の作業を保存</button>
+      <button id="session-load" type="button">保存内容を復元</button>
+      <button id="session-export" type="button">作業JSONを書き出す</button>
+      <button id="session-import" type="button">作業JSONを読み込む</button>
+      <button id="session-reset" type="button">全演算を初期化・保存内容を削除</button>
+      <input id="session-file" type="file" accept=".json,application/json" hidden>
+    </details>
+    <output id="session-status" aria-live="polite"></output>
   </main>
   <script type="module" src="src/ui/GeometryWorkbench.js"></script>
 </body>
