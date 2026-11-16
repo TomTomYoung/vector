@@ -38,7 +38,7 @@ class NthBezierTool extends BezierToolBase {
         max: 12,
         step: 1,
         onChange: (value) => {
-          const nextDegree = Math.max(2, Math.round(value || 2));
+          const nextDegree = Math.min(12, Math.max(2, Math.round(value || 2)));
           if (nextDegree !== this.degree) {
             this.degree = nextDegree;
             this.cancelDrawing();

@@ -24,6 +24,27 @@ class PolylineTool extends BaseTool {
     this.selectedPolylineObserver = null;
     this.selectedPolylineObserverTarget = null;
     this.selectedPolylineMutationHandle = null;
+    this.inputPresetVersion = 1;
+    this.restoredDraft = false;
+    this.implementationError = '';
+  }
+
+  exportInputPreset() {
+    return window.VectorUtils.parseConstructionDraft('polyline',{version:1,input:{points:this.points}});
+  }
+
+  restoreInputPreset(entry) {
+    const {input}=window.VectorUtils.parseConstructionDraft('polyline',entry);
+    if(!this.isActive)throw Error('復元する作図ツールを先に選択してください。');
+    this.resetDrawing();this.points=input.points;this.isDrawing=this.points.length>0;
+    this.restoredDraft=this.isDrawing;
+    if(this.isDrawing){this.createPolyline();this.updatePolyline();}
+  }
+
+  resetDrawing() {
+    this.currentPolyline?.remove();this.previewLine?.remove();
+    this.currentPolyline=this.drawingObject=this.previewLine=null;
+    this.points=[];this.isDrawing=false;this.restoredDraft=false;this.implementationError='';
   }
 
   getTitle() {
@@ -85,7 +106,7 @@ class PolylineTool extends BaseTool {
 
   deactivate() {
     super.deactivate();
-    this.finishPolyline();
+    if(this.restoredDraft)this.resetDrawing();else this.finishPolyline();
     this.disconnectSelectedPolylineObserver();
     this.updatePanel();
   }
@@ -95,10 +116,12 @@ class PolylineTool extends BaseTool {
   }
 
   handleMouseDown(event) {
+    if(!this.isActive||event.button!==0)return;
     this.selectionInteractionInProgress = false;
     if (this.tryBeginSelectionDelegation(event)) {
       return;
     }
+    if(this.points.length>=1000){this.implementationError='一度に入力できる点は1000個までです。';this.updatePanel();return;}
 
     super.handleMouseDown(event);
     const point = this.getMousePosition(event);
@@ -183,9 +206,15 @@ class PolylineTool extends BaseTool {
 
   updatePolyline() {
     if (!this.currentPolyline) return;
-
-    this.draw("polyline", {points: this.points}, this.currentPolyline);
+    this.implementationError='';
+    try {
+      const drawn=this.draw("polyline", {points: this.points}, this.currentPolyline);
+      if(!drawn)throw Error('選択した実装ではポリラインを作図できません。');
+      this.currentPolyline=drawn;this.drawingObject=drawn;drawn.removeAttribute('visibility');
+    } catch(error){this.implementationError=error.message;this.currentPolyline.setAttribute('visibility','hidden');}
   }
+
+  onImplementationChanged() { if(this.currentPolyline)this.updatePolyline(); }
 
   updatePreview(previewPoint) {
     if (this.points.length === 0) return;
@@ -206,6 +235,7 @@ class PolylineTool extends BaseTool {
 
   finishPolyline() {
     let finishedPolyline = null;
+    if(this.points.length>=2){this.updatePolyline();if(this.implementationError){this.updatePanel();return null;}}
 
     if (this.points.length < 2) {
       if (this.currentPolyline) {
@@ -229,6 +259,8 @@ class PolylineTool extends BaseTool {
     this.currentPolyline = null;
     this.drawingObject = null;
     this.isDrawing = false;
+    this.restoredDraft = false;
+    this.implementationError = '';
 
     if (finishedPolyline && this.autoSelectAfterDraw) {
       if (
@@ -253,23 +285,15 @@ class PolylineTool extends BaseTool {
   }
 
   handleKeyDown(event) {
+    if(!this.isActive)return;
     if (event.key === "Escape") {
-      if (this.currentPolyline) {
-        this.canvas.removeChild(this.currentPolyline);
-      }
-      if (this.previewLine) {
-        this.canvas.removeChild(this.previewLine);
-        this.previewLine = null;
-      }
-      this.points = [];
-      this.currentPolyline = null;
-      this.drawingObject = null;
-      this.isDrawing = false;
+      event.preventDefault();this.resetDrawing();
       this.updatePanel();
       return;
     }
 
     if (event.key === "Enter" && this.isDrawing) {
+      event.preventDefault();
       this.finishPolyline();
       this.updatePanel();
       return;

@@ -26,6 +26,30 @@ class LineTool extends BaseTool {
     this.selectedLineObserver = null;
     this.selectedLineObserverTarget = null;
     this.selectedLineMutationHandle = null;
+    this.inputPresetVersion = 1;
+    this.inputPresetInstructions = '復元後はEnterで保存した端点のまま確定、または終点をクリックして確定します。Escで取消できます。通常の操作方法の設定は維持します。';
+    this.restoredDraft = false;
+    this.draftEndPoint = null;
+    this.implementationError = '';
+  }
+
+  exportInputPreset() {
+    let points=[];
+    if(this.isDrawing&&this.startPoint&&this.draftEndPoint){
+      const end=this.currentLine&&!this.implementationError?{x:Number(this.currentLine.getAttribute('x2')),y:Number(this.currentLine.getAttribute('y2'))}:this.draftEndPoint;
+      points=[this.startPoint,end];
+    }
+    return window.VectorUtils.parseConstructionDraft('line',{version:1,input:{points}});
+  }
+
+  restoreInputPreset(entry) {
+    const {input}=window.VectorUtils.parseConstructionDraft('line',entry);
+    if(!this.isActive)throw Error('復元する作図ツールを先に選択してください。');
+    this.resetDrawingState();
+    if(input.points.length){
+      this.beginLine(input.points[0]);this.restoredDraft=true;
+      this.updateCurrentLineEnd(input.points[1],false);
+    }
   }
 
   getTitle() {
@@ -33,6 +57,7 @@ class LineTool extends BaseTool {
   }
 
   getInstructions() {
+    if(this.restoredDraft)return [this.inputPresetInstructions];
     const items =
       this.operationMode === "twoClick"
         ? [
@@ -174,6 +199,8 @@ class LineTool extends BaseTool {
 
     const startPoint = this.getMousePosition(event);
 
+    if(this.restoredDraft){this.updateCurrentLineEnd(startPoint);this.finishLine();return;}
+
     if (this.operationMode === "drag") {
       this.beginLine(startPoint);
       return;
@@ -209,6 +236,7 @@ class LineTool extends BaseTool {
     }
 
     if (!this.isActive) return;
+    if(this.restoredDraft)return;
 
     if (this.operationMode === "drag") {
       if (this.isDrawing && this.currentLine) {
@@ -242,7 +270,7 @@ class LineTool extends BaseTool {
   }
 
   finishLine() {
-    if (!this.currentLine) return;
+    if (!this.currentLine || this.implementationError) {this.requestToolPanelRefresh();return;}
 
     const finishedLine = this.currentLine;
     const lineId = this.ensureLineId(finishedLine);
@@ -259,6 +287,8 @@ class LineTool extends BaseTool {
     this.drawingObject = null;
     this.startPoint = null;
     this.isDrawing = false;
+    this.restoredDraft = false;
+    this.draftEndPoint = null;
 
     if (lineId) {
       this.selectedLineId = lineId;
@@ -283,9 +313,13 @@ class LineTool extends BaseTool {
   }
 
   handleKeyDown(event) {
+    if(!this.isActive)return;
+    if(event.key==='Enter'&&this.restoredDraft){event.preventDefault();this.finishLine();}
     // Escapeキーでキャンセル
     if (event.key === "Escape" && this.isDrawing) {
+      event.preventDefault();
       this.resetDrawingState();
+      this.requestToolPanelRefresh();
     }
   }
 
@@ -293,6 +327,7 @@ class LineTool extends BaseTool {
     this.resetDrawingState();
 
     this.startPoint = point;
+    this.draftEndPoint = {...point};
     this.isDrawing = true;
 
     // SvgUtils.createLine を使用
@@ -314,11 +349,18 @@ class LineTool extends BaseTool {
     this.canvas.appendChild(this.currentLine);
   }
 
-  updateCurrentLineEnd(point) {
+  updateCurrentLineEnd(point, ortho = window.orthoMode) {
     if (!this.currentLine || !this.startPoint) return;
 
-    this.draw("line", {start: this.startPoint, end: point, ortho: window.orthoMode}, this.currentLine);
+    this.draftEndPoint={...point};this.implementationError='';
+    try {
+      const drawn=this.draw("line", {start: this.startPoint, end: point, ortho}, this.currentLine);
+      if(!drawn)throw Error('選択した実装では直線を作図できません。');
+      this.currentLine=drawn;this.drawingObject=drawn;drawn.removeAttribute('visibility');
+    } catch(error){this.implementationError=error.message;this.currentLine.setAttribute('visibility','hidden');}
   }
+
+  onImplementationChanged() { if(this.draftEndPoint)this.updateCurrentLineEnd(this.draftEndPoint,false); }
 
   onCommonPropertiesChanged(properties) {
     if (!this.currentLine) {
@@ -336,6 +378,9 @@ class LineTool extends BaseTool {
     this.drawingObject = null;
     this.startPoint = null;
     this.isDrawing = false;
+    this.restoredDraft = false;
+    this.draftEndPoint = null;
+    this.implementationError = '';
   }
 
   applyLineAppearance(line, properties = null) {

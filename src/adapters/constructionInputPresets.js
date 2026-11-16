@@ -1,4 +1,5 @@
 export const constructionInputTools = ['bSplineCurve','nurbsCurve','convexHull','triangulatePolygon','delaunayTriangles','voronoiCells','fitLine','fitCircle','minimumEnclosingCircle'];
+export const constructionDraftTools = ['line','polyline','quadraticBezier','cubicBezier','nthBezier'];
 export const constructionParameterFields = {
   spline:[['tension','標準実装の接線倍率',0,4]],
   fillet:[['radius','半径',0.5,1000]],
@@ -30,6 +31,14 @@ export function parseConstructionInputPresets(value) {
     if(!Number.isSafeInteger(entry.version)||entry.version<1||!record(entry.input))fail();
     // Unknown tools/entry versions are retained, never interpreted by the built-in controllers.
     if(entry.version!==1)continue;
+    if(constructionDraftTools.includes(name)){
+      const input=entry.input;keys(input,['points',...(name==='nthBezier'?['degree']:[])]);
+      if(name==='nthBezier'&&(!Number.isInteger(input.degree)||input.degree<2||input.degree>12))fail();
+      const max={line:2,polyline:1000,quadraticBezier:3,cubicBezier:4,nthBezier:input.degree+1}[name];
+      if(!Array.isArray(input.points)||input.points.length>max||(name==='line'&&input.points.length===1))fail();
+      for(const p of input.points){keys(p,['x','y']);if(!Number.isFinite(p.x)||!Number.isFinite(p.y))fail();}
+      continue;
+    }
     if(Object.hasOwn(constructionParameterFields,name)){
       const fields=constructionParameterFields[name];keys(entry.input,fields.map(([key])=>key));
       for(const [key,label,min,max] of fields){const v=entry.input[key];if(!Number.isFinite(v)||v<min||v>max)throw RangeError(label+'は'+min+'〜'+max+'の有限数で指定してください。');}
@@ -54,6 +63,11 @@ export function parseConstructionInputPresets(value) {
 
 export function parseConstructionInput(name, entry) {
   if(!constructionInputTools.includes(name)||entry?.version!==1)throw Error('この作図入力のツール・版には対応していません。');
+  return parseConstructionInputPresets({version:1,entries:{[name]:entry}}).entries[name];
+}
+
+export function parseConstructionDraft(name, entry) {
+  if(!constructionDraftTools.includes(name)||entry?.version!==1)throw Error('この線・ベジェ下書きのツール・版には対応していません。');
   return parseConstructionInputPresets({version:1,entries:{[name]:entry}}).entries[name];
 }
 
@@ -91,7 +105,7 @@ export function createConstructionInputPresets() {
         const entry=this.entry(name);if(!entry)throw Error('このツールの記録はありません。');
         if(typeof controller?.restoreInputPreset!=='function'||controller.inputPresetVersion!==entry.version)throw Error(name+'の作図入力のツール・版に対応していません。記録は保持しています。');
         controller.restoreInputPreset(entry);
-        const message=controller.inputPresetMode==='parameters'?'の作図設定を復元しました。入力点と対象の選択は維持します。':'の入力を下書きに復元しました。Enterで図形を確定できます。';
+        const message=controller.inputPresetMode==='parameters'?'の作図設定を復元しました。入力点と対象の選択は維持します。':'の入力を下書きに復元しました。'+(controller.inputPresetInstructions??'Enterで図形を確定できます。');
         status(name+message+(controller.implementationError?' '+controller.implementationError:''),!!controller.implementationError);return true;
       }catch(error){status('作図入力を復元できません。'+error.message,true);return false;}
     },
