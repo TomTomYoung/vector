@@ -11,6 +11,7 @@ class ToolPropertiesPanel {
     this.arcEditor = new ArcEditor(toolManager, () => this.updatePanel());
     this.pointSetEditor = new PointSetEditor(toolManager, () => this.updatePanel());
     this.filletEditor = new FilletEditor(toolManager, () => this.updatePanel());
+    this.chamferEditor = new ChamferEditor(toolManager, () => this.updatePanel());
 
     // デフォルトの共通プロパティ
     this.commonProperties = {
@@ -73,6 +74,7 @@ class ToolPropertiesPanel {
     this.arcEditor.select(this.toolManager.activeToolName === 'select' && selected?.hasAttribute('data-vector-arc') ? selected : null);
     this.pointSetEditor.select(this.toolManager.activeToolName === 'select' && selected?.hasAttribute('data-vector-pointset') ? selected : null);
     this.filletEditor.select(this.toolManager.activeToolName === 'select' && selected?.hasAttribute('data-vector-fillet') ? selected : null);
+    this.chamferEditor.select(this.toolManager.activeToolName === 'select' && selected?.tagName === 'line' && selected.hasAttribute('data-vector-chamfer') ? selected : null);
     if (!this.currentTool) {
       this.panel.innerHTML = "<p style='color: #666;'>ツールが選択されていません</p>";
       return;
@@ -95,6 +97,10 @@ class ToolPropertiesPanel {
     this.createInstructionsSection();
 
     this.createImplementationSection();
+    if (this.chamferEditor.element) {
+      const section = this.createSection('面取りの元データを編集', {emphasize: true});
+      section.dataset.chamferEditor = '';this.chamferEditor.render(section);this.panel.append(section);
+    }
     if (this.filletEditor.element) {
       const section = this.createSection('フィレットの元データを編集', {emphasize: true});
       section.dataset.filletEditor = '';this.filletEditor.render(section);this.panel.append(section);
@@ -211,6 +217,7 @@ class ToolPropertiesPanel {
             (record.arcEdit?.origin ? ` / 元の生成 ${record.arcEdit.origin.tool}: ${record.arcEdit.origin.calculation?.algorithm ?? '不明'} / 元の描画 ${record.arcEdit.origin.rendering?.algorithm ?? '不明'}` : '') +
             (record.pointSetEdit?.origin ? ` / 元の生成 ${record.pointSetEdit.origin.tool}: ${record.pointSetEdit.origin.calculation?.algorithm ?? '不明'} / 元の描画 ${record.pointSetEdit.origin.rendering?.algorithm ?? '不明'}` : '') +
             (record.filletEdit?.origin ? ` / 元の生成 ${record.filletEdit.origin.tool}: ${record.filletEdit.origin.calculation?.algorithm ?? '不明'} / 元の描画 ${record.filletEdit.origin.rendering?.algorithm ?? '不明'}` : '') +
+            (record.chamferEdit?.origin ? ` / 元の生成 ${record.chamferEdit.origin.tool}: ${record.chamferEdit.origin.calculation?.algorithm ?? '不明'} / 元の描画 ${record.chamferEdit.origin.rendering?.algorithm ?? '不明'}` : '') +
             (record.sampling ? ` / 描画枝 ${record.sampling.branches}、省略区間 ${record.sampling.omitted.length}` : '') +
             (record.warning ? ' / ' + record.warning : '') + (record.note ? ' / ' + record.note : '') : '方式の記録なし（旧データ・外部SVG等）';
         } catch { text.textContent = '方式の記録を読めません。'; }

@@ -16,6 +16,7 @@ class ChamferTool extends BaseTool {
     this.selectedLines = [];
     this.distance1 = 10;
     this.distance2 = 10;
+    this.implementationError = "";
   }
 
   getTitle() {
@@ -44,7 +45,7 @@ class ChamferTool extends BaseTool {
         type: "number",
         label: "距離1",
         value: this.distance1,
-        min: 0.5,
+        min: 0,
         max: 1000,
         step: 0.5,
         onChange: (value) => {
@@ -55,7 +56,7 @@ class ChamferTool extends BaseTool {
         type: "number",
         label: "距離2",
         value: this.distance2,
-        min: 0.5,
+        min: 0,
         max: 1000,
         step: 0.5,
         onChange: (value) => {
@@ -127,7 +128,9 @@ class ChamferTool extends BaseTool {
   }
 
   createChamfer() {
-    this.editCorner("chamfer", this.selectedLines, {distance1: this.distance1, distance2: this.distance2});
+    this.implementationError = "";
+    try {this.editCorner("chamfer", this.selectedLines, {distance1: this.distance1, distance2: this.distance2});}
+    catch (error) {this.implementationError = error.message;}
     this.clearSelection();
   }
 

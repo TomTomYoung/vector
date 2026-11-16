@@ -41,36 +41,22 @@ class BaseTool {
   }
 
   editCorner(name, lines, params) {
-    const {outline, writePoints} = window.VectorUtils.linearEditing;
+    const {outline} = window.VectorUtils.linearEditing;
     const shapes = lines.map(line => outline(line, this.canvas));
     if (shapes.length !== 2 || shapes.some(shape => !shape)) return;
-    if(name==='fillet') {
-      const api=window.VectorUtils.filletSource,host=this.toolManager.host;
-      if(lines[0]===lines[1]||lines.some(line=>line.tagName!=='line'||!this.selectTool.canSelect(line)))throw Error('表示中でロックされていない異なる2線分を指定してください。');
-      const input=api.filletInput({...params,first:shapes[0].points,second:shapes[1].points}),result=this.run(name,input);
-      if(!result)throw Error('この2線分と半径ではフィレットを作れません。');
-      const matrices=lines.map(line=>api.filletRelativeMatrix(this.canvas,line));
-      const ids=lines.map(line=>{
-        const id=line.getAttribute('data-vector-fillet-line-id');
-        return id && [...this.canvas.querySelectorAll('[data-vector-fillet-line-id]')].filter(el=>el.getAttribute('data-vector-fillet-line-id')===id).length===1?id:crypto.randomUUID();
-      });
-      const prepared=api.prepareFilletOutput(host,input,result,lines,matrices,ids);
-      window.SvgUtils.setAttributes(prepared.bridge,{stroke:lines[0].getAttribute('stroke'),'stroke-width':lines[0].getAttribute('stroke-width'),fill:'none','data-layer':window.currentLayerId});
-      api.applyFilletLines(lines,prepared.lines);this.canvas.append(prepared.bridge);this.saveState();return;
-    }
-    const edit = this.run(name, {...params, first: shapes[0].points, second: shapes[1].points});
-    if (!edit) return;
-    const bridge = this.toolManager.host.render(edit.bridge, null, {toolName: name});
-    window.SvgUtils.setAttributes(bridge, {
-      stroke: lines[0].getAttribute("stroke"), "stroke-width": lines[0].getAttribute("stroke-width"),
-      fill: "none", "data-layer": window.currentLayerId,
+    if(!['fillet','chamfer'].includes(name))throw Error('対応していない角編集です。');
+    const fillet=name==='fillet',api=fillet?window.VectorUtils.filletSource:window.VectorUtils.chamferSource,host=this.toolManager.host;
+    if(lines[0]===lines[1]||lines.some(line=>line.tagName!=='line'||!this.selectTool.canSelect(line)))throw Error('表示中でロックされていない異なる2線分を指定してください。');
+    const input=(fillet?api.filletInput:api.chamferInput)({...params,first:shapes[0].points,second:shapes[1].points}),result=this.run(name,input);
+    if(!result)throw Error(fillet?'この2線分と半径ではフィレットを作れません。':'この2線分と距離では面取りを作れません。');
+    const matrices=lines.map(line=>(fillet?api.filletRelativeMatrix:api.chamferRelativeMatrix)(this.canvas,line)),attribute='data-vector-'+name+'-line-id';
+    const ids=lines.map(line=>{
+      const id=line.getAttribute(attribute);
+      return id&&[...this.canvas.querySelectorAll('['+attribute+']')].filter(el=>el.getAttribute(attribute)===id).length===1?id:crypto.randomUUID();
     });
-    this.saveState();
-    edit.segments.forEach((points, i) => {
-      writePoints(lines[i], points, shapes[i].inverse);
-      this.toolManager.host.annotate?.(lines[i], name, {note: '既存輪郭への編集。描画形状は線分です。'});
-    });
-    this.canvas.appendChild(bridge);
+    const prepared=(fillet?api.prepareFilletOutput:api.prepareChamferOutput)(host,input,result,lines,matrices,ids);
+    window.SvgUtils.setAttributes(prepared.bridge,{stroke:lines[0].getAttribute('stroke'),'stroke-width':lines[0].getAttribute('stroke-width'),fill:'none','data-layer':window.currentLayerId});
+    (fillet?api.applyFilletLines:api.applyChamferLines)(lines,prepared.lines);this.canvas.append(prepared.bridge);this.saveState();
   }
 
   // ツール名（オーバーライド用）
