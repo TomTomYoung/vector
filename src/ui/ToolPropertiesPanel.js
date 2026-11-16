@@ -305,10 +305,11 @@ class ToolPropertiesPanel {
     const presets=this.toolManager.inputPresets,tool=this.currentTool;
     if(!presets)return;
     const stored=presets.snapshot(),saved=presets.entry(name),supported=typeof tool.exportInputPreset==='function'&&typeof tool.restoreInputPreset==='function';
+    const parameters=tool.inputPresetMode==='parameters';
     if(!supported&&!stored)return;
     const details=document.createElement('details');details.dataset.constructionInputPresets='';
     const heading=document.createElement('summary');heading.textContent='作図入力のプリセット（SVGに保存）';details.append(heading);
-    const note=document.createElement('p');note.textContent='ツールごとに入力を1組記録できます。復元は現在の下書きを置き換えます。図形の確定はEnterで行います。';details.append(note);
+    const note=document.createElement('p');note.textContent=parameters?'数値設定をツールごとに1組記録できます。復元時は入力点と対象の選択を維持します。作図・加工は通常の確定操作で行います。':'ツールごとに入力を1組記録できます。復元は現在の下書きを置き換えます。図形の確定はEnterで行います。';details.append(note);
     if(stored){const list=document.createElement('p');list.textContent='記録のあるツール: '+Object.keys(stored.entries).map(n=>this.toolManager.tools[n]?.getTitle()??n).join('、');details.append(list);}
     const status=document.createElement('p');status.dataset.constructionInputStatus='';status.setAttribute('role','status');status.textContent=presets.state.message;
     status.style.cssText='font-size:12px;line-height:1.6';if(presets.state.warning)status.style.color='#a22';details.append(status);
@@ -318,6 +319,7 @@ class ToolPropertiesPanel {
         if(Array.isArray(saved.input.points))p.textContent+=' / 点数 '+saved.input.points.length;
         if(saved.input.degree!==undefined)p.textContent+=' / 次数 '+saved.input.degree+' / 周期 '+(saved.input.periodic?'あり':'なし');
         if(saved.input.box)p.textContent+=' / 切り取り範囲 '+JSON.stringify(saved.input.box);
+        if(parameters&&Object.hasOwn(window.VectorUtils.constructionParameterFields,name))for(const [key,label] of window.VectorUtils.constructionParameterFields[name])p.textContent+=' / '+label+' '+saved.input[key];
       }
       if(!supported||saved.version!==tool.inputPresetVersion)p.textContent+=' / このツール・版は復元に未対応です。記録はSVGに保持します。';
       details.append(p);
@@ -328,10 +330,10 @@ class ToolPropertiesPanel {
     };
     if(supported)button(saved?'現在の入力で図面の記録を更新':'現在の入力を図面に記録','record',true,()=>{if(presets.record(name,tool))this.toolManager.host.save();});
     if(saved){
-      button('記録した入力を下書きへ復元','restore',supported&&saved.version===tool.inputPresetVersion,()=>presets.restore(name,tool));
+      button(parameters?'記録した作図設定を復元':'記録した入力を下書きへ復元','restore',supported&&saved.version===tool.inputPresetVersion,()=>presets.restore(name,tool));
       button('このツールの入力記録を削除','remove',true,()=>{if(presets.remove(name))this.toolManager.host.save();});
     }
-    if(!supported){const p=document.createElement('p');p.textContent='記録した点入力ツールを選択すると復元できます。';details.append(p);}
+    if(!supported){const p=document.createElement('p');p.textContent='記録したツールを選択すると復元できます。';details.append(p);}
     const link=document.createElement('a');link.textContent='作図入力の保存範囲と復元方法';link.href='https://github.com/TomTomYoung/vector/blob/master/doc/construction-input-presets.md';link.target='_blank';link.rel='noopener';details.append(link);
     section.append(details);
   }

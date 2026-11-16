@@ -1,4 +1,10 @@
 export const constructionInputTools = ['bSplineCurve','nurbsCurve','convexHull','triangulatePolygon','delaunayTriangles','voronoiCells','fitLine','fitCircle','minimumEnclosingCircle'];
+export const constructionParameterFields = {
+  spline:[['tension','標準実装の接線倍率',0,4]],
+  fillet:[['radius','半径',0.5,1000]],
+  chamfer:[['distance1','距離1',0,1000],['distance2','距離2',0,1000]],
+  offset:[['offsetDistance','オフセット距離',0.5,1000],['miterLimit','Miter実装の上限比',1,1000]],
+};
 const record = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 const validName = v => typeof v === 'string' && /^[a-zA-Z0-9_-]{1,100}$/.test(v) && !['__proto__','prototype','constructor'].includes(v);
 const fail = () => {throw new TypeError('作図入力プリセットの形式が不正です。');};
@@ -23,7 +29,13 @@ export function parseConstructionInputPresets(value) {
     if(!validName(name))fail();keys(entry,['version','input']);
     if(!Number.isSafeInteger(entry.version)||entry.version<1||!record(entry.input))fail();
     // Unknown tools/entry versions are retained, never interpreted by the built-in controllers.
-    if(entry.version!==1||!constructionInputTools.includes(name))continue;
+    if(entry.version!==1)continue;
+    if(Object.hasOwn(constructionParameterFields,name)){
+      const fields=constructionParameterFields[name];keys(entry.input,fields.map(([key])=>key));
+      for(const [key,label,min,max] of fields){const v=entry.input[key];if(!Number.isFinite(v)||v<min||v>max)throw RangeError(label+'は'+min+'〜'+max+'の有限数で指定してください。');}
+      continue;
+    }
+    if(!constructionInputTools.includes(name))continue;
     const spline=['bSplineCurve','nurbsCurve'].includes(name),input=entry.input;
     keys(input,['points',...(spline?['degree','periodic','knotsText']:[]),...(name==='nurbsCurve'?['weightsText']:[]),...(name==='voronoiCells'?['box']:[])]);
     if(!Array.isArray(input.points)||input.points.length>1000)fail();
@@ -43,6 +55,19 @@ export function parseConstructionInputPresets(value) {
 export function parseConstructionInput(name, entry) {
   if(!constructionInputTools.includes(name)||entry?.version!==1)throw Error('この作図入力のツール・版には対応していません。');
   return parseConstructionInputPresets({version:1,entries:{[name]:entry}}).entries[name];
+}
+
+export function exportConstructionParameters(name, controller) {
+  if(!Object.hasOwn(constructionParameterFields,name))throw Error('このツールの作図設定には対応していません。');
+  const input=Object.fromEntries(constructionParameterFields[name].map(([key])=>[key,controller[key]]));
+  return parseConstructionInputPresets({version:1,entries:{[name]:{version:1,input}}}).entries[name];
+}
+
+export function restoreConstructionParameters(name, entry, controller) {
+  if(!Object.hasOwn(constructionParameterFields,name)||entry?.version!==1)throw Error('この作図設定のツール・版には対応していません。');
+  const checked=parseConstructionInputPresets({version:1,entries:{[name]:entry}}).entries[name];
+  if(!controller.isActive)throw Error('復元する作図ツールを先に選択してください。');
+  Object.assign(controller,checked.input);
 }
 
 export function createConstructionInputPresets() {
@@ -66,7 +91,8 @@ export function createConstructionInputPresets() {
         const entry=this.entry(name);if(!entry)throw Error('このツールの記録はありません。');
         if(typeof controller?.restoreInputPreset!=='function'||controller.inputPresetVersion!==entry.version)throw Error(name+'の作図入力のツール・版に対応していません。記録は保持しています。');
         controller.restoreInputPreset(entry);
-        status(name+'の入力を下書きに復元しました。Enterで図形を確定できます。'+(controller.implementationError?' '+controller.implementationError:''),!!controller.implementationError);return true;
+        const message=controller.inputPresetMode==='parameters'?'の作図設定を復元しました。入力点と対象の選択は維持します。':'の入力を下書きに復元しました。Enterで図形を確定できます。';
+        status(name+message+(controller.implementationError?' '+controller.implementationError:''),!!controller.implementationError);return true;
       }catch(error){status('作図入力を復元できません。'+error.message,true);return false;}
     },
     remove(name){

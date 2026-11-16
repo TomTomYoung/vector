@@ -16,6 +16,15 @@ class SplineTool extends BaseTool {
     this.isDrawing = false;
     this.previewPoints = [];
     this.tension = 0.5;
+    this.inputPresetVersion = 1; this.inputPresetMode = 'parameters';
+  }
+
+  exportInputPreset() {return window.VectorUtils.exportConstructionParameters('spline',this);}
+  restoreInputPreset(entry) {
+    window.VectorUtils.restoreConstructionParameters('spline',entry,this);
+    this.implementationError = '';
+    try {if(this.points.length)this.updateSpline();}
+    catch(error) {this.implementationError=error.message;this.currentSpline=null;}
   }
 
   getToolProperties() {

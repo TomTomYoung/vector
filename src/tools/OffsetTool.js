@@ -16,10 +16,17 @@ class OffsetTool extends BaseTool {
     this.selectedElement = null;
     this.offsetDistance = 10;
     this.miterLimit = 10;
+    this.inputPresetVersion = 1; this.inputPresetMode = 'parameters';
   }
 
   getTitle() {
     return "オフセット";
+  }
+
+  exportInputPreset() {return window.VectorUtils.exportConstructionParameters('offset',this);}
+  restoreInputPreset(entry) {
+    window.VectorUtils.restoreConstructionParameters('offset',entry,this);
+    this.implementationError = '';
   }
 
   getInstructions() {
