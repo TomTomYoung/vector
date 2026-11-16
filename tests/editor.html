@@ -2217,7 +2217,7 @@ await check('All nine point-input tools save independent drafts in SVG and resto
 await check('Unfinished NURBS text remains an editable draft after SVG reload and can be repaired before committing',async()=>{
   const app=await preferenceEditor('{preferences:false}');
   try{
-    let tool=inputDraft(app,'nurbsCurve',constructionPoints.slice(0,3));tool.knotsText='<script>literal draft</script>';tool.weightsText='1, -';tool.redraw();app.w.toolPropertiesPanel.updatePanel();inputPresetAction(app,'record');
+    let tool=inputDraft(app,'nurbsCurve',constructionPoints.slice(0,3));tool.knotsText='<script>literal draft<\/script>';tool.weightsText='1, -';tool.redraw();app.w.toolPropertiesPanel.updatePanel();inputPresetAction(app,'record');
     const saved=inputPresetState(app),xml=app.w.DrawingDocument.serialize();app.w.DrawingDocument.open(xml);app.d.getElementById('nurbsCurve-tool').click();inputPresetAction(app,'restore');tool=app.w.toolManager.tools.nurbsCurve;
     assert(tool.points.length===3&&tool.weightsText==='1, -'&&tool.knotsText.includes('<script>')&&app.d.querySelector('[data-construction-input-status]').textContent.includes('下書き'),'unfinished text restored as data');
     assert(!app.d.querySelector('[data-construction-tool="nurbsCurve"]')&&tool.implementationError,'invalid geometry not committed');
