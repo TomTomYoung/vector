@@ -2103,7 +2103,7 @@ await check('Drawing presets travel in SVG, remain inert on opening, and explici
     for(const p of [[80,80],[100,160],[210,90]]){event('mousedown',...p);event('mouseup',...p);}target.d.dispatchEvent(new target.w.KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
     const spline=c.querySelector('[data-spline-tool]');assert(JSON.parse(spline.getAttribute('data-vector-implementation')).calculation.id==='centripetal','drawing uses restored calculation');
     target.d.getElementById('circle-tool').click();event('mousedown',350,180);event('mousemove',390,180);event('mouseup',390,180);
-    const circle=c.querySelector('[data-circle-tool]');assert(circle.tagName==='path'&&circle.getAttribute('d').includes('C')&&JSON.parse(circle.getAttribute('data-vector-implementation')).rendering.id==='cubic','drawing uses restored renderer');
+    const circle=c.querySelector('[data-vector-circle]');assert(circle?.tagName==='path'&&circle.getAttribute('d').includes('C')&&JSON.parse(circle.getAttribute('data-vector-implementation')).rendering.id==='cubic','drawing uses restored renderer');
     target.d.getElementById('nurbsCurve-tool').click();assert(target.d.querySelector('input[aria-label="描画の分割数"]').value==='130','tool field uses saved option');
     assert(target.d.getElementById('kept').getAttribute('r')==='5'&&target.w.layers.some(l=>l.id===2),'old figure and layer retained');
   }finally{source.element.remove();target?.element.remove();localStorage.removeItem(key);}
