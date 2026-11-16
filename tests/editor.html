@@ -1407,6 +1407,94 @@ await check('Fillet creation rejects invalid results before trimming, and splitt
   }finally{host.restorePreferences(before);}
 });
 
+const filletHandle=()=>canvas.querySelector('[data-fillet-radius-control]');
+const filletRadius=()=>w.toolPropertiesPanel.filletEditor.input().radius;
+const filletControl=()=>w.VectorUtils.filletControlGeometry.filletRadiusControl(w.toolPropertiesPanel.filletEditor.input());
+
+await check('Fillet radius dragging preserves transformed originals for all renderers and commits all three elements in one history step',async()=>{
+  frame.scrollIntoView();const host=w.toolManager.host,preferences=host.exportPreferences(),viewport=w.zoomPanManager.getTransform(),snap=w.snapToGrid,ortho=w.orthoMode;w.snapToGrid=false;w.orthoMode=false;
+  try{
+    for(const renderer of ['default','sampled','cubic']){
+      let bridge=await addEditableFillet(renderer);const parent=w.SvgUtils.createElement('g',{transform:'translate(500 30) rotate(13) scale(-0.8 1.2)'});canvas.append(parent);parent.append(doc.getElementById('fh'),doc.getElementById('fv'),bridge);
+      w.zoomPanManager.setTransform(1.4,20,10);w.saveState();await tick();w.undoStack.length=0;const original=JSON.stringify(filletState());openFillet(bridge);
+      assert(filletHandle() && !canvas.querySelector('.control-handle'),'only fillet radius handle');
+      pointer('pointerdown',filletHandle(),localScreen(bridge,{x:232,y:161}));pointer('pointermove',doc,localScreen(bridge,{x:222,y:170}));await paint();
+      assert(Math.abs(filletRadius()-20)<1e-6,'grab offset retained and normal displacement projected');pointer('pointerup',doc,localScreen(bridge,{x:212,y:180}));
+      assert(Math.abs(filletRadius()-30)<1e-6 && Math.abs(Number(doc.querySelector('[aria-label="フィレットの半径"]').value)-30)<1e-6,'last pointer and numeric field synchronized');
+      const preview=canvas.querySelector('[data-vector-preview="fillet-edit"]');assert(preview?.children.length===3 && canvas.lastElementChild.getAttribute('data-vector-preview')==='fillet-controls','three preview shapes below handle');
+      const a=bridge.getScreenCTM(),b=preview.getScreenCTM();assert(['a','b','c','d','e','f'].every(k=>Math.abs(a[k]-b[k])<1e-5),'transformed preview alignment');
+      assert(JSON.stringify(filletState())===original && w.undoStack.length===0 && !w.DrawingDocument.capture().querySelector('[data-vector-preview]'),'draft excluded from document and history');
+      filletAction('apply');await tick();assert(Math.abs(Number(doc.getElementById('fh').getAttribute('x2'))-210)<1e-6 && Math.abs(Number(doc.getElementById('fv').getAttribute('y1'))-190)<1e-6 && w.undoStack.length===1,'both tangencies updated once');
+      assert(!filletHandle() && !w.toolPropertiesPanel.filletEditor.controls.drag,'gesture cleanup');key('z',{ctrlKey:true});await tick();assert(JSON.stringify(filletState())===original,'one undo restores all elements');
+      key('Z',{ctrlKey:true,shiftKey:true});await tick();bridge=doc.getElementById('editable-fillet');assert(Math.abs(JSON.parse(bridge.getAttribute('data-vector-fillet')).input.radius-30)<1e-6,'redo radius');
+    }
+  }finally{host.restorePreferences(preferences);w.snapToGrid=snap;w.orthoMode=ortho;w.zoomPanManager.setTransform(viewport.zoom,viewport.panX,viewport.panY);}
+});
+
+await check('Fillet Escape, pointer cancellation, lost capture and blur roll back only the active drag',async()=>{
+  frame.scrollIntoView();const host=w.toolManager.host,preferences=host.exportPreferences(),snap=w.snapToGrid,ortho=w.orthoMode;w.snapToGrid=false;w.orthoMode=false;
+  try{
+    const bridge=await addEditableFillet();openFillet(bridge);filletField('フィレットの半径',20);const original=JSON.stringify(filletState());
+    for(const action of ['escape','cancel','capture','blur']){
+      pointer('pointerdown',filletHandle(),localScreen(bridge,{x:220,y:160}));pointer('pointermove',doc,localScreen(bridge,{x:205,y:170}));await paint();assert(Math.abs(filletRadius()-35)<1e-6,'draft moved '+action);
+      if(action==='escape')key('Escape');else if(action==='blur')w.dispatchEvent(new w.Event('blur'));else pointer(action==='capture'?'lostpointercapture':'pointercancel',action==='capture'?canvas:doc,localScreen(bridge,{x:205,y:170}));
+      assert(w.toolPropertiesPanel.filletEditor.draft && filletRadius()===20 && !w.toolPropertiesPanel.filletEditor.controls.drag,'earlier numeric edit retained '+action);
+      assert(JSON.stringify(filletState())===original,'original unchanged '+action);
+    }
+    key('Escape');assert(!w.toolPropertiesPanel.filletEditor.draft && !filletHandle() && canvas.querySelector('.control-handle'),'idle Escape cancels editor');
+  }finally{host.restorePreferences(preferences);w.snapToGrid=snap;w.orthoMode=ortho;}
+});
+
+await check('Fillet handles follow numeric input and zoom and use drawing-space grid and orthogonal snapping',async()=>{
+  frame.scrollIntoView();const host=w.toolManager.host,preferences=host.exportPreferences(),viewport=w.zoomPanManager.getTransform(),snap=w.snapToGrid,ortho=w.orthoMode;w.snapToGrid=true;w.orthoMode=false;
+  try{
+    const bridge=await addEditableFillet(),group=w.SvgUtils.createElement('g',{transform:'matrix(1 1 -1 1 200 -200)'});canvas.append(group);group.append(doc.getElementById('fh'),doc.getElementById('fv'),bridge);openFillet(bridge);
+    const start=filletControl().handle;pointer('pointerdown',filletHandle(),localScreen(bridge,start));pointer('pointerup',doc,localScreen(bridge,start));assert(filletRadius()===10,'click does not snap');
+    const controlFrame=w.VectorUtils.filletControlGeometry.filletControlFrame(canvas.getScreenCTM(),bridge.getScreenCTM()),anchor=controlFrame.toCanvas(filletControl().vertex);
+    const screen=localScreen(bridge,{x:213,y:164}),expected=w.VectorUtils.filletControlGeometry.moveFilletRadius(controlFrame,w.toolPropertiesPanel.filletEditor.input(),screen,{x:0,y:0},{anchor,ortho:true,snap:p=>w.toolManager.snapToGrid(p)});
+    pointer('pointerdown',filletHandle(),localScreen(bridge,start));pointer('pointerup',doc,screen,{shiftKey:true});assert(Math.abs(filletRadius()-expected)<1e-6,'snap then drawing-space ortho then side projection');
+    filletField('フィレットの半径',40);const diameter=filletHandle().getBoundingClientRect().width;w.zoomPanManager.setTransform(2.1,35,25);await paint();await paint();
+    const position=localScreen(bridge,filletControl().handle),box=filletHandle().getBoundingClientRect();assert(Math.abs(box.width-diameter)<0.05 && Math.abs(box.x+box.width/2-position.x)<0.05 && Math.abs(box.y+box.height/2-position.y)<0.05,'fixed screen size and updated position');
+    filletField('フィレットの半径',0);assert(!filletHandle(),'invalid input hides handle');filletField('フィレットの半径',25);assert(filletHandle(),'numeric repair restores handle');filletAction('cancel');
+  }finally{host.restorePreferences(preferences);w.snapToGrid=snap;w.orthoMode=ortho;w.zoomPanManager.setTransform(viewport.zoom,viewport.panX,viewport.panY);}
+});
+
+await check('Fillet drag stops on linked-line changes and lock, handles singular frames and releases tool and selection changes',async()=>{
+  frame.scrollIntoView();const host=w.toolManager.host,preferences=host.exportPreferences(),snap=w.snapToGrid,ortho=w.orthoMode;w.snapToGrid=false;w.orthoMode=false;
+  try{
+    const bridge=await addEditableFillet(),h=doc.getElementById('fh'),original=JSON.stringify(filletState());openFillet(bridge);
+    pointer('pointerdown',filletHandle(),localScreen(bridge,{x:230,y:160}));pointer('pointermove',doc,localScreen(bridge,{x:220,y:160}));await paint();
+    w.layers.push({id:2,name:'locked incident',visible:true,locked:true});h.setAttribute('data-layer','2');pointer('pointerup',doc,localScreen(bridge,{x:210,y:160}));
+    assert(filletRadius()===10 && !w.toolPropertiesPanel.filletEditor.controls.drag && JSON.stringify(filletState())===original,'linked lock rolls back whole gesture');h.removeAttribute('data-layer');filletAction('cancel');filletAction('begin');
+    pointer('pointerdown',filletHandle(),localScreen(bridge,{x:230,y:160}));h.setAttribute('x2','999');pointer('pointerup',doc,localScreen(bridge,{x:210,y:160}));assert(h.getAttribute('x2')==='999' && filletRadius()===10 && !filletHandle(),'external line geometry preserved');h.setAttribute('x2','230');filletAction('cancel');filletAction('begin');
+    const group=w.SvgUtils.createElement('g');canvas.append(group);group.append(h,doc.getElementById('fv'),bridge);group.setAttribute('transform','scale(0 1)');await paint();await paint();assert(!filletHandle(),'singular common frame hides handle');group.removeAttribute('transform');await paint();await paint();assert(filletHandle(),'invertible frame recovers');
+    pointer('pointerdown',filletHandle(),localScreen(bridge,{x:230,y:160}));activate('line');assert(!filletHandle() && !w.toolPropertiesPanel.filletEditor.controls.drag,'tool change releases gesture');
+    openFillet(bridge);pointer('pointerdown',filletHandle(),localScreen(bridge,{x:230,y:160}));w.selectTool.selectObject(h);assert(!filletHandle() && !w.toolPropertiesPanel.filletEditor.draft,'selection change clears draft');
+    openFillet(bridge);h.remove();await paint();await paint();assert(!filletHandle() && !canvas.querySelector('[data-vector-preview]'),'missing referenced line clears helpers');
+  }finally{host.restorePreferences(preferences);w.snapToGrid=snap;w.orthoMode=ortho;}
+});
+
+await check('Fillet gestures ignore panning and other pointers and rollback nonpositive radii or failing calculations',async()=>{
+  frame.scrollIntoView();const host=w.toolManager.host,preferences=host.exportPreferences(),snap=w.snapToGrid,ortho=w.orthoMode;w.snapToGrid=false;w.orthoMode=false;
+  try{
+    const bridge=await addEditableFillet();openFillet(bridge);const original=JSON.stringify(filletState());
+    w.zoomPanManager.spacePressed=true;pointer('pointerdown',filletHandle(),localScreen(bridge,{x:230,y:160}));assert(!w.toolPropertiesPanel.filletEditor.controls.drag,'panning wins');w.zoomPanManager.spacePressed=false;
+    pointer('pointerdown',filletHandle(),localScreen(bridge,{x:230,y:160}));pointer('pointerup',doc,localScreen(bridge,{x:210,y:160}),{pointerId:99});assert(w.toolPropertiesPanel.filletEditor.controls.drag && filletRadius()===10,'other pointer ignored');
+    pointer('pointerup',doc,localScreen(bridge,{x:245,y:160}));assert(filletRadius()===10 && !w.toolPropertiesPanel.filletEditor.controls.drag,'negative radius rolls back');
+    host.registerImplementation('fillet',{id:'test-fillet-drag-limit',label:'Limited fillet',algorithm:'Fails above radius 15',run:(input,ops,execute)=>{if(input.radius>15)throw Error('radius plugin limit');return execute('fillet',input,{implementation:'default'});}});
+    filletField('フィレットの再計算実装','test-fillet-drag-limit','change');const selected=JSON.stringify(host.exportPreferences());pointer('pointerdown',filletHandle(),localScreen(bridge,{x:230,y:160}));pointer('pointerup',doc,localScreen(bridge,{x:210,y:160}));await paint();await paint();
+    assert(filletRadius()===10 && JSON.stringify(filletState())===original && JSON.stringify(host.exportPreferences())===selected,'failed plugin rolls back without changing document or preferences');
+    filletField('フィレットの再計算実装','default','change');pointer('pointerdown',filletHandle(),localScreen(bridge,{x:230,y:160}));pointer('pointerup',doc,localScreen(bridge,{x:215,y:170}));
+    filletField('フィレットの再描画実装','cubic','change');filletAction('preview');assert(filletHandle() && canvas.querySelector('[data-vector-preview="fillet-edit"] path').getAttribute('d').includes('C'),'renderer changes retain dragged radius');filletAction('apply');
+    assert(Math.abs(JSON.parse(bridge.getAttribute('data-vector-fillet')).input.radius-25)<1e-6,'dragged radius committed');
+    host.registerImplementation('fillet',{id:'test-fillet-shifted-contact',label:'Shifted fillet',algorithm:'Translated tangent result',run:(input,ops,execute)=>{const r=execute('fillet',input,{implementation:'default'}),shift=p=>({x:p.x+5,y:p.y});return {bridge:{...r.bridge,center:shift(r.bridge.center),start:shift(r.bridge.start),end:shift(r.bridge.end)},segments:r.segments.map(s=>s.map(shift))};}});
+    filletAction('begin');filletField('フィレットの再計算実装','test-fillet-shifted-contact','change');filletAction('preview');
+    assert(!filletHandle() && canvas.querySelector('[data-vector-preview="fillet-edit"]') && doc.querySelector('[data-fillet-edit-status]').textContent.includes('接点'),'incompatible contact keeps numerical preview but hides handle');filletAction('apply');
+    assert(JSON.parse(bridge.getAttribute('data-vector-implementation')).calculation.id==='test-fillet-shifted-contact','numeric editing remains available for alternate contact contracts');
+
+  }finally{w.zoomPanManager.spacePressed=false;host.restorePreferences(preferences);w.snapToGrid=snap;w.orthoMode=ortho;}
+});
+
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
 </script>
