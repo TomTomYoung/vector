@@ -364,6 +364,8 @@ await check("Four composed geometry operations run in the workbench worker", asy
     async function execute(name, change) {
       get("tool").value = name;
       get("tool").dispatchEvent(new Event("change"));
+      // Switching now restores drafts; each independent calculation case starts from its example.
+      get("reset").click();
       if (change) get("input").value = JSON.stringify(change(JSON.parse(get("input").value)));
       const done = new Promise(resolve => {
         const observer = new MutationObserver(() => {
