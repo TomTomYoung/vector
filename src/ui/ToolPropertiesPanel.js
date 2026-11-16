@@ -305,33 +305,38 @@ class ToolPropertiesPanel {
     const presets=this.toolManager.inputPresets,tool=this.currentTool;
     if(!presets)return;
     const stored=presets.snapshot(),saved=presets.entry(name),supported=typeof tool.exportInputPreset==='function'&&typeof tool.restoreInputPreset==='function';
-    const parameters=tool.inputPresetMode==='parameters';
+    const parameters=window.VectorUtils.constructionInputMode(tool,saved)==='parameters';
+    const canRestore=window.VectorUtils.supportsConstructionInput(tool,saved);
+    const dual=typeof tool.exportInputDraftPreset==='function';
     if(!supported&&!stored)return;
     const details=document.createElement('details');details.dataset.constructionInputPresets='';
     const heading=document.createElement('summary');heading.textContent='作図入力のプリセット（SVGに保存）';details.append(heading);
+    if(dual){const p=document.createElement('p');p.textContent='数値設定だけの記録と、入力点を含む下書きの記録を選べます。新しい記録で、このツールの記録1組を置き換えます。';details.append(p);}
     const note=document.createElement('p');note.textContent=parameters?'数値設定をツールごとに1組記録できます。復元時は入力点と対象の選択を維持します。作図・加工は通常の確定操作で行います。':'ツールごとに入力を1組記録できます。復元は現在の下書きを置き換えます。'+(tool.inputPresetInstructions??'図形の確定はEnterで行います。');details.append(note);
     if(stored){const list=document.createElement('p');list.textContent='記録のあるツール: '+Object.keys(stored.entries).map(n=>this.toolManager.tools[n]?.getTitle()??n).join('、');details.append(list);}
     const status=document.createElement('p');status.dataset.constructionInputStatus='';status.setAttribute('role','status');status.textContent=presets.state.message;
     status.style.cssText='font-size:12px;line-height:1.6';if(presets.state.warning)status.style.color='#a22';details.append(status);
     if(saved){
       const p=document.createElement('p');p.dataset.constructionInputRecord='';p.textContent=name+' / 入力形式 '+saved.version;
-      if(saved.version===1&&supported){
+      if(canRestore){
         if(Array.isArray(saved.input.points))p.textContent+=' / 点数 '+saved.input.points.length;
         if(saved.input.degree!==undefined)p.textContent+=' / 次数 '+saved.input.degree;
         if(saved.input.periodic!==undefined)p.textContent+=' / 周期 '+(saved.input.periodic?'あり':'なし');
         if(saved.input.box)p.textContent+=' / 切り取り範囲 '+JSON.stringify(saved.input.box);
-        if(parameters&&Object.hasOwn(window.VectorUtils.constructionParameterFields,name))for(const [key,label] of window.VectorUtils.constructionParameterFields[name])p.textContent+=' / '+label+' '+saved.input[key];
+        if(saved.input.pathMode)p.textContent+=' / 描画モード '+(saved.input.pathMode==='line'?'直線':'ベジェ');
+        if(Object.hasOwn(window.VectorUtils.constructionParameterFields,name))for(const [key,label] of window.VectorUtils.constructionParameterFields[name])p.textContent+=' / '+label+' '+saved.input[key];
       }
-      if(!supported||saved.version!==tool.inputPresetVersion)p.textContent+=' / このツール・版は復元に未対応です。記録はSVGに保持します。';
+      if(!canRestore)p.textContent+=' / このツール・版は復元に未対応です。記録はSVGに保持します。';
       details.append(p);
     }
     const button=(label,id,enabled,action)=>{
       const b=document.createElement('button');b.type='button';b.textContent=label;b.dataset.constructionInputAction=id;b.disabled=!enabled;b.style.margin='3px';
       b.onclick=()=>{action();this.updatePanel();const next=this.panel.querySelector('[data-construction-input-presets]');if(next)next.open=true;};details.append(b);
     };
-    if(supported)button(saved?'現在の入力で図面の記録を更新':'現在の入力を図面に記録','record',true,()=>{if(presets.record(name,tool))this.toolManager.host.save();});
+    if(supported)button(dual?'現在の数値設定だけを図面に記録':saved?'現在の入力で図面の記録を更新':'現在の入力を図面に記録','record',true,()=>{if(presets.record(name,tool))this.toolManager.host.save();});
+    if(dual)button('現在の入力点と数値設定を下書きとして記録','record-draft',true,()=>{if(presets.record(name,tool,{draft:true}))this.toolManager.host.save();});
     if(saved){
-      button(parameters?'記録した作図設定を復元':'記録した入力を下書きへ復元','restore',supported&&saved.version===tool.inputPresetVersion,()=>presets.restore(name,tool));
+      button(parameters?'記録した作図設定を復元':'記録した入力を下書きへ復元','restore',canRestore,()=>presets.restore(name,tool));
       button('このツールの入力記録を削除','remove',true,()=>{if(presets.remove(name))this.toolManager.host.save();});
     }
     if(!supported){const p=document.createElement('p');p.textContent='記録したツールを選択すると復元できます。';details.append(p);}
@@ -566,6 +571,7 @@ class ToolPropertiesPanel {
               prop.onChange(value);
             }
           });
+          select.setAttribute('aria-label', prop.label);
           group.appendChild(select);
           break;
 
