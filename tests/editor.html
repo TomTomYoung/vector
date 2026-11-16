@@ -2358,13 +2358,16 @@ await check('Fillet and chamfer restore numeric parameters without losing the fi
 await check('Offset restoration retains the selected source and passes restored distance and miter limit to the actual interchangeable calculation',async()=>{
   const app=await preferenceEditor('{preferences:false}');
   try{
-    app.w.DrawingDocument.open('<svg xmlns="http://www.w3.org/2000/svg"><polyline id="parameter-offset" points="100,200 200,200 110,210" stroke="black" fill="none"/></svg>');parameterPresetRecord(app,'offset');await tick();
+    app.w.DrawingDocument.open('<svg xmlns="http://www.w3.org/2000/svg"><polyline id="parameter-offset" points="100,200 200,200 200,300" stroke="black" fill="none"/></svg>');parameterPresetRecord(app,'offset');await tick();
     const tool=app.w.toolManager.tools.offset,host=app.w.toolManager.host,source=app.d.getElementById('parameter-offset');let actual;
     host.registerImplementation('offset',{id:'parameter-offset-observer',label:'Observed miter',algorithm:'Explicit miter delegation',run:(input,ops,execute)=>{actual=JSON.parse(JSON.stringify(input));return execute('offset',input,{implementation:'miter'});}});host.selectImplementation('offset','parameter-offset-observer');tool.offsetDistance=5;tool.miterLimit=10;
     parameterClick(app,150,200,source);const before=source.outerHTML,history=app.w.undoStack.length;inputPresetAction(app,'restore');assert(tool.selectedElement===source&&source.outerHTML===before&&!actual,'source retained and calculation deferred');
     parameterClick(app,180,230);await tick();const copy=app.d.querySelector('polyline:not(#parameter-offset)');assert(copy&&actual.amount===15&&actual.miterLimit===2,'restored parameters used');
     const expected=host.execute('offset',actual,{implementation:'miter'});assert(copy.points.length===expected.points.length&&Array.from(copy.points).every((p,i)=>Math.hypot(p.x-expected.points[i].x,p.y-expected.points[i].y)<0.001),'rendered miter geometry matches restored values');
     assert(JSON.parse(copy.getAttribute('data-vector-implementation')).calculation.id==='parameter-offset-observer'&&app.w.undoStack.length===history+1,'actual implementation and one edit');
+    source.setAttribute('points','100,200 200,200 110,210');app.w.saveState();await tick();const count=app.d.querySelectorAll('polyline').length,limitedHistory=app.w.undoStack.length;
+    parameterClick(app,150,200,source);inputPresetAction(app,'restore');parameterClick(app,180,230);await tick();
+    assert(actual.amount===15&&actual.miterLimit===2&&app.d.querySelectorAll('polyline').length===count&&app.w.undoStack.length===limitedHistory,'restored miter limit refuses an excessive corner without creating geometry');
   }finally{app.element.remove();}
 });
 
