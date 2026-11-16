@@ -50,7 +50,7 @@ test('real controllers preserve active input and selected target identities whil
 });
 
 test('future parameter versions and invalid SVG metadata retain existing records and never invoke a mismatched controller',()=>{
-  const store=createConstructionInputPresets();store.open({version:1,entries:{offset:entry('offset'),spline:{version:2,input:{future:'value'}}}});const before=store.snapshot();
+  const store=createConstructionInputPresets();store.open({version:1,entries:{offset:entry('offset'),spline:{version:3,input:{future:'value'}}}});const before=store.snapshot();
   let calls=0;assert.equal(store.restore('spline',{inputPresetVersion:1,restoreInputPreset:()=>calls++}),false);assert.equal(calls,0);assert.deepEqual(store.snapshot(),before);
   assert.throws(()=>store.open({version:1,entries:{offset:{version:1,input:{offsetDistance:25,miterLimit:0}}}}));assert.deepEqual(store.snapshot(),before);
   const tool=controllers().offset;tool.offsetDistance=NaN;assert.equal(store.record('offset',tool),false);assert.deepEqual(store.snapshot(),before);

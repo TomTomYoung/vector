@@ -2543,6 +2543,116 @@ await check('Line draft records work without browser storage and real SVG downlo
   }finally{app.element.remove();}
 });
 
+
+function curveDraftMode(app,value){const el=app.d.querySelector('select[aria-label="描画モード"]');assert(el,'path mode selector');el.value=value;el.dispatchEvent(new app.w.Event('change'));}
+function curveDraftInput(app,name,mode='bezier',points=linearDraftPoints.slice(0,4)){
+  app.d.getElementById(name+'-tool').click();const tool=app.w.toolManager.tools[name];
+  if(name==='path')curveDraftMode(app,mode);else preferenceNumber(app,'標準実装の接線倍率',2);
+  for(const p of points)parameterClick(app,p.x,p.y);return tool;
+}
+const curveDraftRecord=(app,name)=>inputPresetAction(app,name==='spline'?'record-draft':'record');
+const curveDraftPoints=tool=>tool.pathPoints??tool.points;
+const curveDraftShape=(app,name)=>app.w.DrawingDocument.capture().querySelector('[data-'+name+'-tool]');
+
+await check('Path line and Bezier modes roundtrip clicked points into a fresh editor without cursor previews or implicit computation',async()=>{
+  for(const mode of ['line','bezier']){
+    const source=await preferenceEditor('{preferences:false}');let target;
+    try{
+      const tool=curveDraftInput(source,'path',mode);parameterMouse(source,'mousemove',500,400);curveDraftRecord(source,'path');await tick();
+      const saved=inputPresetState(source),xml=source.w.DrawingDocument.serialize();assert(saved.entries.path.input.points.length===4&&saved.entries.path.input.pathMode===mode,'clicked input and mode only');
+      assert(!curveDraftShape(source,'path')&&!source.w.DrawingDocument.capture().querySelector('[data-tool-layer="construction-handles"]'),'live preview excluded');
+      target=await preferenceEditor('{preferences:false}');const host=target.w.toolManager.host,execute=host.execute;let calls=0;host.execute=(...args)=>{calls++;return execute(...args);};
+      target.w.DrawingDocument.open(xml);target.w.saveState();await tick();assert(calls===0&&target.w.toolManager.activeToolName==='select','inert open');target.d.getElementById('path-tool').click();inputPresetAction(target,'restore');
+      const restored=target.w.toolManager.tools.path;assert(JSON.stringify(restored.exportInputPreset())===JSON.stringify(saved.entries.path),'restored ordered input');
+      assert(target.d.querySelector('select[aria-label="描画モード"]').value===mode&&target.d.querySelector('[data-construction-input-record]').textContent.includes(mode==='line'?'直線':'ベジェ'),'mode visible in current and recorded fields');
+      const expected=host.encodePath(host.execute('path',{points:restored.pathPoints,mode})),history=target.w.undoStack.length;constructionEnter(target);await tick();
+      assert(curveDraftShape(target,'path').getAttribute('d')===expected&&target.w.undoStack.length===history+1,'actual path and atomic commit');target.w.undo();assert(!curveDraftShape(target,'path'),'undo path');target.w.redo();assert(curveDraftShape(target,'path'),'redo path');
+    }finally{source.element.remove();target?.element.remove();}
+  }
+});
+
+await check('Spline supports distinct numeric-only and point-draft records with truthful version-specific restoration and active implementation identity',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    const tool=curveDraftInput(app,'spline'),host=app.w.toolManager.host;inputPresetAction(app,'record');await tick();const live=tool.points;
+    assert(inputPresetState(app).entries.spline.version===1&&!inputPresetState(app).entries.spline.input.points,'legacy numeric-only record');tool.tension=0.5;inputPresetAction(app,'restore');assert(tool.points===live&&tool.tension===2,'numeric restore retains live array');
+    curveDraftRecord(app,'spline');await tick();const saved=inputPresetState(app),savedPoints=JSON.stringify(saved.entries.spline.input.points);draftKey(app,'Escape');
+    host.selectImplementation('spline','centripetal');host.selectRenderer('spline','sampled',{sampleCount:20});const methods=JSON.stringify(host.exportPreferences());
+    inputPresetAction(app,'restore');assert(saved.entries.spline.version===2&&JSON.stringify(tool.points)===savedPoints&&tool.points!==live&&tool.tension===2,'full draft restores points and parameter');
+    const panel=app.d.querySelector('[data-construction-input-presets]').textContent;assert(panel.includes('点数 4')&&panel.includes('標準実装の接線倍率 2')&&panel.includes('下書きへ復元')&&panel.includes('Enter'),'draft description matches behavior');
+    const history=app.w.undoStack.length;constructionEnter(app);await tick();const element=curveDraftShape(app,'spline'),record=JSON.parse(element.getAttribute('data-vector-implementation'));
+    assert(record.calculation.id==='centripetal'&&record.rendering.id==='sampled'&&app.w.undoStack.length===history+1,'selected methods used once');assert(JSON.stringify(host.exportPreferences())===methods&&JSON.stringify(inputPresetState(app))===JSON.stringify(saved),'independent settings and stored input');
+    inputPresetAction(app,'restore');inputPresetAction(app,'record');await tick();assert(inputPresetState(app).entries.spline.version===1,'explicit numeric recording replaces draft format');
+  }finally{app.element.remove();}
+});
+
+await check('Path and spline drafts resume editing, preserve incomplete points on Enter, support Backspace, empty records and explicit double-click completion',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    for(const name of ['path','spline']){
+      const tool=curveDraftInput(app,name,'line',[{x:80,y:100}]);curveDraftRecord(app,name);await tick();draftKey(app,'Escape');inputPresetAction(app,'restore');
+      constructionEnter(app);assert(curveDraftPoints(tool).length===1&&tool.implementationError&&!curveDraftShape(app,name),'incomplete Enter keeps point '+name);
+      parameterClick(app,180,90);parameterClick(app,220,180);draftKey(app,'Backspace');assert(curveDraftPoints(tool).length===2,'last point removed');
+      if(name==='path'){curveDraftMode(app,'bezier');assert(tool.pathPoints.length===2,'mode change retains inputs');}
+      parameterClick(app,220,180);parameterClick(app,120,220);curveDraftRecord(app,name);await tick();const saved=JSON.stringify(inputPresetState(app)),history=app.w.undoStack.length;
+      parameterMouse(app,'mousemove',600,400);app.d.getElementById('canvas').dispatchEvent(new app.w.MouseEvent('dblclick',{bubbles:true,cancelable:true}));await tick();
+      assert(curveDraftShape(app,name)&&app.w.undoStack.length===history+1&&JSON.stringify(inputPresetState(app))===saved,'double click commits clicked points only '+name);
+      inputPresetAction(app,'restore');while(curveDraftPoints(tool).length)draftKey(app,'Backspace');assert(!tool.drawingObject&&!tool.draftHandles,'last deletion clears preview');curveDraftRecord(app,name);await tick();inputPresetAction(app,'restore');assert(curveDraftPoints(tool).length===0&&!tool.draftHandles,'empty record roundtrip');
+    }
+  }finally{app.element.remove();}
+});
+
+await check('Curve draft updates and removal undo as metadata while malformed SVG preserves the entire live draft and history',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    const tool=curveDraftInput(app,'spline');curveDraftRecord(app,'spline');await tick();const before=app.w.DrawingDocument.serialize(),points=tool.points,preview=tool.currentSpline,history=app.w.undoStack.length;
+    const invalid=[['path',{version:1,input:{points:[],pathMode:'unknown'}}],['path',{version:1,input:{points:[{x:1,y:'2'}],pathMode:'line'}}],['spline',{version:2,input:{tension:1}}],['spline',{version:2,input:{points:[],tension:5}}],['spline',{version:2,input:{points:[],tension:1,extra:true}}]];
+    for(const [name,entry] of invalid){let failed=false;try{app.w.DrawingDocument.open(inputPresetSVG(app,{version:1,entries:{[name]:entry}}));}catch{failed=true;}assert(failed&&app.w.DrawingDocument.serialize()===before&&tool.points===points&&tool.currentSpline===preview&&app.w.undoStack.length===history,'atomic refusal '+name);}
+    draftKey(app,'Backspace');curveDraftRecord(app,'spline');await tick();assert(inputPresetState(app).entries.spline.input.points.length===3,'update');app.w.undo();assert(inputPresetState(app).entries.spline.input.points.length===4&&tool.points.length===0,'undo metadata is inert');app.w.redo();assert(inputPresetState(app).entries.spline.input.points.length===3,'redo update');
+    app.d.getElementById('spline-tool').click();inputPresetAction(app,'remove');await tick();assert(!inputPresetState(app),'remove');app.w.undo();assert(inputPresetState(app).entries.spline.version===2,'undo remove');
+  }finally{app.element.remove();}
+});
+
+await check('Curve draft calculation and rendering failures retain editable input and recover without committing stale previews or changing saved records',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    const host=app.w.toolManager.host;host.registerRenderer({id:'curve-draft-failure',label:'Failure',algorithm:'Explicit test error',supports:()=>true,prepare:()=>{throw Error('curve draft renderer failed');}});
+    for(const name of ['path','spline']){
+      const tool=curveDraftInput(app,name);curveDraftRecord(app,name);await tick();draftKey(app,'Escape');const saved=JSON.stringify(inputPresetState(app)),history=app.w.undoStack.length;
+      host.registerImplementation(name,{id:'curve-draft-failure',label:'Failure',algorithm:'Explicit test error',run:()=>{throw Error('curve draft calculation failed');}});host.selectImplementation(name,'curve-draft-failure');inputPresetAction(app,'restore');
+      assert(tool.implementationError.includes('curve draft calculation failed')&&curveDraftPoints(tool).length===4,'calculation failure retains input');constructionEnter(app);await tick();assert(!curveDraftShape(app,name)&&app.w.undoStack.length===history,'no failed commit');
+      host.selectImplementation(name,'default');host.selectRenderer(name,'curve-draft-failure');inputPresetAction(app,'restore');assert(tool.implementationError.includes('curve draft renderer failed'),'render error');constructionEnter(app);assert(!curveDraftShape(app,name),'no stale render');
+      host.selectRenderer(name,'default');inputPresetAction(app,'restore');assert(!tool.implementationError,'preview recovered');constructionEnter(app);await tick();assert(curveDraftShape(app,name)&&JSON.stringify(inputPresetState(app))===saved,'successful retry with record unchanged');
+    }
+  }finally{app.element.remove();}
+});
+
+await check('Restored spline drafts cancel on tool switch or document open while ordinary spline completion remains available and failed previews are discarded',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    const tool=curveDraftInput(app,'spline');curveDraftRecord(app,'spline');await tick();draftKey(app,'Escape');inputPresetAction(app,'restore');const history=app.w.undoStack.length;
+    app.d.getElementById('select-tool').click();await tick();assert(!curveDraftShape(app,'spline')&&app.w.undoStack.length===history&&!tool.draftHandles,'switch cancels restored curve');
+    app.d.getElementById('spline-tool').click();inputPresetAction(app,'restore');const xml=app.w.DrawingDocument.serialize();app.w.DrawingDocument.open(xml);await tick();assert(!curveDraftShape(app,'spline')&&app.w.toolManager.activeToolName==='select'&&tool.points.length===0,'document open never commits restored curve');
+    curveDraftInput(app,'spline');app.d.getElementById('select-tool').click();await tick();assert(app.w.DrawingDocument.capture().querySelectorAll('[data-spline-tool]').length===1,'ordinary switch completes original behavior');
+    const host=app.w.toolManager.host;host.registerImplementation('spline',{id:'ordinary-spline-failure',label:'Failure',algorithm:'Explicit test error',run:()=>{throw Error('ordinary failed');}});host.selectImplementation('spline','ordinary-spline-failure');curveDraftInput(app,'spline');app.d.getElementById('select-tool').click();assert(!tool.currentSpline&&!tool.draftHandles&&app.w.DrawingDocument.capture().querySelectorAll('[data-spline-tool]').length===1,'failed ordinary draft does not leak');
+  }finally{app.element.remove();}
+});
+
+await check('Curve draft SVG download and reopening work without browser storage and future entry versions remain inert and reusable',async()=>{
+  const app=await preferenceEditor('{preferences:{storage:()=>{throw Error("blocked");}}}');
+  try{
+    for(const name of ['path','spline']){curveDraftInput(app,name);curveDraftRecord(app,name);draftKey(app,'Escape');}await tick();const saved=JSON.stringify(inputPresetState(app));let blob;
+    const url=app.w.URL.createObjectURL,revoke=app.w.URL.revokeObjectURL,click=app.w.HTMLAnchorElement.prototype.click;
+    app.w.URL.createObjectURL=value=>{blob=value;return 'blob:curve-drafts';};app.w.URL.revokeObjectURL=()=>{};app.w.HTMLAnchorElement.prototype.click=function(){};
+    try{app.d.getElementById('save-btn').click();const xml=await blob.text();app.w.DrawingDocument.open(xml);assert(JSON.stringify(inputPresetState(app))===saved,'download holds path and spline records');}
+    finally{app.w.URL.createObjectURL=url;app.w.URL.revokeObjectURL=revoke;app.w.HTMLAnchorElement.prototype.click=click;}
+    for(const name of ['path','spline']){app.d.getElementById(name+'-tool').click();inputPresetAction(app,'restore');constructionEnter(app);await tick();assert(curveDraftShape(app,name),'draw without storage '+name);}
+    const future={version:1,entries:{path:{version:2,input:{later:true}},spline:{version:3,input:{later:true}}}};app.w.DrawingDocument.open(inputPresetSVG(app,future));
+    for(const name of ['path','spline']){app.d.getElementById(name+'-tool').click();assert(app.d.querySelector('[data-construction-input-action="restore"]').disabled,'future version disabled '+name);}
+    app.w.DrawingDocument.open(app.w.DrawingDocument.serialize());assert(JSON.stringify(inputPresetState(app))===JSON.stringify(future),'future records preserved');
+  }finally{app.element.remove();}
+});
+
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
 </script>

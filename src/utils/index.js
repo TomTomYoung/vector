@@ -30,7 +30,7 @@ import * as chamferControlGeometry from '../adapters/chamferControlGeometry.js';
 import * as filletControlGeometry from '../adapters/filletControlGeometry.js';
 import {createImplementationPreferences} from '../adapters/implementationPreferences.js';
 import {createDocumentImplementationPreset,parseDocumentImplementationPreset} from '../adapters/documentImplementationPreset.js';
-import {createConstructionInputPresets,parseConstructionInputPresets,parseConstructionInput,parseConstructionDraft,constructionParameterFields,exportConstructionParameters,restoreConstructionParameters} from '../adapters/constructionInputPresets.js';
+import {createConstructionInputPresets,parseConstructionInputPresets,parseConstructionInput,parseConstructionDraft,parseCurveDraft,supportsConstructionInput,constructionInputMode,constructionParameterFields,exportConstructionParameters,restoreConstructionParameters} from '../adapters/constructionInputPresets.js';
 import * as splineControlGeometry from '../adapters/splineControlGeometry.js';
 import * as circleControlGeometry from '../adapters/circleControlGeometry.js';
 import * as geometry from './geometry.js';
@@ -60,6 +60,9 @@ window.VectorUtils = {
   parseConstructionInput,
   constructionParameterFields,
   parseConstructionDraft,
+  parseCurveDraft,
+  supportsConstructionInput,
+  constructionInputMode,
   exportConstructionParameters,
   restoreConstructionParameters,
   splineControlGeometry,

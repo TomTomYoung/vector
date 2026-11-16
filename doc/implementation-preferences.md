@@ -78,6 +78,8 @@ JSONの版は1、最大256000文字、入れ子は12階層までです。ツー�
 
 [implementationPreferences.test.mjs](../tests/implementationPreferences.test.mjs) は設定の往復、インスタンスの独立性、設定値の置換、未登録実装、不正データ、起動設定の優先、保存失敗、JSON読込、外部ホストを検証します。[editor.html](../tests/editor.html) に、GUI変更後の新しい画面への復元、実際の描画への反映、初期化、JSONファイル入出力、保存失敗、図形再編集との分離を追加しました。
 
-[演算室の入力・計算方式・選択状態の保存と復元](workbench-session.md)は別の保存先で実装済みです。[図面ごとの方式プリセット](document-implementation-presets.md)も実装済みです。[4ツールの作図数値](drawing-parameter-presets.md)もSVGへ明示保存できます。[直線・ポリライン・ベジェ5ツールの下書き](linear-bezier-drafts.md)も実装済みです。対応18ツール以外の作図入力、自動クラウド同期、タブ間の即時同期は未実装です。
+[演算室の入力・計算方式・選択状態の保存と復元](workbench-session.md)は別の保存先で実装済みです。[図面ごとの方式プリセット](document-implementation-presets.md)も実装済みです。[4ツールの作図数値](drawing-parameter-presets.md)もSVGへ明示保存できます。[直線・ポリライン・ベジェ5ツールの下書き](linear-bezier-drafts.md)も実装済みです。対応19ツール以外の作図入力、自動クラウド同期、タブ間の即時同期は未実装です。
 
 実装コミット `d9ef151` の[CI](https://github.com/TomTomYoung/vector/actions/runs/43770286494)で、数値・モデル・編集81件とブラウザー操作30件が全て成功しました。
+
+[パスの点列・入力モードとスプラインの通過点・接線倍率の下書き保存](path-spline-drafts.md)も実装済みです。スプラインは従来の数値設定だけの保存と下書き全体の保存を選べます。

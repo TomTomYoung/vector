@@ -24,7 +24,23 @@ class PathTool extends BaseTool {
     this.selectedPathObserver = null;
     this.selectedPathObserverTarget = null;
     this.selectedPathMutationHandle = null;
+    this.inputPresetVersion = 1;
+    this.implementationError = '';
+    this.draftHandles = null;
   }
+
+  exportInputPreset() {
+    return window.VectorUtils.parseCurveDraft('path',{version:1,input:{points:this.pathPoints,pathMode:this.pathMode}});
+  }
+
+  restoreInputPreset(entry) {
+    const {input}=window.VectorUtils.parseCurveDraft('path',entry);
+    if(!this.isActive)throw Error('復元する作図ツールを先に選択してください。');
+    this.cancelPath();this.pathPoints=input.points;this.pathMode=input.pathMode;
+    if(this.pathPoints.length){this.createPath();this.updatePathData();}
+  }
+
+  onImplementationChanged() {this.updatePathData();}
 
   getTitle() {
     return "パス";
@@ -40,6 +56,7 @@ class PathTool extends BaseTool {
       "マウス移動: 次の頂点位置をプレビュー",
       "ダブルクリック/Enter: パスを確定",
       "Esc: 描画中のパスをキャンセル",
+      "Backspace: 最後の入力点を削除",
     ];
 
     instructions.push(
@@ -110,6 +127,7 @@ class PathTool extends BaseTool {
   }
 
   handleMouseDown(event) {
+    if(!this.isActive||event.button!==0)return;
     this.selectionInteractionInProgress = false;
     if (this.tryBeginSelectionDelegation(event)) {
       return;
@@ -163,12 +181,7 @@ class PathTool extends BaseTool {
 
   handleDblClick(event) {
     if (!this.isActive) return;
-
-    if (this.pathPoints.length >= 2) {
-      this.finishPath();
-    } else {
-      this.cancelPath();
-    }
+    event.preventDefault();this.finishPath();
 
     this.requestToolPanelRefresh();
   }
@@ -177,12 +190,19 @@ class PathTool extends BaseTool {
     if (!this.isActive) return;
 
     if (event.key === "Escape") {
+      event.preventDefault();
       this.cancelPath();
       this.requestToolPanelRefresh();
     }
 
-    if (event.key === "Enter" && this.pathPoints.length >= 2) {
+    if (event.key === "Enter") {
+      event.preventDefault();
       this.finishPath();
+    }
+    if(event.key==='Backspace'){
+      event.preventDefault();this.pathPoints.pop();
+      if(this.pathPoints.length)this.updatePathData();else this.cancelPath();
+      this.requestToolPanelRefresh();
     }
   }
 
@@ -195,14 +215,20 @@ class PathTool extends BaseTool {
       return;
     }
 
-    if (!this.currentPath) {
-      this.saveState();
-      this.pathPoints = [];
+    if(this.pathPoints.length>=1000){this.implementationError='一度に入力できる点は1000個までです。';return;}
+    if (!this.currentPath) this.createPath();
+
+    this.pathPoints.push({ ...point });
+    this.updatePathData();
+  }
+
+  createPath() {
       this.currentPath = window.SvgUtils.createElement("path", {
         "data-path-tool": "true",
       });
       this.applyDefaultAttributes(this.currentPath);
       this.currentPath.setAttribute("fill", "none");
+      this.drawingObject=this.currentPath;
 
       this.canvas.appendChild(this.currentPath);
 
@@ -212,17 +238,23 @@ class PathTool extends BaseTool {
         "stroke-dasharray": "4 4",
       });
       this.canvas.appendChild(this.tempLine);
-    }
-
-    this.pathPoints.push({ ...point });
-    this.updatePathData();
   }
 
   updatePathData() {
     if (!this.currentPath || this.pathPoints.length === 0) return;
 
-    this.draw("path", {points: this.pathPoints, mode: this.pathMode}, this.currentPath);
-    this.currentPath.dataset.pathMode = this.pathMode;
+    this.draftHandles?.remove();
+    this.draftHandles=window.SvgUtils.createElement('g',{'data-tool-layer':'construction-handles','pointer-events':'none'});
+    this.pathPoints.forEach(p=>this.draftHandles.appendChild(window.SvgUtils.createCircle(p.x,p.y,3,{fill:'#fff',stroke:'#2673c7'})));
+    this.canvas.appendChild(this.draftHandles);
+    const last=this.pathPoints.at(-1);this.updateTemporaryLine(last,last);
+    this.implementationError='';
+    try {
+      const drawn=this.draw("path", {points: this.pathPoints, mode: this.pathMode}, this.currentPath);
+      if(!drawn)throw Error('選択した実装ではパスを作図できません。');
+      this.currentPath=this.drawingObject=drawn;
+      this.currentPath.removeAttribute('visibility');this.currentPath.dataset.pathMode = this.pathMode;
+    } catch(error){this.implementationError=error.message;this.currentPath.setAttribute('visibility','hidden');}
   }
 
   updateTemporaryLine(start, end) {
@@ -236,9 +268,11 @@ class PathTool extends BaseTool {
 
   finishPath() {
     if (!this.currentPath || this.pathPoints.length < 2) {
-      this.cancelPath();
+      this.implementationError='確定には入力点が2点以上必要です。';this.requestToolPanelRefresh();
       return null;
     }
+    this.updatePathData();
+    if(this.implementationError){this.requestToolPanelRefresh();return null;}
 
     if (this.tempLine) {
       this.canvas.removeChild(this.tempLine);
@@ -249,6 +283,8 @@ class PathTool extends BaseTool {
 
     const createdPath = this.currentPath;
     this.currentPath = null;
+    this.drawingObject=null;
+    this.draftHandles?.remove();this.draftHandles=null;
     this.pathPoints = [];
 
     if (this.selectTool) {
@@ -277,6 +313,7 @@ class PathTool extends BaseTool {
     this.currentPath = null;
     this.tempLine = null;
     this.pathPoints = [];
+    this.drawingObject=null;this.draftHandles?.remove();this.draftHandles=null;this.implementationError='';
   }
 
   requestToolPanelRefresh() {
