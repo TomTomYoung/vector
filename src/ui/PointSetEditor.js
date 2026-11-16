@@ -13,7 +13,7 @@ class PointSetEditor {
   snapshot() {return JSON.stringify(window.VectorUtils.pointSetSource.pointSetGeometrySnapshot(this.element));}
   assertTarget() {
     if(!this.element?.isConnected || !this.manager.tools.select.canSelect(this.element))throw Error('編集対象が削除されたか、非表示・ロック中です。');
-    if(this.element.tagName==='g'&&[...this.element.children].some(el=>['polygon','path'].includes(el.tagName)&&!this.manager.tools.select.canSelect(el)))throw Error('三角形が非表示・ロック中です。');
+    if(this.element.tagName==='g'&&[...this.element.children].some(el=>['polygon','path'].includes(el.tagName)&&!this.manager.tools.select.canSelect(el)))throw Error('領域の面が非表示・ロック中です。');
     if(this.manager.activeToolName!=='select' || window.selectedObjects?.length!==1 || window.selectedObjects[0]!==this.element)throw Error('編集対象の選択が変更されました。');
     if(this.draft && (this.snapshot()!==this.originalGeometry || this.element.getAttribute('data-vector-pointset')!==this.originalSource ||
       this.element.getAttribute('data-vector-implementation')!==this.originalRecord))throw Error('編集中に元図形が変更されました。取消してから読み直してください。');
@@ -24,7 +24,7 @@ class PointSetEditor {
       this.assertTarget();const api=window.VectorUtils.pointSetSource;
       const source=api.readPointSetSource(this.element.getAttribute('data-vector-pointset'),this.element.getAttribute('data-vector-implementation'),api.pointSetGeometrySnapshot(this.element));
       this.originalGeometry=this.snapshot();this.originalSource=this.element.getAttribute('data-vector-pointset');this.originalRecord=this.element.getAttribute('data-vector-implementation');
-      this.draft={...source,pointsText:source.input.points.map(p=>p.x+', '+p.y).join('\n')};
+      this.draft={...source,pointsText:api.pointSetPoints(source.input).map(p=>p.x+', '+p.y).join('\n'),...(source.input.box?{box:{...source.input.box}}:{})};
       this.message='元の点群を図形のローカル座標で編集します。外観・変形・レイヤーを保持します。';
     } catch(error){this.message=error.message;}
     this.refresh();if(this.draft)this.controls.open();
@@ -38,8 +38,9 @@ class PointSetEditor {
       if(values.length!==2 || !values.every(Number.isFinite))throw Error(`点群の${i+1}行目は有限な x, y の2数で指定してください。`);
       return {x:values[0],y:values[1]};
     });
-    return window.VectorUtils.pointSetSource.pointSetInput(this.draft.method,{points});
+    return window.VectorUtils.pointSetSource.pointSetInput(this.draft.method,this.draft.method==='voronoiCells'?{sites:points,box:this.draft.box}:{points});
   }
+  controlPoints() {return window.VectorUtils.pointSetSource.pointSetPoints(this.input());}
   build() {
     this.assertTarget();const host=this.manager.host,d=this.draft,input=this.input(),method=d.method,api=window.VectorUtils.pointSetSource;
     if(!host.implementations(method).some(v=>v.id===d.implementation))throw Error('記録された計算実装がありません。使用する実装を選び直してください。');
@@ -71,7 +72,7 @@ class PointSetEditor {
   apply() {
     try {
       const result=this.build(),old=this.element,method=this.draft.method;
-      const meshChildren=method==='delaunayTriangles'?window.VectorUtils.pointSetSource.meshReplacementChildren(old,result):null;
+      const meshChildren=['delaunayTriangles','voronoiCells'].includes(method)?window.VectorUtils.pointSetSource.meshReplacementChildren(old,result):null;
       const generated=['x1','y1','x2','y2','cx','cy','r','d','points','data-vector-circle','data-vector-pointset','data-vector-implementation'];
       let target=old;
       if(result.tagName!==old.tagName) {
@@ -108,7 +109,15 @@ class PointSetEditor {
     const wrapper=document.createElement('label');wrapper.textContent='元の点群（1行に x, y）';wrapper.style.cssText='display:block;font-size:12px';
     const textarea=document.createElement('textarea');textarea.rows=6;textarea.value=d.pointsText;textarea.setAttribute('aria-label',wrapper.textContent);textarea.style.cssText='display:block;width:100%;box-sizing:border-box';
     textarea.addEventListener('input',()=>{d.pointsText=textarea.value;this.changed();status.textContent=this.message;});wrapper.append(textarea);container.append(wrapper);
-    if(!['convexHull','delaunayTriangles'].includes(d.method)){
+    if(d.method==='voronoiCells'){
+      const hint=document.createElement('p');hint.style.fontSize='12px';hint.textContent='切り取り範囲は図形のローカル座標です。図面サイズを変えても保存した範囲を使います。';container.append(hint);
+      for(const [key,caption] of [['x','切り取り範囲 X'],['y','切り取り範囲 Y'],['width','切り取り範囲 幅'],['height','切り取り範囲 高さ']]){
+        const label=document.createElement('label');label.textContent=caption;label.style.cssText='display:block;font-size:12px;margin:6px 0';
+        const number=document.createElement('input');number.type='number';number.step='any';number.value=d.box[key];number.setAttribute('aria-label',caption);number.style.width='100%';
+        number.addEventListener('input',()=>{d.box[key]=number.value.trim()?Number(number.value):NaN;this.changed();status.textContent=this.message;});label.append(number);container.append(label);
+      }
+    }
+    if(!['convexHull','delaunayTriangles','voronoiCells'].includes(d.method)){
     const label=document.createElement('label');label.textContent='点群の再描画分割数';label.style.cssText='display:block;font-size:12px;margin:10px 0';
     const number=document.createElement('input');number.type='number';number.min=2;number.max=10000;number.step=1;number.value=d.options.sampleCount;number.setAttribute('aria-label',label.textContent);number.style.width='100%';
     number.addEventListener('input',()=>{d.options.sampleCount=number.value.trim()?Number(number.value):NaN;this.changed();status.textContent=this.message;});label.append(number);container.append(label);
