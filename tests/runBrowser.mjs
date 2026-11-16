@@ -39,17 +39,18 @@ chrome.stdio[4].on("data", chunk => {
     }
   }
 });
-async function send(method, params = {}, sessionId) {
+async function send(method, params = {}, sessionId, timeoutMs = 15000) {
   if (exitError) throw exitError;
   const id = ++sequence;
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {pending.delete(id); reject(new Error("CDP timed out: " + method));}, 15000);
+    const timeout = setTimeout(() => {pending.delete(id); reject(new Error("CDP timed out: " + method));}, timeoutMs);
     pending.set(id, {resolve: value => {clearTimeout(timeout); resolve(value);}, reject: error => {clearTimeout(timeout); reject(error);}});
     chrome.stdio[3].write(JSON.stringify({id, method, params, ...(sessionId ? {sessionId} : {})}) + "\0");
   });
 }
 try {
-  const {targetId} = await send("Target.createTarget", {url: "about:blank"});
+  // Initial tab creation also waits for Chrome startup on a fresh CI runner.
+  const {targetId} = await send("Target.createTarget", {url: "about:blank"}, undefined, 45000);
   const {sessionId} = await send("Target.attachToTarget", {targetId, flatten: true});
   await send("Runtime.enable", {}, sessionId);
   await send("Page.enable", {}, sessionId);
@@ -70,7 +71,7 @@ try {
   if (result?.status !== "passed") throw new Error("Browser test status: " + (result?.status ?? "missing"));
 } catch (error) {
   console.error(error.stack);
-  if (exitError) console.error(stderr);
+  if (stderr) console.error(stderr);
   process.exitCode = 1;
 } finally {
   if (!exitError) await send("Browser.close").catch(() => {});

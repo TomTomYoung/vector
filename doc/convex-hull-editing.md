@@ -40,4 +40,4 @@ Andrew法は [polygons.js](../src/model/polygons.js)、Jarvis marchは [alternat
 
 ## 残る範囲
 
-点・線分へ退化した凸包の保存表示、増分更新のデータ構造、各入力点と他図形の継続的な拘束、点群ファイルの入出力、3次元凸包、任意の外部SVGからの全入力復元は未導入です。[Delaunay三角分割の元入力保存・再編集](delaunay-editing.md)も実装済みです。[Voronoi図の元入力保存・再編集](voronoi-editing.md)も実装済みです。多角形三角分割への展開は未導入です。
+点・線分へ退化した凸包の保存表示、増分更新のデータ構造、各入力点と他図形の継続的な拘束、点群ファイルの入出力、3次元凸包、任意の外部SVGからの全入力復元は未導入です。[Delaunay三角分割の元入力保存・再編集](delaunay-editing.md)も実装済みです。[Voronoi図の元入力保存・再編集](voronoi-editing.md)も実装済みです。[多角形三角分割の元境界保存・再編集](polygon-triangulation-editing.md)も実装済みです。

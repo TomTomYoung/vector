@@ -13,6 +13,7 @@ class PointConstructionTool extends BaseTool {
       this.isSpline() ? `次数${this.degree}には制御点${this.degree + 1}個以上が必要です（現在${this.points.length}個）` : `入力順の点列を使用します（現在${this.points.length}個）`,
       ...(this.isSpline() ? [this.periodic ? '周期曲線：先頭の制御点と重みを循環させ、一様ノットで閉じます' : '内部ノットを次数+1回重ねると、そこで別の枝に分かれます'] : []),
       ...(this.method === 'nurbsCurve' ? ['零・負の重みも使用できます。分母零付近と検査未完了の区間は省略します'] : []),
+      ...(this.method === 'triangulatePolygon' ? ['境界順に頂点を指定します。末尾から先頭へ閉じ、自己交差や辺の重なりは扱いません'] : []),
       ...(this.method === 'voronoiCells' ? ['Voronoiの切り取り範囲は図面全体です'] : [])];
   }
   isSpline() { return ['bSplineCurve', 'nurbsCurve'].includes(this.method); }
@@ -90,8 +91,6 @@ class PointConstructionTool extends BaseTool {
     return {points};
   }
   geometry(result) {
-    const polygon = points => ({kind: 'polygon', points});
-    if (this.method === 'triangulatePolygon') return result.length ? {kind: 'group', children: result.map(polygon)} : null;
     if (window.VectorUtils.pointSetSource.pointSetMethods.includes(this.method))
       return window.VectorUtils.pointSetSource.pointSetGeometry(this.method,this.input(),result);
     return result;
@@ -104,11 +103,11 @@ class PointConstructionTool extends BaseTool {
     if (!result) {this.implementationError = '入力条件を満たしません。点の配置・次数・ノット・重みを確認してください。'; return null;}
     const shape = this.geometry(result);
     if (!shape) {this.implementationError = 'この配置では図形を作成できません。'; return null;}
-    const element = this.toolManager.host.render(shape, null, {toolName: this.method,...(['convexHull','delaunayTriangles','voronoiCells'].includes(this.method)?{}:{sampleCount:this.sampleCount}),
+    const element = this.toolManager.host.render(shape, null, {toolName: this.method,...(['convexHull','delaunayTriangles','voronoiCells','triangulatePolygon'].includes(this.method)?{}:{sampleCount:this.sampleCount}),
       ...(source.pointSetMethods.includes(this.method) ? {sourceInput:input,sourceResult:result} : {}),
       ...(this.isSpline() ? {poleTolerance: this.poleTolerance, maxDepth: this.poleMaxDepth} : {})});
     if (!element) {this.implementationError = '指定した検査条件では描画できる区間がありません。分母の除外幅・最大深さ・重みを確認してください。'; return null;}
-    if(['convexHull','delaunayTriangles','voronoiCells'].includes(this.method))source.readPointSetSource(element.getAttribute('data-vector-pointset'),element.getAttribute('data-vector-implementation'),source.pointSetGeometrySnapshot(element));
+    if(['convexHull','delaunayTriangles','voronoiCells','triangulatePolygon'].includes(this.method))source.readPointSetSource(element.getAttribute('data-vector-pointset'),element.getAttribute('data-vector-implementation'),source.pointSetGeometrySnapshot(element));
     this.applyDefaultAttributes(element);
     if (element.hasAttribute('data-vector-partial')) element.setAttribute('fill', 'none');
     const record = element.getAttribute('data-vector-implementation');

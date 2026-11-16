@@ -40,6 +40,7 @@ class PointSetEditor {
     });
     return window.VectorUtils.pointSetSource.pointSetInput(this.draft.method,this.draft.method==='voronoiCells'?{sites:points,box:this.draft.box}:{points});
   }
+  controlPolygonClosed() {return this.draft?.method==='triangulatePolygon';}
   controlPoints() {return window.VectorUtils.pointSetSource.pointSetPoints(this.input());}
   build() {
     this.assertTarget();const host=this.manager.host,d=this.draft,input=this.input(),method=d.method,api=window.VectorUtils.pointSetSource;
@@ -72,7 +73,7 @@ class PointSetEditor {
   apply() {
     try {
       const result=this.build(),old=this.element,method=this.draft.method;
-      const meshChildren=['delaunayTriangles','voronoiCells'].includes(method)?window.VectorUtils.pointSetSource.meshReplacementChildren(old,result):null;
+      const meshChildren=['delaunayTriangles','voronoiCells','triangulatePolygon'].includes(method)?window.VectorUtils.pointSetSource.meshReplacementChildren(old,result):null;
       const generated=['x1','y1','x2','y2','cx','cy','r','d','points','data-vector-circle','data-vector-pointset','data-vector-implementation'];
       let target=old;
       if(result.tagName!==old.tagName) {
@@ -105,7 +106,7 @@ class PointSetEditor {
     const button=(text,id,action)=>{const b=document.createElement('button');b.type='button';b.textContent=text;b.dataset.pointsetAction=id;b.style.margin='4px';b.addEventListener('click',action);container.append(b);};
     if(!this.draft){button('点群を再編集','begin',()=>this.begin());container.append(status);return;}
     const d=this.draft,hint=document.createElement('p');hint.style.fontSize='12px';
-    hint.textContent='番号付きの点をドラッグできます。座標欄の行を増減すると点を追加・削除できます。Shift・直交モードは図面の縦横方向へ拘束します。Escはドラッグ中ならその移動、それ以外は再編集を取り消します。';container.append(hint);
+    hint.textContent=(d.method==='triangulatePolygon'?'座標欄の順に境界を結び、末尾から先頭へ閉じます。自己交差は適用できません。':'')+'番号付きの点をドラッグできます。座標欄の行を増減すると点を追加・削除できます。Shift・直交モードは図面の縦横方向へ拘束します。Escはドラッグ中ならその移動、それ以外は再編集を取り消します。';container.append(hint);
     const wrapper=document.createElement('label');wrapper.textContent='元の点群（1行に x, y）';wrapper.style.cssText='display:block;font-size:12px';
     const textarea=document.createElement('textarea');textarea.rows=6;textarea.value=d.pointsText;textarea.setAttribute('aria-label',wrapper.textContent);textarea.style.cssText='display:block;width:100%;box-sizing:border-box';
     textarea.addEventListener('input',()=>{d.pointsText=textarea.value;this.changed();status.textContent=this.message;});wrapper.append(textarea);container.append(wrapper);
@@ -117,7 +118,7 @@ class PointSetEditor {
         number.addEventListener('input',()=>{d.box[key]=number.value.trim()?Number(number.value):NaN;this.changed();status.textContent=this.message;});label.append(number);container.append(label);
       }
     }
-    if(!['convexHull','delaunayTriangles','voronoiCells'].includes(d.method)){
+    if(!['convexHull','delaunayTriangles','voronoiCells','triangulatePolygon'].includes(d.method)){
     const label=document.createElement('label');label.textContent='点群の再描画分割数';label.style.cssText='display:block;font-size:12px;margin:10px 0';
     const number=document.createElement('input');number.type='number';number.min=2;number.max=10000;number.step=1;number.value=d.options.sampleCount;number.setAttribute('aria-label',label.textContent);number.style.width='100%';
     number.addEventListener('input',()=>{d.options.sampleCount=number.value.trim()?Number(number.value):NaN;this.changed();status.textContent=this.message;});label.append(number);container.append(label);

@@ -90,7 +90,7 @@ export function createEditorHost({
         ...(prepared?.withinTolerance === false ? {warning: '最大深さに達し、許容差を満たしていません。'} : {}),
         ...(prepared?.warning ? {warning: prepared.warning} : {}),
         ...(prepared?.sampling ? {sampling: prepared.sampling} : {}),
-        ...(pointSource ? {parameters:{pointCount:(pointSource.input.sites??pointSource.input.points).length,...(pointSource.method==='convexHull'?{hullVertexCount:pointSource.result.length}:{}),...(pointSource.method==='delaunayTriangles'?{triangleCount:pointSource.result.length}:{}),...(pointSource.method==='voronoiCells'?{cellCount:pointSource.result.length,visibleCellCount:pointSource.result.filter(c=>c.points.length).length,box:pointSource.input.box}:{}),...(pointSource.result.rms!==undefined?{rms:pointSource.result.rms}:{})}} : {}),
+        ...(pointSource ? {parameters:{pointCount:(pointSource.input.sites??pointSource.input.points).length,...(pointSource.method==='convexHull'?{hullVertexCount:pointSource.result.length}:{}),...(['delaunayTriangles','triangulatePolygon'].includes(pointSource.method)?{triangleCount:pointSource.result.length}:{}),...(pointSource.method==='voronoiCells'?{cellCount:pointSource.result.length,visibleCellCount:pointSource.result.filter(c=>c.points.length).length,box:pointSource.input.box}:{}),...(pointSource.result.rms!==undefined?{rms:pointSource.result.rms}:{})}} : {}),
         ...(shape?.kind === 'splineCurve' ? {parameters: {degree: shape.degree, periodic: !!shape.periodic, controlCount: shape.controlCount ?? shape.points.length}} : {}),
       });
     },
