@@ -1943,6 +1943,75 @@ await check('Voronoi rejects invalid cell correspondence, mutating inputs, incom
   }finally{host.restorePreferences(before);}
 });
 
+const polygonBoundary=[{x:100,y:100},{x:260,y:100},{x:260,y:260},{x:180,y:260},{x:180,y:180},{x:100,y:180}];
+const polygonRecorded=[polygonBoundary[0],polygonBoundary[0],{x:180,y:100},...polygonBoundary.slice(1),polygonBoundary[0]];
+async function addEditablePolygonMesh(content=''){
+  fixture(content);await tick();const host=w.toolManager.host,input={points:polygonBoundary};host.selectImplementation('triangulatePolygon','default');host.selectRenderer('triangulatePolygon','default');const computed=host.execute('triangulatePolygon',input);
+  const el=host.render(w.VectorUtils.pointSetSource.pointSetGeometry('triangulatePolygon',input,computed),null,{toolName:'triangulatePolygon',sourceInput:input,sourceResult:computed});el.id='editable-polygon-mesh';el.setAttribute('stroke','#734589');el.setAttribute('stroke-width','3');el.setAttribute('fill','#f3eaff');el.setAttribute('data-layer',w.layers[0].id);canvas.append(el);return el;
+}
+
+await check('Polygon triangulation toolbar retains the boundary, duplicates and closing point, selects the whole mesh and reopens a closed control outline',async()=>{
+  const host=w.toolManager.host,before=host.exportPreferences(),snap=w.snapToGrid;w.snapToGrid=false;
+  try{
+    for(const points of [polygonRecorded,[...polygonRecorded].reverse()]){
+      fixture();await tick();host.selectImplementation('triangulatePolygon','default');host.selectRenderer('triangulatePolygon','default');activate('triangulatePolygon');for(const p of points)click(p.x,p.y);
+      const accepted=w.toolManager.tools.triangulatePolygon.points.map(p=>({...p}));assert(!w.DrawingDocument.capture().querySelector('[data-vector-pointset]'),'unfinished polygon source excluded');key('Enter');let el=canvas.querySelector('[data-construction-tool="triangulatePolygon"]');const source=hullRecord(el),record=JSON.parse(el.getAttribute('data-vector-implementation'));
+      assert(el.tagName==='g'&&JSON.stringify(source.input.points)===JSON.stringify(accepted)&&source.result.length===meshFaces(el).length,'source boundary and triangles');assert(record.parameters.pointCount===points.length&&record.parameters.triangleCount===meshFaces(el).length&&record.rendering.algorithm.includes('SVG g'),'actual methods and counts');activate('select');click(130,130,meshFaces(el)[0]);assert(w.selectedObject===el,'face selects whole triangulation');pointsetAction('begin');
+      assert(canvas.querySelectorAll('[data-pointset-control-index]').length===points.length&&/Z$/.test(canvas.querySelector('[data-pointset-control-polygon]').getAttribute('d'))&&!doc.querySelector('[aria-label="点群の再描画分割数"]'),'all input handles and closed boundary');pointsetAction('cancel');w.DrawingDocument.open(w.DrawingDocument.serialize());el=canvas.querySelector('[data-construction-tool="triangulatePolygon"]');openMesh(el);assert(JSON.stringify(w.toolPropertiesPanel.pointSetEditor.input().points)===JSON.stringify(accepted),'original boundary survives SVG');pointsetAction('cancel');
+    }
+  }finally{host.restorePreferences(before);w.snapToGrid=snap;}
+});
+
+await check('Polygon triangulation adds and removes boundary vertices with one-step history and preserves transformed group and metadata identities',async()=>{
+  const host=w.toolManager.host,before=host.exportPreferences();
+  try{
+    let el=await addEditablePolygonMesh('<g id="polygon-parent" transform="translate(30 20) rotate(12)"/>');doc.getElementById('polygon-parent').append(el);el.setAttribute('transform','scale(-0.8 1.2) translate(-450 0)');el.setAttribute('style','opacity:0.7');const title=w.SvgUtils.createElement('title'),desc=w.SvgUtils.createElement('desc'),metadata=w.SvgUtils.createElement('metadata');title.textContent='polygon';desc.textContent='concave boundary';metadata.textContent='notes';el.prepend(title);el.append(desc,metadata);
+    w.saveState();await tick();w.undoStack.length=0;const original=meshState(el),attrs=['transform','style','stroke','fill','data-layer'],appearance=attrs.map(k=>el.getAttribute(k)),preferences=JSON.stringify(host.exportPreferences()),oldFace=meshFaces(el)[0];openMesh(el);const points=[...polygonBoundary,{x:80,y:140}];pointsetField('元の点群（1行に x, y）',arcText(points));pointsetAction('preview');const preview=canvas.querySelector('[data-vector-preview="pointset-edit"]'),a=el.getScreenCTM(),b=preview.getScreenCTM();
+    const error=Math.max(...points.map(p=>{const x=new w.DOMPoint(p.x,p.y).matrixTransform(a),y=new w.DOMPoint(p.x,p.y).matrixTransform(b);return Math.hypot(x.x-y.x,x.y-y.y);}));assert(error<0.001&&meshFaces(preview).length===5,'aligned concave mesh preview');assert(meshState(el)===original&&!w.DrawingDocument.capture().querySelector('[data-vector-preview]'),'preview excluded');pointsetAction('apply');await tick();
+    assert(doc.getElementById('editable-polygon-mesh')===el&&el.querySelector('title')===title&&el.querySelector('desc')===desc&&el.querySelector('metadata')===metadata&&w.selectedObject===el,'group and metadata identity');assert(attrs.every((k,i)=>el.getAttribute(k)===appearance[i])&&!oldFace.isConnected&&meshFaces(el).length===5&&w.undoStack.length===1&&JSON.stringify(host.exportPreferences())===preferences,'atomic faces, appearance and independent settings');const saved=meshState(el);
+    key('z',{ctrlKey:true});await tick();el=doc.getElementById('editable-polygon-mesh');assert(meshState(el)===original,'undo exact ring and faces');key('Z',{ctrlKey:true,shiftKey:true});await tick();el=doc.getElementById('editable-polygon-mesh');assert(meshState(el)===saved,'redo exact ring');openMesh(el);pointsetField('元の点群（1行に x, y）','100,100\n260,100\n100,180');pointsetAction('apply');assert(meshFaces(el).length===1&&hullRecord(el).input.points.length===3,'removal leaves one triangle');
+  }finally{host.restorePreferences(before);}
+});
+
+await check('Polygon boundary dragging supports affine transforms, gesture cancellation and repair of a self-crossing draft',async()=>{
+  frame.scrollIntoView();const host=w.toolManager.host,before=host.exportPreferences(),viewport=w.zoomPanManager.getTransform(),snap=w.snapToGrid,ortho=w.orthoMode;w.snapToGrid=false;w.orthoMode=false;
+  try{
+    const el=await addEditablePolygonMesh('<g id="polygon-drag" transform="matrix(-0.8 0.3 0.2 1.2 500 20)"/>');doc.getElementById('polygon-drag').append(el);w.zoomPanManager.setTransform(1.3,20,10);openMesh(el);const original=meshState(el);
+    pointer('pointerdown',pointsetHandle(4),localScreen(el,{x:182,y:181}));pointer('pointermove',doc,localScreen(el,{x:172,y:171}));await paint();pointer('pointerup',doc,localScreen(el,{x:162,y:171}));assert(closePoint(w.toolPropertiesPanel.pointSetEditor.input().points[4],{x:160,y:170})&&meshState(el)===original,'local concave vertex and last pointer');
+    pointer('pointerdown',pointsetHandle(0),localScreen(el,polygonBoundary[0]));pointer('pointermove',doc,localScreen(el,{x:80,y:80}));await paint();key('Escape');assert(closePoint(w.toolPropertiesPanel.pointSetEditor.input().points[0],polygonBoundary[0])&&closePoint(w.toolPropertiesPanel.pointSetEditor.input().points[4],{x:160,y:170}),'only current gesture canceled');
+    pointsetField('元の点群（1行に x, y）','100,100\n240,240\n100,240\n240,100');pointsetAction('preview');pointsetAction('apply');assert(meshState(el)===original&&!canvas.querySelector('[data-vector-preview="pointset-edit"]')&&pointsetHandle(2),'self crossing blocked with repair handles retained');pointer('pointerdown',pointsetHandle(2),localScreen(el,{x:100,y:240}));pointer('pointerup',doc,localScreen(el,{x:300,y:300}));assert(canvas.querySelector('[data-vector-preview="pointset-edit"]'),'drag repairs crossing');pointsetAction('apply');assert(closePoint(hullRecord(el).input.points[2],{x:300,y:300})&&meshFaces(el).length>0,'repaired boundary applies');
+  }finally{host.restorePreferences(before);w.zoomPanManager.setTransform(viewport.zoom,viewport.panX,viewport.panY);w.snapToGrid=snap;w.orthoMode=ortho;}
+});
+
+await check('Polygon triangulation detects child changes, locked faces and changed input before replacing any triangles',async()=>{
+  const host=w.toolManager.host,before=host.exportPreferences();
+  try{
+    for(const change of ['face','source','lock']){
+      const el=await addEditablePolygonMesh();openMesh(el);pointsetAction('preview');if(change==='face')meshFaces(el)[0].setAttribute('points','0,0 1,0 0,1');if(change==='source'){const s=hullRecord(el);s.input.points.reverse();el.setAttribute('data-vector-pointset',JSON.stringify(s));}if(change==='lock'){w.layers.push({id:2,name:'locked triangle',visible:true,locked:true});meshFaces(el)[0].setAttribute('data-layer','2');}
+      const modified=meshState(el);await paint();await paint();assert(!pointsetHandle(0)&&!canvas.querySelector('[data-vector-preview]'),'change clears helpers '+change);pointsetAction('apply');assert(meshState(el)===modified,'changed input or face retained '+change);pointsetAction('cancel');
+    }
+    const el=await addEditablePolygonMesh();openMesh(el);el.setAttribute('transform','scale(0 1)');await paint();await paint();assert(!pointsetHandle(0),'singular group');el.removeAttribute('transform');await paint();await paint();assert(pointsetHandle(0),'frame recovers');activate('line');assert(!w.toolPropertiesPanel.pointSetEditor.draft&&!canvas.querySelector('[data-vector-preview]'),'tool switch cleanup');
+    fixture('<g id="legacy-polygon-mesh"><polygon points="100,100 200,100 100,200"/></g>');await tick();activate('select');w.selectTool.selectObject(doc.getElementById('legacy-polygon-mesh'));assert(!doc.querySelector('[data-pointset-editor]'),'legacy triangle group has no invented boundary');
+  }finally{host.restorePreferences(before);}
+});
+
+await check('Polygon triangulation swaps calculation and closed-path rendering, retains provenance and roundtrips SVG',async()=>{
+  const host=w.toolManager.host,before=host.exportPreferences();
+  try{
+    let el=await addEditablePolygonMesh();host.registerImplementation('triangulatePolygon',{id:'test-polygon-delegate',label:'Delegated ears',algorithm:'Explicit ear clipping delegation',run:(input,ops,execute)=>execute('triangulatePolygon',input,{implementation:'default'})});host.registerRenderer({id:'test-polygon-paths',label:'Triangle paths',algorithm:'Closed M/L/Z triangles',supports:n=>n==='triangulatePolygon',prepare:s=>({...s,children:s.children.map(p=>({kind:'path',start:p.points[0],segments:p.points.slice(1).map(end=>({kind:'segment',end})),closed:true}))})});const preferences=JSON.stringify(host.exportPreferences());openMesh(el);pointsetField('点群の再計算実装','test-polygon-delegate','change');pointsetField('点群の再描画実装','test-polygon-paths','change');pointsetAction('apply');
+    assert(meshFaces(el).every(f=>f.tagName==='path')&&JSON.parse(el.getAttribute('data-vector-implementation')).calculation.id==='test-polygon-delegate'&&JSON.stringify(host.exportPreferences())===preferences,'actual methods and settings');assert(doc.querySelector('[data-recorded-implementation]').textContent.includes('元の生成 triangulatePolygon'),'origin visible');w.DrawingDocument.open(w.DrawingDocument.serialize());el=doc.getElementById('editable-polygon-mesh');activate('select');click(120,140,meshFaces(el)[0]);assert(w.selectedObject===el,'loaded triangle selects whole polygon');pointsetAction('begin');pointsetField('点群の再計算実装','default','change');pointsetField('点群の再描画実装','default','change');pointsetAction('apply');assert(meshFaces(el).every(f=>f.tagName==='polygon')&&JSON.stringify(hullRecord(el).input.points)===JSON.stringify(polygonBoundary),'restore native faces and boundary');
+  }finally{host.restorePreferences(before);}
+});
+
+await check('Polygon triangulation refuses foreign vertices, mutating calculations, incompatible rendering and missing implementations atomically',async()=>{
+  const host=w.toolManager.host,before=host.exportPreferences();
+  try{
+    const el=await addEditablePolygonMesh();host.registerImplementation('triangulatePolygon',{id:'test-polygon-bad',label:'Foreign vertex',algorithm:'Invalid triangle',run:input=>[[{x:0,y:0},input.points[0],input.points[1]]]});host.registerImplementation('triangulatePolygon',{id:'test-polygon-mutate',label:'Mutating ring',algorithm:'Reverses input',run:input=>{input.points.reverse();return [];}});host.registerRenderer({id:'test-polygon-single',label:'Single',algorithm:'Drops group',supports:n=>n==='triangulatePolygon',prepare:s=>s.children[0]});host.registerRenderer({id:'test-polygon-open',label:'Open',algorithm:'Unclosed paths',supports:n=>n==='triangulatePolygon',prepare:s=>({...s,children:s.children.map(p=>({kind:'path',start:p.points[0],segments:p.points.slice(1).map(end=>({kind:'segment',end}))}))})});
+    const original=meshState(el),preferences=JSON.stringify(host.exportPreferences());openMesh(el);for(const id of ['test-polygon-bad','test-polygon-mutate']){pointsetField('点群の再計算実装',id,'change');pointsetAction('apply');assert(meshState(el)===original,'invalid calculation '+id);}pointsetField('点群の再計算実装','default','change');for(const id of ['test-polygon-single','test-polygon-open']){pointsetField('点群の再描画実装',id,'change');pointsetAction('apply');assert(meshState(el)===original,'incompatible renderer '+id);}assert(JSON.stringify(host.exportPreferences())===preferences,'preferences unchanged');pointsetAction('cancel');
+    const record=JSON.parse(el.getAttribute('data-vector-implementation'));record.calculation.id='missing-polygon';record.rendering.id='missing-polygon-renderer';el.setAttribute('data-vector-implementation',JSON.stringify(record));pointsetAction('begin');pointsetAction('apply');assert(doc.querySelector('[data-pointset-edit-status]').textContent.includes('計算実装がありません'),'missing calculation');pointsetField('点群の再計算実装','default','change');pointsetAction('apply');assert(doc.querySelector('[data-pointset-edit-status]').textContent.includes('描画実装がありません'),'missing renderer');pointsetField('点群の再描画実装','default','change');pointsetAction('apply');assert(JSON.parse(el.getAttribute('data-vector-implementation')).rendering.id==='default','explicit recovery');
+  }finally{host.restorePreferences(before);}
+});
+
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
 </script>

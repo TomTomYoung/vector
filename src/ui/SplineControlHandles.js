@@ -72,7 +72,7 @@ class SplineControlHandles {
         group.append(circle,label);this.items.push(group);this.group.append(group);
       }
       const canvasPoints=points.map(frame.toCanvas);
-      this.polygon.setAttribute('d',canvasPoints.map((p,i)=>(i?'L':'M')+p.x+' '+p.y).join(' ')+(this.editor.draft.periodic&&points.length?' Z':''));
+      this.polygon.setAttribute('d',canvasPoints.map((p,i)=>(i?'L':'M')+p.x+' '+p.y).join(' ')+((this.editor.controlPolygonClosed?.()??this.editor.draft.periodic)&&points.length?' Z':''));
       canvasPoints.forEach((p,i)=>this.items[i].setAttribute('transform',text(frame.handleMatrix(p))));
       if(this.editor.preview)this.editor.preview.setAttribute('transform',text(frame.localCanvas));
       if(this.group.parentNode!==this.canvas || (this.editor.preview && this.group.nextSibling))this.canvas.append(this.group);
