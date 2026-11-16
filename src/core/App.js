@@ -50,6 +50,7 @@ class App {
     // ツールマネージャーの初期化
     this.toolManager = this.createManager(canvas, this.host);
     this.toolManager.preferences = this.preferences;
+    this.toolManager.documentPreset = window.VectorUtils.createDocumentImplementationPreset(this.host);
     window.toolManager = this.toolManager;
     this.setupKeyboardEvents();
 

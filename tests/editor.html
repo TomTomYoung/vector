@@ -2079,6 +2079,102 @@ await check('Workbench cancels obsolete Workers and prevents a delayed file read
   }finally{page.close();}
 });
 
+const presetAction=(app,id)=>{const b=app.d.querySelector(`[data-document-preset-action="${id}"]`);assert(b&&!b.disabled,'enabled preset action '+id);b.click();};
+const documentSettings=app=>JSON.parse(app.w.DrawingDocument.capture().querySelector('metadata[data-vector-document]').textContent).implementationPreset;
+function presetSVG(app,preset){
+  const root=app.w.DrawingDocument.capture(),meta=root.querySelector('metadata[data-vector-document]'),state=JSON.parse(meta.textContent);
+  state.implementationPreset=preset;meta.textContent=JSON.stringify(state);return new app.w.XMLSerializer().serializeToString(root);
+}
+await check('Drawing presets travel in SVG, remain inert on opening, and explicitly control real spline and circle drawing',async()=>{
+  const key='vector.test.document-preset',options='{preferences:{key:'+JSON.stringify(key)+'}}';localStorage.removeItem(key);
+  let source=await preferenceEditor('{preferences:false}'),target;
+  try{
+    source.w.DrawingDocument.open('<svg xmlns="http://www.w3.org/2000/svg"><circle id="kept" cx="10" cy="20" r="5" data-layer="2"/></svg>');
+    const h=source.w.toolManager.host;h.selectImplementation('spline','centripetal');h.selectRenderer('circle','cubic');h.selectRenderer('nurbsCurve','default',{sampleCount:130,poleTolerance:1e-6});
+    presetAction(source,'record');await tick();const saved=documentSettings(source),xml=source.w.DrawingDocument.serialize();
+    assert(Object.keys(saved.calculation).length===119&&Object.keys(saved.rendering).length===119,'full snapshot');source.element.remove();
+    target=await preferenceEditor(options);const host=target.w.toolManager.host;host.selectImplementation('spline','chordal');target.w.toolManager.preferences.save();const browser=localStorage.getItem(key);
+    target.w.DrawingDocument.open(xml);const before=target.w.DrawingDocument.serialize();
+    assert(host.describe('spline').id==='chordal'&&host.describeRendering('circle').id==='default','open is inert');
+    target.d.getElementById('spline-tool').click();assert(target.d.querySelector('[data-document-preset-method="calculation"]').textContent.includes('centripetal'),'recorded ID shown apart from current choice');
+    presetAction(target,'apply');assert(host.describe('spline').id==='centripetal'&&host.describeRendering('circle').id==='cubic','explicit apply');
+    assert(target.w.DrawingDocument.serialize()===before&&localStorage.getItem(key)===browser,'existing SVG and saved browser defaults unchanged');
+    target.element.scrollIntoView();const c=target.d.getElementById('canvas'),event=(type,x,y)=>{const p=new target.w.DOMPoint(x,y).matrixTransform(c.getScreenCTM());c.dispatchEvent(new target.w.MouseEvent(type,{clientX:p.x,clientY:p.y,button:0,bubbles:true}));};
+    for(const p of [[80,80],[100,160],[210,90]]){event('mousedown',...p);event('mouseup',...p);}target.d.dispatchEvent(new target.w.KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
+    const spline=c.querySelector('[data-spline-tool]');assert(JSON.parse(spline.getAttribute('data-vector-implementation')).calculation.id==='centripetal','drawing uses restored calculation');
+    target.d.getElementById('circle-tool').click();event('mousedown',350,180);event('mousemove',390,180);event('mouseup',390,180);
+    const circle=c.querySelector('[data-vector-circle]');assert(circle?.tagName==='path'&&circle.getAttribute('d').includes('C')&&JSON.parse(circle.getAttribute('data-vector-implementation')).rendering.id==='cubic','drawing uses restored renderer');
+    target.d.getElementById('nurbsCurve-tool').click();assert(target.d.querySelector('input[aria-label="描画の分割数"]').value==='130','tool field uses saved option');
+    assert(target.d.getElementById('kept').getAttribute('r')==='5'&&target.w.layers.some(l=>l.id===2),'old figure and layer retained');
+  }finally{source.element.remove();target?.element.remove();localStorage.removeItem(key);}
+});
+
+await check('Recording, updating and removing a drawing preset each undo in one step without changing active methods',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    const host=app.w.toolManager.host;await tick();app.w.undoStack.length=0;
+    host.selectImplementation('spline','centripetal');presetAction(app,'record');await tick();assert(app.w.undoStack.length===1,'record is one step');
+    host.selectImplementation('spline','chordal');presetAction(app,'record');await tick();assert(app.w.undoStack.length===2&&documentSettings(app).calculation.spline==='chordal','update is one step');
+    app.w.undo();assert(documentSettings(app).calculation.spline==='centripetal'&&host.describe('spline').id==='chordal','undo updates document only');app.w.redo();assert(documentSettings(app).calculation.spline==='chordal','redo updated preset');
+    presetAction(app,'clear');await tick();assert(!documentSettings(app)&&app.w.undoStack.length===3&&host.describe('spline').id==='chordal','clear one step without reset');
+    app.w.undo();assert(documentSettings(app).calculation.spline==='chordal','undo deletion');app.w.redo();assert(!documentSettings(app),'redo deletion');
+    app.w.undo();host.selectImplementation('spline','uniform');const count=app.w.undoStack.length;presetAction(app,'apply');await tick();assert(host.describe('spline').id==='chordal'&&app.w.undoStack.length===count,'apply changes settings, not document history');
+  }finally{app.element.remove();}
+});
+
+await check('Malformed drawing presets reject the whole SVG before changing artwork, selection, layers or history',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    app.w.DrawingDocument.open('<svg xmlns="http://www.w3.org/2000/svg"><circle id="original" cx="20" cy="20" r="10" data-layer="3"/></svg>');presetAction(app,'record');await tick();
+    const el=app.d.getElementById('original');app.w.selectTool.selectObject(el);const before=app.w.DrawingDocument.serialize(),host=JSON.stringify(app.w.toolManager.host.exportPreferences()),history=app.w.undoStack.length;
+    const empty={version:1,calculation:{},rendering:{}};
+    for(const bad of [null,{...empty,version:2},{...empty,calculation:{spline:7}}, {...empty,rendering:{circle:{id:'cubic',options:[]}}},JSON.parse('{"version":1,"calculation":{"__proto__":"bad"},"rendering":{}}'),{...empty,rendering:{circle:{id:'cubic',options:{huge:'x'.repeat(256001)}}}}]){
+      let rejected=false;try{app.w.DrawingDocument.open(presetSVG(app,bad));}catch{rejected=true;}
+      assert(rejected&&app.w.DrawingDocument.serialize()===before&&app.d.getElementById('original')===el&&app.w.selectedObject===el,'atomic SVG refusal');
+      assert(JSON.stringify(app.w.toolManager.host.exportPreferences())===host&&app.w.undoStack.length===history&&app.w.layers.some(l=>l.id===3),'settings, history and layers unchanged');
+    }
+  }finally{app.element.remove();}
+});
+
+await check('Unavailable drawing methods are reported and survive SVG round trips for later registration',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    const host=app.w.toolManager.host,preset={version:1,calculation:{spline:'later-spline',futureTool:'future'},rendering:{circle:{id:'cubic',options:{}},line:{id:'adaptive',options:{}}}};
+    app.w.DrawingDocument.open(presetSVG(app,preset));app.d.getElementById('spline-tool').click();
+    assert(app.d.querySelector('[data-document-preset-method="calculation"]').textContent.includes('未登録'),'unavailable recorded method identified');presetAction(app,'apply');
+    assert(host.describe('spline').id==='default'&&host.describeRendering('circle').id==='cubic','compatible only');assert(app.d.querySelector('[data-document-preset-status]').textContent.includes('futureTool/future'),'reason displayed');
+    app.w.DrawingDocument.open(app.w.DrawingDocument.serialize());assert(JSON.stringify(documentSettings(app))===JSON.stringify(preset),'unknown entries retained after apply and save');
+    let executions=0;host.registerImplementation('spline',{id:'later-spline',label:'Later spline',algorithm:'Explicit test delegation',run:(input,ops,execute)=>{executions++;return execute('spline',input,{implementation:'uniform'});}});
+    presetAction(app,'apply');assert(host.describe('spline').id==='later-spline'&&executions===0,'registration allows retry without execution');host.execute('spline',{points:[{x:0,y:0},{x:10,y:20},{x:40,y:0}]});assert(executions===1,'explicit calculation works');
+  }finally{app.element.remove();}
+});
+
+await check('Opening legacy or alternate drawings replaces only their preset and document undo never switches methods',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    const host=app.w.toolManager.host;host.selectImplementation('spline','centripetal');presetAction(app,'record');await tick();const a=app.w.DrawingDocument.serialize();
+    host.selectImplementation('spline','chordal');presetAction(app,'record');await tick();const b=app.w.DrawingDocument.serialize();
+    app.w.DrawingDocument.open(a);app.w.saveState();await tick();assert(documentSettings(app).calculation.spline==='centripetal'&&host.describe('spline').id==='chordal','drawing A inert');
+    app.w.DrawingDocument.open('<svg xmlns="http://www.w3.org/2000/svg"><rect id="legacy" width="10" height="10"/></svg>');app.w.saveState();await tick();
+    assert(!documentSettings(app)&&app.d.querySelector('[data-document-preset-action="apply"]').disabled&&host.describe('spline').id==='chordal','legacy has no inherited preset');
+    app.w.undo();assert(documentSettings(app).calculation.spline==='centripetal'&&!app.d.getElementById('legacy'),'undo open restores old document preset');app.w.redo();assert(!documentSettings(app)&&app.d.getElementById('legacy'),'redo legacy');
+    app.w.DrawingDocument.open(b);assert(documentSettings(app).calculation.spline==='chordal','drawing B owns its snapshot');
+  }finally{app.element.remove();}
+});
+
+await check('Drawing presets work with denied browser storage and the actual SVG download carries the recorded snapshot',async()=>{
+  const app=await preferenceEditor('{preferences:{storage:()=>{throw Error("blocked");}}}');
+  try{
+    const host=app.w.toolManager.host;app.d.getElementById('spline-tool').click();preferenceChoose(app,'calculation','uniform');
+    assert(app.d.querySelector('[data-preference-status]').textContent.includes('保存できません'),'browser failure visible');presetAction(app,'record');host.selectImplementation('spline','default');presetAction(app,'apply');
+    assert(host.describe('spline').id==='uniform'&&!app.w.toolManager.documentPreset.state.warning,'independent SVG preset works');
+    let blob,name;const url=app.w.URL.createObjectURL,revoke=app.w.URL.revokeObjectURL,click=app.w.HTMLAnchorElement.prototype.click;
+    app.w.URL.createObjectURL=b=>{blob=b;return 'blob:preset-test';};app.w.URL.revokeObjectURL=()=>{};app.w.HTMLAnchorElement.prototype.click=function(){name=this.download;};
+    try{app.d.getElementById('save-btn').click();assert(blob?.type==='image/svg+xml'&&name==='drawing.svg','real SVG download');const text=await blob.text();presetAction(app,'clear');app.w.DrawingDocument.open(text);assert(documentSettings(app).calculation.spline==='uniform','download can be reopened');}
+    finally{app.w.URL.createObjectURL=url;app.w.URL.revokeObjectURL=revoke;app.w.HTMLAnchorElement.prototype.click=click;}
+  }finally{app.element.remove();}
+});
+
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
 </script>

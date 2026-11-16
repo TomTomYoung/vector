@@ -24,7 +24,8 @@ class DrawingDocument {
     metadata.setAttribute("data-vector-document", "1");
     metadata.textContent = JSON.stringify({
       layers: window.layers, currentLayerId: window.currentLayerId,
-      vertices: window.verticesTool?.verticesObject
+      vertices: window.verticesTool?.verticesObject,
+      implementationPreset: window.toolManager?.documentPreset?.snapshot()
     });
     svg.prepend(metadata);
     return svg;
@@ -64,6 +65,7 @@ class DrawingDocument {
     }
     if (!layers.size) layers.set(1, this.defaultLayer(1));
     if (state.vertices && !VerticesTool.isValidModel(state.vertices)) throw new Error("頂点の編集データが不正です。");
+    const preset = window.VectorUtils.parseDocumentImplementationPreset(state.implementationPreset);
 
     // Validate the complete new document before replacing the current one.
     const canvas = document.getElementById("canvas");
@@ -81,6 +83,7 @@ class DrawingDocument {
     window.layers = Array.from(layers.values());
     window.currentLayerId = layers.has(state.currentLayerId) ? state.currentLayerId : window.layers[0].id;
     window.verticesTool.restoreModel(state.vertices);
+    window.toolManager.documentPreset.open(preset);
     window.updateLayerList();
     if (window.showGrid) GridManager.createGrid();
     window.toolPropertiesPanel.updatePanel();
