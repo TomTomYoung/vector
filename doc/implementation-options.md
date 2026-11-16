@@ -187,3 +187,7 @@ Bernstein直接評価、BigIntの2進整数化、登録API、SVGグループ化�
 ## 検証
 
 [implementations.test.mjs](../tests/implementations.test.mjs)で方式選択の独立性、委譲、Catmull–Romの補間、凸包の一致、矩形切取の境界、丸めで消える行列式の符号、Delaunayの空円条件、Bernsteinとde Casteljauの一致、適応分割の許容差と上限、NURBSの円弧と無効入力を検証します。[editor.html](../tests/editor.html)では実際のプロパティ操作、9ツールの作図、記録のSVG往復、円からパスへの切替、外部実装、Workerへの選択伝達を確認します。
+
+## 演算室の作業保存
+
+演算室では[演算ごとの入力・計算方式と選択状態を保存・復元](workbench-session.md)できます。JSONの下書き、自動保存、明示的な復元、JSON書出し・読込、初期化に対応します。保存した実装IDをWorkerへ渡し、使用するアルゴリズムと実装元を画面で確認できます。作図エディタの方式設定と図形の生成記録は別に保持します。

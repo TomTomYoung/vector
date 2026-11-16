@@ -48,6 +48,24 @@ function fixture(content = "") {
   w.DrawingDocument.open('<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600">' + content + '</svg>');
   w.saveState();
 }
+async function createWorkbench(options={storage:false},setup=''){
+  const url=new URL('../geometry.html',location.href),html=await (await fetch(url)).text(),other=document.createElement('iframe');other.width=1100;other.height=700;
+  const ready=new Promise(resolve=>other.addEventListener('load',resolve,{once:true}));
+  const bootstrap='<script>window.vectorWorkbenchOptions='+JSON.stringify(options)+';window.__workbenchWorkerCount=0;const NativeWorker=Worker;window.Worker=class extends NativeWorker{constructor(...args){super(...args);window.__workbenchWorkerCount++;}};'+setup+'<\/script>';
+  other.srcdoc=html.replace('<head>','<head><base href="'+url+'">'+bootstrap);document.body.append(other);await ready;
+  const cw=other.contentWindow,get=id=>cw.document.getElementById(id);
+  const choose=(id,value)=>{get(id).value=value;get(id).dispatchEvent(new cw.Event('change'));};
+  const edit=text=>{get('input').value=text;get('input').dispatchEvent(new cw.Event('input'));};
+  return {frame:other,w:cw,get,choose,edit,
+    async run(){get('run').click();for(let i=0;i<200&&get('status').textContent==='計算中…';i++)await new Promise(r=>setTimeout(r,20));assert(get('status').textContent!=='計算中…','workbench completion');return get('output').textContent;},
+    async importText(text){const files=new cw.DataTransfer();files.items.add(new cw.File([text],'session.json',{type:'application/json'}));get('session-file').files=files.files;await get('session-file').onchange();},
+    async exportText(){let blob,filename;const create=cw.URL.createObjectURL,revoke=cw.URL.revokeObjectURL,click=cw.HTMLAnchorElement.prototype.click;
+      cw.URL.createObjectURL=value=>{blob=value;return 'blob:workbench-test';};cw.URL.revokeObjectURL=()=>{};cw.HTMLAnchorElement.prototype.click=function(){filename=this.download;};
+      try{get('session-export').click();assert(blob?.type==='application/json'&&filename==='vector-workbench-session.json','JSON download');return await blob.text();}finally{cw.URL.createObjectURL=create;cw.URL.revokeObjectURL=revoke;cw.HTMLAnchorElement.prototype.click=click;}
+    },close(){other.remove();},
+  };
+}
+
 await check("All 31 registered toolbar buttons activate", async () => {
   const buttons = [...doc.querySelectorAll("#tool-buttons-scroll button")];
   assert(buttons.length === 31, "registered " + buttons.length);
@@ -302,12 +320,8 @@ await check("A second editor replaces input, dispatch, arithmetic, tool, rendere
 await check("Workbench selects real examples, reports invalid JSON and runs the model in a worker", async () => {
   const link = doc.querySelector('a[href="geometry.html"]');
   assert(link, "workbench link in editor");
-  const other = document.createElement("iframe");
-  const ready = new Promise(resolve => other.addEventListener("load", resolve, {once:true}));
-  other.src = link.href;
-  document.body.append(other);
+  const {frame:other}=await createWorkbench();
   try {
-    await ready;
     const d = other.contentDocument, get = id => d.getElementById(id);
     const select = get("tool"), input = get("input"), status = get("status");
     assert(select.options.length === 119, "public examples loaded");
@@ -344,12 +358,8 @@ await check("Workbench selects real examples, reports invalid JSON and runs the 
   } finally { other.remove(); }
 });
 await check("Four composed geometry operations run in the workbench worker", async () => {
-  const other = document.createElement("iframe");
-  const ready = new Promise(resolve => other.addEventListener("load", resolve, {once:true}));
-  other.src = "../geometry.html";
-  document.body.append(other);
+  const {frame:other}=await createWorkbench();
   try {
-    await ready;
     const d = other.contentDocument, get = id => d.getElementById(id);
     async function execute(name, change) {
       get("tool").value = name;
@@ -451,10 +461,9 @@ await check('Renderer changes SVG tag safely and independent external implementa
 });
 
 await check('Workbench implementation picker executes the chosen alternative in the worker', async () => {
-  const other=document.createElement('iframe');
-  const ready=new Promise(resolve=>other.addEventListener('load',resolve,{once:true}));other.src='../geometry.html';document.body.append(other);
+  const {frame:other}=await createWorkbench();
   try{
-    await ready;const d=other.contentDocument,get=id=>d.getElementById(id);
+    const d=other.contentDocument,get=id=>d.getElementById(id);
     get('tool').value='spline';get('tool').dispatchEvent(new Event('change'));
     get('implementation').value='uniform';get('implementation').dispatchEvent(new Event('change'));
     assert(get('algorithm').textContent.includes('tension=1'),'algorithm shown');
@@ -2010,6 +2019,62 @@ await check('Polygon triangulation refuses foreign vertices, mutating calculatio
     const original=meshState(el),preferences=JSON.stringify(host.exportPreferences());openMesh(el);for(const id of ['test-polygon-bad','test-polygon-mutate']){pointsetField('点群の再計算実装',id,'change');pointsetAction('apply');assert(meshState(el)===original,'invalid calculation '+id);}pointsetField('点群の再計算実装','default','change');for(const id of ['test-polygon-single','test-polygon-open']){pointsetField('点群の再描画実装',id,'change');pointsetAction('apply');assert(meshState(el)===original,'incompatible renderer '+id);}assert(JSON.stringify(host.exportPreferences())===preferences,'preferences unchanged');pointsetAction('cancel');
     const record=JSON.parse(el.getAttribute('data-vector-implementation'));record.calculation.id='missing-polygon';record.rendering.id='missing-polygon-renderer';el.setAttribute('data-vector-implementation',JSON.stringify(record));pointsetAction('begin');pointsetAction('apply');assert(doc.querySelector('[data-pointset-edit-status]').textContent.includes('計算実装がありません'),'missing calculation');pointsetField('点群の再計算実装','default','change');pointsetAction('apply');assert(doc.querySelector('[data-pointset-edit-status]').textContent.includes('描画実装がありません'),'missing renderer');pointsetField('点群の再描画実装','default','change');pointsetAction('apply');assert(JSON.parse(el.getAttribute('data-vector-implementation')).rendering.id==='default','explicit recovery');
   }finally{host.restorePreferences(before);}
+});
+
+await check('Workbench keeps per-operation drafts and implementations through reload without executing or restoring old output',async()=>{
+  const key='vector.test.workbench.reopen';localStorage.removeItem(key);let first,second;
+  try{
+    first=await createWorkbench({storageKey:key});first.choose('tool','spline');first.choose('implementation','centripetal');first.edit(' {\n"points": [');first.choose('tool','convexHull');first.choose('implementation','exact');first.edit('{"points":[{"x":0,"y":0},{"x":10,"y":0},{"x":0,"y":10}]}');const hull=first.get('input').value;
+    first.choose('tool','spline');assert(first.get('input').value===' {\n"points": ['&&first.get('implementation').value==='centripetal','incomplete draft restored on switch');first.choose('tool','convexHull');assert(first.get('input').value===hull,'other draft remembered');first.close();first=null;
+    second=await createWorkbench({storageKey:key});assert(second.get('tool').value==='convexHull'&&second.get('input').value===hull&&second.get('implementation').value==='exact','active operation and state reload');assert(second.w.__workbenchWorkerCount===0&&!second.get('output').textContent&&!second.get('status').textContent&&second.get('stop').disabled,'reload never calculates');second.choose('tool','spline');assert(second.get('input').value===' {\n"points": ['&&second.get('implementation').value==='centripetal','invalid JSON draft survived reload');await second.run();assert(second.get('status').textContent.includes('JSON')&&second.w.__workbenchWorkerCount===0,'invalid draft only checked on explicit run');
+  }finally{first?.close();second?.close();localStorage.removeItem(key);}
+});
+
+await check('Workbench restored alternative reaches the real Worker and input edits discard obsolete results',async()=>{
+  const key='vector.test.workbench.execution';localStorage.removeItem(key);let first,second;
+  try{
+    first=await createWorkbench({storageKey:key});first.choose('tool','spline');first.choose('implementation','uniform');const source=first.get('input').value;first.close();first=null;second=await createWorkbench({storageKey:key});assert(second.get('algorithm').textContent.includes('tension=1')&&second.get('input').value===source,'restored algorithm shown');const result=JSON.parse(await second.run());assert(Math.abs(result.segments[0].control1.x-1/3)<1e-12&&second.w.__workbenchWorkerCount===1,'restored choice actually executed');second.edit('{');assert(!second.get('output').textContent&&!second.get('status').textContent&&second.get('stop').disabled,'edited input clears result');assert(JSON.parse(localStorage.getItem(key)).entries.spline.inputText==='{','invalid draft saved');
+  }finally{first?.close();second?.close();localStorage.removeItem(key);}
+});
+
+await check('Workbench exports and imports all drafts via JSON controls while isolating storage namespaces and editor settings',async()=>{
+  const key='vector.test.workbench.export',otherKey='vector.test.workbench.import',editorKey='vector:implementation-preferences:v1:'+new URL('../',location.href).pathname,oldEditor=localStorage.getItem(editorKey);localStorage.removeItem(key);localStorage.removeItem(otherKey);let first,second;
+  try{
+    localStorage.setItem(editorKey,'editor sentinel');first=await createWorkbench({storageKey:key});first.choose('tool','convexHull');first.choose('implementation','jarvis');first.edit('hull draft');first.choose('tool','spline');first.choose('implementation','chordal');first.edit('spline draft');const text=await first.exportText(),saved=JSON.parse(text);assert(Object.keys(saved.entries).length===119&&saved.activeTool==='spline'&&!('output' in saved),'all inputs, no result history');second=await createWorkbench({storageKey:otherKey});assert(second.get('tool').value==='segmentContact','independent storage');await second.importText(text);assert(second.get('tool').value==='spline'&&second.get('input').value==='spline draft'&&second.get('implementation').value==='chordal'&&second.w.__workbenchWorkerCount===0,'file restores selected state without running');second.choose('tool','convexHull');assert(second.get('input').value==='hull draft'&&second.get('implementation').value==='jarvis','other operation imported');assert(localStorage.getItem(editorKey)==='editor sentinel'&&JSON.parse(localStorage.getItem(key)).activeTool==='spline','editor and source namespaces untouched');
+  }finally{first?.close();second?.close();localStorage.removeItem(key);localStorage.removeItem(otherKey);if(oldEditor===null)localStorage.removeItem(editorKey);else localStorage.setItem(editorKey,oldEditor);}
+});
+
+await check('Workbench rejects malformed files atomically and explicitly skips unknown operations or implementations',async()=>{
+  const key='vector.test.workbench.invalid';localStorage.removeItem(key);let page;
+  try{
+    page=await createWorkbench({storageKey:key});page.choose('tool','convexHull');page.choose('implementation','exact');page.edit('current hull');const saved=localStorage.getItem(key);await page.importText('{');assert(page.get('input').value==='current hull'&&page.get('implementation').value==='exact'&&localStorage.getItem(key)===saved&&page.get('session-status').dataset.warning==='true','malformed file has no changes');
+    await page.importText(JSON.stringify({version:1,activeTool:'missing',entries:{spline:{implementation:'uniform',inputText:'imported draft'},convexHull:{implementation:'missing',inputText:'discarded'},future:{implementation:'default',inputText:'{}'}}}));assert(page.get('tool').value==='convexHull'&&page.get('input').value==='current hull'&&page.get('implementation').value==='exact'&&page.get('session-status').textContent.includes('未登録'),'unsupported entries preserve current input and choice');page.choose('tool','spline');assert(page.get('input').value==='imported draft'&&page.get('implementation').value==='uniform','compatible entry applied');localStorage.setItem(key,'{');page.get('session-load').click();assert(page.get('input').value==='imported draft'&&localStorage.getItem(key)==='{'&&page.get('session-status').textContent.includes('復元できません'),'bad stored data retained for recovery');
+  }finally{page?.close();localStorage.removeItem(key);}
+});
+
+await check('Workbench remains usable with denied or disabled storage and still supports explicit JSON export',async()=>{
+  let blocked,disabled;
+  try{
+    blocked=await createWorkbench({storageKey:'vector.test.workbench.blocked'},'Object.defineProperty(window,"localStorage",{get(){throw Error("storage blocked");}});');assert(blocked.get('session-status').dataset.warning==='true','read failure visible');blocked.choose('tool','convexHull');blocked.choose('implementation','exact');assert(blocked.get('session-status').textContent.includes('保存できません'),'write failure visible');assert(JSON.parse(await blocked.run()).length>=3,'calculation continues');const exported=JSON.parse(await blocked.exportText());assert(exported.entries.convexHull.implementation==='exact','export still works');await blocked.importText(JSON.stringify({version:1,activeTool:'spline',entries:{spline:{implementation:'uniform',inputText:'draft'}}}));assert(blocked.get('input').value==='draft'&&blocked.get('session-status').dataset.warning==='true','import applied in memory despite storage failure');blocked.get('session-reset').click();assert(blocked.get('tool').value==='segmentContact'&&blocked.get('session-status').textContent.includes('削除できません'),'in-memory reset despite deletion failure');
+    disabled=await createWorkbench({storage:false},'window.storageReads=0;Object.defineProperty(window,"localStorage",{get(){window.storageReads++;throw Error("must not read");}});');disabled.choose('tool','spline');disabled.edit('{');assert(disabled.get('session-save').disabled&&disabled.get('session-load').disabled&&disabled.w.storageReads===0,'disabled store never accessed');assert(JSON.parse(await disabled.exportText()).entries.spline.inputText==='{','disabled persistence still exports drafts');
+  }finally{blocked?.close();disabled?.close();}
+});
+
+await check('Workbench input reset, manual restore and full reset have separate scopes',async()=>{
+  const key='vector.test.workbench.reset';localStorage.removeItem(key);let page,reloaded;
+  try{
+    page=await createWorkbench({storageKey:key});page.choose('tool','spline');const example=page.get('input').value;page.choose('implementation','uniform');page.edit('spline draft');page.choose('tool','convexHull');page.choose('implementation','exact');page.edit('hull draft');page.choose('tool','spline');page.get('reset').click();assert(page.get('input').value===example&&page.get('implementation').value==='uniform','input reset keeps method');page.choose('tool','convexHull');assert(page.get('input').value==='hull draft','input reset leaves other draft');const saved=localStorage.getItem(key);page.edit('new draft');localStorage.setItem(key,saved);page.get('session-load').click();assert(page.get('input').value==='hull draft'&&page.get('implementation').value==='exact','explicit restore');page.get('session-reset').click();assert(page.get('tool').value==='segmentContact'&&localStorage.getItem(key)===null,'all reset deletes storage');page.choose('tool','spline');assert(page.get('implementation').value==='default'&&page.get('input').value===example,'all methods reset');page.get('session-reset').click();reloaded=await createWorkbench({storageKey:key});assert(reloaded.get('tool').value==='segmentContact'&&reloaded.w.__workbenchWorkerCount===0,'new instance stays reset');
+  }finally{page?.close();reloaded?.close();localStorage.removeItem(key);}
+});
+
+await check('Workbench cancels obsolete Workers and prevents a delayed file read from overwriting later edits',async()=>{
+  const page=await createWorkbench();
+  try{
+    const workers=[];page.w.Worker=class{constructor(){workers.push(this);}postMessage(data){this.request=data;}terminate(){this.terminated=true;}};
+    const changes=[()=>page.edit('{}'),()=>page.choose('tool','spline'),()=>page.choose('implementation','uniform'),()=>page.get('reset').click(),()=>page.get('session-reset').click(),()=>page.get('stop').click()];
+    for(const change of changes){page.get('run').click();const worker=workers.at(-1);assert(worker&&page.get('status').textContent==='計算中…','worker started');change();assert(worker.terminated&&page.get('stop').disabled,'obsolete worker stopped');worker.onmessage({data:{outcome:'complete',json:'"stale"'}});assert(!page.get('output').textContent,'late result ignored');}
+    let resolve;const file=page.get('session-file');Object.defineProperty(file,'files',{configurable:true,value:[{size:1,text:()=>new Promise(r=>resolve=r)}]});const reading=file.onchange();page.edit('later draft');resolve(JSON.stringify({version:1,activeTool:'spline',entries:{spline:{implementation:'uniform',inputText:'old import'}}}));await reading;assert(page.get('input').value==='later draft'&&page.get('session-status').textContent.includes('読込中に'),'late file does not replace newer input');
+  }finally{page.close();}
 });
 
 result.textContent = reports.join("\n");
