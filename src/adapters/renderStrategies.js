@@ -79,6 +79,7 @@ export function defaultRenderDescription(name) {
   if (name === 'bSplineCurve' || name === 'nurbsCurve') return '同次de Boorの極形式で区間ベジェ化・分母のBernstein係数範囲で再分割 → SVG M/L（不連続・分母零付近で枝を分離）';
   if (name === 'quadraticBezier') return 'SVG Q（二次ベジェ）';
   if (name === 'cubicBezier' || name === 'spline') return 'SVG C（三次ベジェ）';
+  if (name === 'chamfer') return 'SVG line（面取りの接続線分）';
   if (name === 'arc' || name === 'fillet') return 'SVG A（円弧）';
   if (name === 'vertices') return '指定方式に対応するSVG要素・Q/C、任意次数はde Casteljau → M/L';
   if (name === 'dimension') return 'DimensionToolのSVG線・円弧・矢印・文字';

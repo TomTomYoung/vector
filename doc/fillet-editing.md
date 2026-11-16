@@ -54,6 +54,8 @@
 
 [filletSource.test.mjs](../tests/filletSource.test.mjs) と [filletControl.test.mjs](../tests/filletControl.test.mjs) で元入力・要素参照・座標変換・半径逆算・接点規則を検証し、[editor.html](../tests/editor.html) で3要素の再編集、ドラッグ、取消、異常条件、SVG往復、Undo/Redoを検証します。[PR #62](https://github.com/TomTomYoung/vector/pull/62) の実装コミット `31a3dc7` に対する[CI](https://github.com/TomTomYoung/vector/actions/runs/43783802145)で、数値・モデル119件と実Chrome操作68件が全て成功しました。
 
+[面取りの元モデル保存・再編集](chamfer-editing.md)も実装済みです。線分の照合・座標変換・一括更新を [cornerLineBindings.js](../src/adapters/cornerLineBindings.js) と共用し、既存のフィレットの保存形式と参照IDは維持します。
+
 ## 残る範囲
 
-元の線分端点の直接編集、複数フィレットの連鎖更新、継続的接線拘束、半径の自動上限、任意曲線同士のフィレット、面取りの元モデル保存、外部SVGからの関連復元は未導入です。既存の交点計算の絶対閾値や退化配置に対する数値精度保証も変更していません。
+元の線分端点の直接編集、複数フィレットの連鎖更新、継続的接線拘束、半径の自動上限、任意曲線同士のフィレット、外部SVGからの関連復元は未導入です。既存の交点計算の絶対閾値や退化配置に対する数値精度保証も変更していません。

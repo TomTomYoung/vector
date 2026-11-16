@@ -1496,6 +1496,114 @@ await check('Fillet gestures ignore panning and other pointers and rollback nonp
   }finally{w.zoomPanManager.spacePressed=false;host.restorePreferences(preferences);w.snapToGrid=snap;w.orthoMode=ortho;}
 });
 
+const chamferAction=id=>{const b=doc.querySelector(`[data-chamfer-action="${id}"]`);assert(b,'chamfer action '+id);b.click();};
+const chamferField=(label,value,event='input')=>splineField(label,value,event);
+const chamferLines='<line id="ch" x1="120" y1="160" x2="240" y2="160" stroke="#345678" stroke-width="5"/><line id="cv" x1="240" y1="160" x2="240" y2="280" stroke="#345678" stroke-width="5"/>';
+async function addEditableChamfer(content=chamferLines){
+  fixture(content);await tick();const host=w.toolManager.host;host.selectImplementation('chamfer','default');host.selectRenderer('chamfer','default');
+  activate('chamfer');Object.assign(w.toolManager.tools.chamfer,{distance1:10,distance2:20});click(180,160,doc.getElementById('ch'));click(240,220,doc.getElementById('cv'));
+  const bridge=canvas.querySelector('[data-vector-chamfer]');assert(bridge,'chamfer created: '+w.toolManager.tools.chamfer.implementationError);bridge.id='editable-chamfer';return bridge;
+}
+const chamferState=()=>['ch','cv','editable-chamfer'].map(id=>{const el=doc.getElementById(id);return el?['x1','y1','x2','y2','data-vector-chamfer','data-vector-implementation'].map(k=>el.getAttribute(k)):null;});
+const openChamfer=bridge=>{activate('select');w.selectTool.selectObject(bridge);chamferAction('begin');};
+
+await check('Chamfer toolbar saves the original lines, independent distances and associations through SVG roundtrip',async()=>{
+  const host=w.toolManager.host,before=host.exportPreferences();
+  try{
+    const bridge=await addEditableChamfer(),source=JSON.parse(bridge.getAttribute('data-vector-chamfer'));
+    assert(source.input.first[1].x===240 && source.input.second[0].y===160 && source.input.distance1===10 && source.input.distance2===20,'untrimmed lines and independent distances');
+    assert(Number(doc.getElementById('ch').getAttribute('x2'))===230 && Number(doc.getElementById('cv').getAttribute('y1'))===180 && source.bindings[0].id!==source.bindings[1].id,'trimmed geometry and unique associations');
+    assert(JSON.parse(bridge.getAttribute('data-vector-implementation')).rendering.algorithm.includes('SVG line'),'actual bridge rendering recorded');
+    assert(JSON.parse(doc.getElementById('ch').getAttribute('data-vector-implementation')).rendering.id==='native-segment','incident line rendering recorded');
+    w.DrawingDocument.open(w.DrawingDocument.serialize());openChamfer(doc.getElementById('editable-chamfer'));assert(w.toolPropertiesPanel.chamferEditor.draft?.input.distance2===20 && w.toolPropertiesPanel.chamferEditor.lines.length===2,'SVG associations reopen');chamferAction('cancel');
+  }finally{host.restorePreferences(before);}
+});
+
+await check('Chamfer independently changes both setbacks, restores trimmed lengths and applies all three lines with one Undo/Redo',async()=>{
+  const host=w.toolManager.host,before=host.exportPreferences();
+  try{
+    let bridge=await addEditableChamfer();w.saveState();await tick();w.undoStack.length=0;const original=JSON.stringify(chamferState());openChamfer(bridge);
+    chamferField('面取りの距離1',25);chamferField('面取りの距離2',40);chamferAction('preview');
+    const preview=canvas.querySelector('[data-vector-preview="chamfer-edit"]');assert(preview?.querySelectorAll('line').length===3 && !canvas.querySelector('.control-handle'),'three preview lines and no competing handles');
+    assert(JSON.stringify(chamferState())===original && !w.DrawingDocument.capture().querySelector('[data-vector-preview]'),'preview leaves source intact and is not saved');chamferAction('apply');await tick();
+    assert(Number(doc.getElementById('ch').getAttribute('x2'))===215 && Number(doc.getElementById('cv').getAttribute('y1'))===200 && w.undoStack.length===1,'both setbacks in one history entry');
+    assert(doc.querySelector('[data-recorded-implementation]').textContent.includes('元の生成 chamfer'),'original provenance displayed');
+    key('z',{ctrlKey:true});await tick();assert(JSON.stringify(chamferState())===original,'undo restores all source and geometry');key('Z',{ctrlKey:true,shiftKey:true});await tick();bridge=doc.getElementById('editable-chamfer');openChamfer(bridge);
+    chamferField('面取りの距離1',0);chamferField('面取りの距離2',5);chamferAction('apply');assert(Number(doc.getElementById('ch').getAttribute('x2'))===240 && Number(doc.getElementById('cv').getAttribute('y1'))===165,'zero and smaller distance restore original lengths');
+    const committed=JSON.stringify(chamferState());chamferAction('begin');chamferField('面取りの距離1',30);chamferAction('preview');doc.querySelector('[aria-label="面取りの距離1"]').dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));
+    assert(!w.toolPropertiesPanel.chamferEditor.draft && !canvas.querySelector('[data-vector-preview]') && JSON.stringify(chamferState())===committed,'Escape cancels draft');
+  }finally{host.restorePreferences(before);}
+});
+
+await check('Chamfer supports transformed incident lines and a common affine frame while preserving identity, appearance and selection',async()=>{
+  const host=w.toolManager.host,before=host.exportPreferences();
+  try{
+    const bridge=await addEditableChamfer('<g id="chamfer-nest" transform="translate(20 10) rotate(12) scale(1.2 0.8)">'+chamferLines+'</g>');
+    const group=w.SvgUtils.createElement('g',{transform:'translate(500 20) scale(-0.9 1.1)'});canvas.append(group);group.append(doc.getElementById('chamfer-nest'),bridge);
+    bridge.setAttribute('style','opacity:0.7');bridge.setAttribute('stroke-dasharray','7 3');bridge.setAttribute('data-transform-layers','[]');const title=w.SvgUtils.createElement('title');title.textContent='chamfer';bridge.append(title);
+    const attrs=['id','stroke','stroke-width','stroke-dasharray','style','data-layer','data-transform-layers'],appearance=attrs.map(k=>bridge.getAttribute(k));openChamfer(bridge);assert(w.toolPropertiesPanel.chamferEditor.draft,'shared affine frame accepted');
+    chamferField('面取りの距離1',20);chamferField('面取りの距離2',30);chamferAction('preview');const preview=canvas.querySelector('[data-vector-preview="chamfer-edit"]'),a=bridge.getScreenCTM(),b=preview.getScreenCTM();
+    assert(['a','b','c','d','e','f'].every(k=>Math.abs(a[k]-b[k])<1e-5),'preview aligns with local frame');chamferAction('apply');
+    assert(doc.getElementById('editable-chamfer')===bridge && w.selectedObject===bridge && attrs.every((k,i)=>bridge.getAttribute(k)===appearance[i]) && bridge.querySelector('title').textContent==='chamfer','identity, appearance, children and selection');
+    const source=w.VectorUtils.chamferSource.readChamferSource(bridge.getAttribute('data-vector-chamfer'),bridge.getAttribute('data-vector-implementation'),w.VectorUtils.chamferSource.chamferGeometry(bridge));
+    const lines=w.VectorUtils.chamferSource.resolveChamferLines(canvas,bridge,source,()=>true);source.result.segments.forEach((s,i)=>s.forEach((p,j)=>{const line=lines[i],local={x:Number(line.getAttribute('x'+(j+1))),y:Number(line.getAttribute('y'+(j+1)))},f=w.VectorUtils.splineControlGeometry.splineControlFrame(bridge.getScreenCTM(),line.getScreenCTM());assert(closePoint(f.toCanvas(local),p),'line endpoint maps back to bridge frame');}));
+    openChamfer(bridge);chamferAction('preview');activate('line');assert(!w.toolPropertiesPanel.chamferEditor.draft && !canvas.querySelector('[data-vector-preview]'),'tool switch clears draft');
+  }finally{host.restorePreferences(before);}
+});
+
+await check('Chamfer rejects invalid distances, stale geometry, locked, missing, duplicate and independently moved incident lines atomically',async()=>{
+  const host=w.toolManager.host,before=host.exportPreferences();
+  try{
+    const bridge=await addEditableChamfer(),h=doc.getElementById('ch');openChamfer(bridge);const original=JSON.stringify(chamferState());
+    for(const [d1,d2] of [[0,0],[-1,20],['',20],[10,'Infinity']]){chamferField('面取りの距離1',d1);chamferField('面取りの距離2',d2);chamferAction('apply');assert(JSON.stringify(chamferState())===original,'invalid distances leave all shapes');}
+    chamferField('面取りの距離1',30);chamferField('面取りの距離2',40);w.layers.push({id:2,name:'locked source',visible:true,locked:true});h.setAttribute('data-layer','2');chamferAction('apply');assert(JSON.stringify(chamferState())===original && doc.querySelector('[data-chamfer-edit-status]').textContent.includes('ロック'),'locked source line blocked');h.removeAttribute('data-layer');
+    const clone=h.cloneNode(true);clone.removeAttribute('id');canvas.append(clone);chamferAction('apply');assert(JSON.stringify(chamferState())===original && doc.querySelector('[data-chamfer-edit-status]').textContent.includes('重複'),'duplicate reference blocked');clone.remove();
+    h.setAttribute('transform','translate(1 0)');chamferAction('apply');assert(JSON.stringify(chamferState())===original && doc.querySelector('[data-chamfer-edit-status]').textContent.includes('相対変形'),'independent movement blocked');h.removeAttribute('transform');
+    const next=h.nextSibling;h.remove();chamferAction('apply');assert(doc.querySelector('[data-chamfer-edit-status]').textContent.includes('削除') && bridge.getAttribute('data-vector-chamfer')===JSON.parse(original)[2][4],'missing line no partial mutation');canvas.insertBefore(h,next);
+    h.setAttribute('x2','999');chamferAction('apply');assert(h.getAttribute('x2')==='999','external endpoint retained');chamferAction('cancel');chamferAction('begin');assert(!w.toolPropertiesPanel.chamferEditor.draft,'stale binding refuses reopen');h.setAttribute('x2','230');chamferAction('begin');
+    const x=bridge.getAttribute('x1');bridge.setAttribute('x1','999');chamferAction('apply');assert(bridge.getAttribute('x1')==='999','external bridge retained');chamferAction('cancel');chamferAction('begin');assert(!w.toolPropertiesPanel.chamferEditor.draft,'stale bridge refused');bridge.setAttribute('x1',x);chamferAction('begin');
+    const group=w.SvgUtils.createElement('g');canvas.append(group);group.append(h,doc.getElementById('cv'),bridge);chamferAction('preview');group.setAttribute('transform','scale(0 1)');await paint();await paint();assert(!canvas.querySelector('[data-vector-preview]'),'singular common transform clears preview');group.removeAttribute('transform');chamferAction('preview');assert(canvas.querySelector('[data-vector-preview="chamfer-edit"]'),'invertible frame can preview again');
+  }finally{host.restorePreferences(before);}
+});
+
+await check('Chamfer implementation and line-renderer replacement record actual methods and restore drawing preferences after failure',async()=>{
+  const host=w.toolManager.host,before=host.exportPreferences();
+  try{
+    const bridge=await addEditableChamfer();
+    host.registerImplementation('chamfer',{id:'test-chamfer-fail',label:'Fail',algorithm:'Intentional failure',run:()=>{throw Error('chamfer failure');}});
+    host.registerImplementation('chamfer',{id:'test-chamfer-plugin',label:'Plugin',algorithm:'Delegating chamfer',run:(input,ops,execute)=>execute('chamfer',input,{implementation:'default'})});
+    host.registerRenderer({id:'test-chamfer-reverse',label:'Reverse',algorithm:'Reverse endpoints',supports:n=>n==='chamfer',prepare:s=>({...s,start:s.end,end:s.start})});
+    host.registerRenderer({id:'test-chamfer-path',label:'Path',algorithm:'Unsupported path output',supports:n=>n==='chamfer',prepare:s=>({kind:'path',start:s.start,segments:[{kind:'segment',end:s.end}]})});
+    const original=JSON.stringify(chamferState()),preferences=JSON.stringify(host.exportPreferences());openChamfer(bridge);chamferField('面取りの再計算実装','test-chamfer-fail','change');chamferAction('apply');assert(JSON.stringify(chamferState())===original && JSON.stringify(host.exportPreferences())===preferences,'failed calculation restores selected implementation');
+    chamferField('面取りの再計算実装','test-chamfer-plugin','change');chamferField('面取りの再描画実装','test-chamfer-path','change');chamferAction('apply');assert(JSON.stringify(chamferState())===original && doc.querySelector('[data-chamfer-edit-status]').textContent.includes('SVG線分'),'nonline renderer rejected before mutation');
+    chamferField('面取りの再描画実装','test-chamfer-reverse','change');chamferField('面取りの距離1',15);chamferAction('apply');let record=JSON.parse(bridge.getAttribute('data-vector-implementation'));
+    assert(record.calculation.id==='test-chamfer-plugin' && record.rendering.id==='test-chamfer-reverse' && Number(bridge.getAttribute('y1'))===180 && JSON.stringify(host.exportPreferences())===preferences,'actual implementations saved without changing preferences');
+    record.calculation.id='missing-chamfer';bridge.setAttribute('data-vector-implementation',JSON.stringify(record));chamferAction('begin');chamferAction('apply');assert(doc.querySelector('[data-chamfer-edit-status]').textContent.includes('計算実装がありません'),'unknown calculation visible');chamferField('面取りの再計算実装','default','change');chamferAction('apply');
+  }finally{host.restorePreferences(before);}
+});
+
+await check('Chamfer invalid creation is atomic, outline splitting detaches sources, and legacy lines do not invent associations',async()=>{
+  const host=w.toolManager.host,before=host.exportPreferences();
+  try{
+    fixture(chamferLines);await tick();const h=doc.getElementById('ch'),v=doc.getElementById('cv'),original=[h.outerHTML,v.outerHTML];activate('chamfer');Object.assign(w.toolManager.tools.chamfer,{distance1:0,distance2:0});click(180,160,h);click(240,220,v);
+    assert(h.outerHTML===original[0] && v.outerHTML===original[1] && !canvas.querySelector('[data-vector-chamfer]'),'invalid creation leaves original lines');
+    const bridge=await addEditableChamfer(),middle={x:(Number(bridge.getAttribute('x1'))+Number(bridge.getAttribute('x2')))/2,y:(Number(bridge.getAttribute('y1'))+Number(bridge.getAttribute('y2')))/2},parts=w.VectorUtils.linearEditing.split(bridge,canvas,middle);
+    assert(parts?.length===2 && parts.every(el=>!el.hasAttribute('data-vector-chamfer')),'split detaches both source models');
+    fixture('<line id="legacy-chamfer" x1="230" y1="160" x2="240" y2="180"/>');await tick();w.selectTool.selectObject(doc.getElementById('legacy-chamfer'));assert(!doc.querySelector('[data-chamfer-editor]'),'legacy lines have no inferred origin');
+  }finally{host.restorePreferences(before);}
+});
+
+await check('Chamfer and fillet sharing incident lines retain separate references and refuse stale linked geometry',async()=>{
+  const host=w.toolManager.host,before=host.exportPreferences();
+  try{
+    const bevel=await addEditableChamfer(),source=bevel.getAttribute('data-vector-chamfer'),h=doc.getElementById('ch'),v=doc.getElementById('cv');
+    host.selectImplementation('fillet','default');host.selectRenderer('fillet','default');activate('fillet');w.toolManager.tools.fillet.radius=10;click(180,160,h);click(240,220,v);
+    const round=canvas.querySelector('[data-vector-fillet]');assert(round && h.hasAttribute('data-vector-fillet-line-id') && h.hasAttribute('data-vector-chamfer-line-id'),'both reference namespaces preserved');
+    openChamfer(bevel);assert(!w.toolPropertiesPanel.chamferEditor.draft && doc.querySelector('[data-chamfer-edit-status]').textContent.includes('変更') && bevel.getAttribute('data-vector-chamfer')===source,'old chamfer refuses changed incident lines');
+    openFillet(round);assert(w.toolPropertiesPanel.filletEditor.draft && canvas.querySelector('[data-fillet-radius-control]'),'current fillet remains editable after common binding extraction');filletAction('cancel');
+  }finally{host.restorePreferences(before);}
+});
+
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
 </script>
