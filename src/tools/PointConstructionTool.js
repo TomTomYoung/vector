@@ -5,6 +5,7 @@ class PointConstructionTool extends BaseTool {
     this.method = method; this.title = title; this.points = [];
     this.degree = 3; this.sampleCount = 80; this.weightsText = ''; this.knotsText = '';
     this.periodic = false; this.poleTolerance = 1e-8; this.poleMaxDepth = 18;
+    this.inputPresetVersion = 1; this.voronoiBox = null;
     this.previewElement = null; this.handles = null; this.implementationError = '';
   }
   getTitle() { return this.title; }
@@ -14,10 +15,14 @@ class PointConstructionTool extends BaseTool {
       ...(this.isSpline() ? [this.periodic ? '周期曲線：先頭の制御点と重みを循環させ、一様ノットで閉じます' : '内部ノットを次数+1回重ねると、そこで別の枝に分かれます'] : []),
       ...(this.method === 'nurbsCurve' ? ['零・負の重みも使用できます。分母零付近と検査未完了の区間は省略します'] : []),
       ...(this.method === 'triangulatePolygon' ? ['境界順に頂点を指定します。末尾から先頭へ閉じ、自己交差や辺の重なりは扱いません'] : []),
-      ...(this.method === 'voronoiCells' ? ['Voronoiの切り取り範囲は図面全体です'] : [])];
+      ...(this.method === 'voronoiCells' ? [this.voronoiBox?'Voronoiは復元した切り取り範囲を使用します':'Voronoiの切り取り範囲は図面全体です'] : [])];
   }
   isSpline() { return ['bSplineCurve', 'nurbsCurve'].includes(this.method); }
   getToolProperties() {
+    if(this.method==='voronoiCells')return [{type:'custom',label:'Voronoiの切り取り範囲',render:group=>{
+      const box=this.input().box,p=document.createElement('p');p.textContent=(this.voronoiBox?'復元した範囲: ':'図面全体: ')+`x=${box.x}, y=${box.y}, 幅=${box.width}, 高さ=${box.height}`;group.append(p);
+      if(this.voronoiBox){const b=document.createElement('button');b.type='button';b.textContent='切り取り範囲を図面全体に戻す';b.dataset.constructionBoxReset='';b.onclick=()=>{this.voronoiBox=null;this.redraw();this.refreshPanel();};group.append(b);}
+    }}];
     if (!this.isSpline()) return [];
     const rendering=this.toolManager.host.describeRendering?.(this.method)?.options ?? {};
     const text = (label, key) => ({type: 'custom', label, render: group => {
@@ -55,12 +60,27 @@ class PointConstructionTool extends BaseTool {
     this.toolManager.preferences?.save();this.redraw();this.refreshPanel();
   }
   refreshPanel() { window.toolPropertiesPanel?.updatePanel(); }
+  exportInputPreset() {
+    return window.VectorUtils.parseConstructionInput(this.method,{version:1,input:{points:this.points,
+      ...(this.isSpline()?{degree:this.degree,periodic:this.periodic,knotsText:this.knotsText}:{}),
+      ...(this.method==='nurbsCurve'?{weightsText:this.weightsText}:{}),
+      ...(this.method==='voronoiCells'?{box:this.input().box}:{})}});
+  }
+  restoreInputPreset(entry) {
+    const {input}=window.VectorUtils.parseConstructionInput(this.method,entry);
+    if(!this.isActive)throw Error('復元する作図ツールを先に選択してください。');
+    this.reset();this.points=input.points;
+    if(this.isSpline()){this.degree=input.degree;this.periodic=input.periodic;this.knotsText=input.knotsText;}
+    if(this.method==='nurbsCurve')this.weightsText=input.weightsText;
+    if(this.method==='voronoiCells')this.voronoiBox=input.box;
+    this.redraw();
+  }
   activate() { super.activate(); this.canvas.style.cursor = 'crosshair'; }
   deactivate() { this.reset(); super.deactivate(); }
   cancel() { this.reset(); this.refreshPanel(); }
   reset() {
     this.previewElement?.remove(); this.handles?.remove();
-    this.previewElement = this.handles = null; this.points = []; this.implementationError = '';
+    this.previewElement = this.handles = null; this.points = []; this.voronoiBox = null; this.implementationError = '';
   }
   handleMouseDown(event) {
     if (!this.isActive || event.button !== 0) return;
@@ -85,7 +105,7 @@ class PointConstructionTool extends BaseTool {
     }
     if (this.method === 'voronoiCells') {
       const box = this.canvas.viewBox.baseVal;
-      return {sites: points, box: box.width > 0 ? {x: box.x, y: box.y, width: box.width, height: box.height} :
+      return {sites: points, box: this.voronoiBox ? {...this.voronoiBox} : box.width > 0 ? {x: box.x, y: box.y, width: box.width, height: box.height} :
         {x: 0, y: 0, width: this.canvas.width.baseVal.value, height: this.canvas.height.baseVal.value}};
     }
     return {points};

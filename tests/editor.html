@@ -2175,6 +2175,130 @@ await check('Drawing presets work with denied browser storage and the actual SVG
   }finally{app.element.remove();}
 });
 
+const inputPresetAction=(app,id)=>{const b=app.d.querySelector(`[data-construction-input-action="${id}"]`);assert(b&&!b.disabled,'enabled construction input action '+id);b.click();};
+const inputPresetState=app=>JSON.parse(app.w.DrawingDocument.capture().querySelector('metadata[data-vector-document]').textContent).constructionInputs;
+function inputPresetSVG(app,value){const root=app.w.DrawingDocument.capture(),meta=root.querySelector('metadata[data-vector-document]'),state=JSON.parse(meta.textContent);state.constructionInputs=value;meta.textContent=JSON.stringify(state);return new app.w.XMLSerializer().serializeToString(root);}
+const constructionNames=['bSplineCurve','nurbsCurve','convexHull','triangulatePolygon','delaunayTriangles','voronoiCells','fitLine','fitCircle','minimumEnclosingCircle'];
+const constructionPoints=[{x:80,y:100},{x:180,y:90},{x:220,y:180},{x:120,y:220}];
+function inputDraft(app,name,points=constructionPoints){
+  app.d.getElementById(name+'-tool').click();const tool=app.w.toolManager.tools[name];tool.points=points.map(p=>({...p}));
+  if(tool.isSpline()){tool.degree=2;tool.periodic=false;tool.knotsText='';if(name==='nurbsCurve')tool.weightsText='1,2,1,1';}
+  tool.redraw();app.w.toolPropertiesPanel.updatePanel();return tool;
+}
+const constructionEnter=app=>app.d.dispatchEvent(new app.w.KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));
+
+await check('All nine point-input tools save independent drafts in SVG and restore real editable constructions in a fresh editor',async()=>{
+  const source=await preferenceEditor('{preferences:false}');let target;
+  try{
+    const beforeMethods=JSON.stringify(source.w.toolManager.host.exportPreferences());
+    for(const name of constructionNames){
+      source.d.getElementById(name+'-tool').click();const tool=source.w.toolManager.tools[name],canvas=source.d.getElementById('canvas');
+      if(tool.isSpline()){tool.degree=2;tool.knotsText='';tool.periodic=false;tool.weightsText=name==='nurbsCurve'?'1,2,1,1':'';}
+      for(const p of constructionPoints){const screen=new source.w.DOMPoint(p.x,p.y).matrixTransform(canvas.getScreenCTM());canvas.dispatchEvent(new source.w.MouseEvent('mousedown',{clientX:screen.x,clientY:screen.y,button:0,bubbles:true}));canvas.dispatchEvent(new source.w.MouseEvent('mouseup',{clientX:screen.x,clientY:screen.y,button:0,bubbles:true}));}
+      inputPresetAction(source,'record');assert(tool.points.length===4,'record leaves live points '+name);
+    }
+    const saved=inputPresetState(source),xml=source.w.DrawingDocument.serialize();assert(Object.keys(saved.entries).length===9,'nine independent records');
+    assert(!source.w.DrawingDocument.capture().querySelector('[data-vector-preview], [data-tool-layer="construction-handles"], [data-construction-tool]'),'uncommitted geometry excluded');
+    assert(JSON.stringify(source.w.toolManager.host.exportPreferences())===beforeMethods&&!documentSettings(source),'input recording independent from methods');
+    target=await preferenceEditor('{preferences:false}');const host=target.w.toolManager.host,execute=host.execute;let calls=0;host.execute=(...args)=>{calls++;return execute(...args);};target.w.DrawingDocument.open(xml);
+    assert(calls===0&&target.w.toolManager.activeToolName==='select'&&constructionNames.every(n=>target.w.toolManager.tools[n].points.length===0),'loading is inert');
+    for(const name of constructionNames){
+      target.d.getElementById(name+'-tool').click();inputPresetAction(target,'restore');const tool=target.w.toolManager.tools[name];
+      assert(JSON.stringify(tool.points)===JSON.stringify(saved.entries[name].input.points)&&target.d.querySelector('[data-construction-input-record]').textContent.includes('点数 4'),'restored editable points '+name);
+      assert(!target.d.querySelector(`[data-construction-tool="${name}"]`),'not committed by restore '+name);constructionEnter(target);
+      const element=target.d.querySelector(`[data-construction-tool="${name}"]`);assert(element&&tool.points.length===0,'explicit commit '+name);
+      const record=JSON.parse(element.getAttribute('data-vector-spline')||element.getAttribute('data-vector-pointset'));
+      assert(record&&(record.model?.points.length===4||(record.input.points??record.input.sites).length===4),'saved source model '+name);
+    }
+    assert(calls>0&&JSON.stringify(inputPresetState(target))===JSON.stringify(saved),'commits do not rewrite stored inputs');target.w.DrawingDocument.open(target.w.DrawingDocument.serialize());assert(target.d.querySelectorAll('[data-construction-tool]').length===9,'all actual constructions survive SVG');
+  }finally{source.element.remove();target?.element.remove();}
+});
+
+await check('Unfinished NURBS text remains an editable draft after SVG reload and can be repaired before committing',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    let tool=inputDraft(app,'nurbsCurve',constructionPoints.slice(0,3));tool.knotsText='<script>literal draft<\/script>';tool.weightsText='1, -';tool.redraw();app.w.toolPropertiesPanel.updatePanel();inputPresetAction(app,'record');
+    const saved=inputPresetState(app),xml=app.w.DrawingDocument.serialize();app.w.DrawingDocument.open(xml);app.d.getElementById('nurbsCurve-tool').click();inputPresetAction(app,'restore');tool=app.w.toolManager.tools.nurbsCurve;
+    assert(tool.points.length===3&&tool.weightsText==='1, -'&&tool.knotsText.includes('<script>')&&app.d.querySelector('[data-construction-input-status]').textContent.includes('下書き'),'unfinished text restored as data');
+    assert(!app.d.querySelector('[data-construction-tool="nurbsCurve"]')&&tool.implementationError,'invalid geometry not committed');
+    for(const [label,text] of [['ノット列（カンマ区切り、空欄で一様）','0,0,0,1,1,1'],['重み（各制御点に1個、零・負も可）','1,1,1']]){const input=app.d.querySelector(`input[aria-label="${label}"]`);input.value=text;input.dispatchEvent(new app.w.Event('change'));}
+    constructionEnter(app);assert(app.d.querySelector('[data-construction-tool="nurbsCurve"]')&&JSON.stringify(inputPresetState(app))===JSON.stringify(saved),'repaired commit leaves reusable original draft');
+  }finally{app.element.remove();}
+});
+
+await check('Construction input recording, updating and removal undo independently of live drafts and other stored tools',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    inputDraft(app,'fitCircle');inputPresetAction(app,'record');await tick();const other=inputPresetState(app).entries.fitCircle;inputDraft(app,'convexHull');app.w.undoStack.length=0;
+    inputPresetAction(app,'record');await tick();assert(app.w.undoStack.length===1,'one record step');let tool=app.w.toolManager.tools.convexHull;tool.points.push({x:320,y:80});tool.redraw();inputPresetAction(app,'record');await tick();assert(app.w.undoStack.length===2,'one update step');
+    app.w.undo();assert(inputPresetState(app).entries.convexHull.input.points.length===4,'undo original draft');app.w.redo();assert(inputPresetState(app).entries.convexHull.input.points.length===5,'redo updated draft');
+    app.d.getElementById('convexHull-tool').click();inputPresetAction(app,'restore');await tick();const count=app.w.undoStack.length;tool=app.w.toolManager.tools.convexHull;assert(tool.points.length===5,'restore live draft');
+    inputPresetAction(app,'remove');await tick();assert(tool.points.length===5&&!inputPresetState(app).entries.convexHull&&app.w.undoStack.length===count+1,'delete record leaves live draft');
+    app.w.undo();assert(inputPresetState(app).entries.convexHull.input.points.length===5&&JSON.stringify(inputPresetState(app).entries.fitCircle)===JSON.stringify(other),'undo deletion and preserve other tool');
+    app.d.getElementById('convexHull-tool').click();inputPresetAction(app,'restore');const before=app.w.DrawingDocument.serialize();app.d.dispatchEvent(new app.w.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));assert(app.w.toolManager.tools.convexHull.points.length===0&&app.w.DrawingDocument.serialize()===before,'cancel only live draft');
+  }finally{app.element.remove();}
+});
+
+await check('Voronoi input restoration keeps its original clipping rectangle and can explicitly return to the current drawing bounds',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    const canvas=app.d.getElementById('canvas');canvas.setAttribute('viewBox','-50 -20 350 280');inputDraft(app,'voronoiCells');inputPresetAction(app,'record');const original=inputPresetState(app).entries.voronoiCells.input.box;
+    app.w.DrawingDocument.open(app.w.DrawingDocument.serialize());canvas.setAttribute('viewBox','0 0 1000 700');app.d.getElementById('voronoiCells-tool').click();inputPresetAction(app,'restore');
+    let tool=app.w.toolManager.tools.voronoiCells;assert(JSON.stringify(tool.input().box)===JSON.stringify(original),'recorded rectangle independent from canvas');constructionEnter(app);
+    const element=canvas.querySelector('[data-construction-tool="voronoiCells"]');assert(JSON.stringify(JSON.parse(element.getAttribute('data-vector-pointset')).input.box)===JSON.stringify(original),'actual cells use recorded rectangle');assert(tool.voronoiBox===null&&tool.input().box.width===1000,'commit ends restored draft bounds');
+    inputPresetAction(app,'restore');app.d.querySelector('[data-construction-box-reset]').click();assert(tool.input().box.width===1000&&JSON.stringify(inputPresetState(app).entries.voronoiCells.input.box)===JSON.stringify(original),'explicit bounds reset leaves saved preset');
+  }finally{app.element.remove();}
+});
+
+await check('Malformed construction input metadata rejects SVG before changing artwork, live draft, methods or history',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    app.w.DrawingDocument.open('<svg xmlns="http://www.w3.org/2000/svg"><circle id="kept-input-test" cx="20" cy="20" r="10" data-layer="2"/></svg>');const tool=inputDraft(app,'convexHull');inputPresetAction(app,'record');await tick();
+    const original=app.d.getElementById('kept-input-test'),before=app.w.DrawingDocument.serialize(),draft=JSON.stringify(tool.points),methods=JSON.stringify(app.w.toolManager.host.exportPreferences()),history=app.w.undoStack.length;
+    const bad=[null,{version:2,entries:{}},{version:1,entries:{convexHull:{version:1,input:{points:[{x:0,y:'bad'}]}}}},
+      {version:1,entries:{nurbsCurve:{version:1,input:{points:[],degree:15,periodic:false,knotsText:'',weightsText:''}}}},
+      {version:1,entries:{voronoiCells:{version:1,input:{points:[],box:{x:0,y:0,width:-1,height:10}}}}},
+      JSON.parse('{"version":1,"entries":{"__proto__":{"version":1,"input":{}}}}')];
+    for(const value of bad){let failed=false;try{app.w.DrawingDocument.open(inputPresetSVG(app,value));}catch{failed=true;}
+      assert(failed&&app.w.DrawingDocument.serialize()===before&&app.d.getElementById('kept-input-test')===original&&JSON.stringify(tool.points)===draft,'atomic malformed rejection');assert(app.w.toolManager.activeToolName==='convexHull'&&app.w.undoStack.length===history&&JSON.stringify(app.w.toolManager.host.exportPreferences())===methods,'active tool, history and methods preserved');}
+  }finally{app.element.remove();}
+});
+
+await check('Unknown input tools and future entry versions remain in SVG and legacy drawings never inherit previous presets',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    const value={version:1,entries:{futureTool:{version:3,input:{custom:'future'}},convexHull:{version:2,input:{nextSchema:true}}}};
+    app.w.DrawingDocument.open(inputPresetSVG(app,value));app.w.saveState();await tick();app.d.getElementById('convexHull-tool').click();
+    assert(app.d.querySelector('[data-construction-input-action="restore"]').disabled&&app.d.querySelector('[data-construction-input-record]').textContent.includes('未対応'),'future version cannot execute');
+    app.w.DrawingDocument.open(app.w.DrawingDocument.serialize());assert(JSON.stringify(inputPresetState(app))===JSON.stringify(value),'future entries survive roundtrip');
+    app.w.DrawingDocument.open('<svg xmlns="http://www.w3.org/2000/svg"><rect id="old-input-test" width="20" height="10"/></svg>');app.w.saveState();await tick();assert(!inputPresetState(app),'old SVG clears previous presets');app.w.undo();assert(JSON.stringify(inputPresetState(app))===JSON.stringify(value),'undo restores future metadata');app.w.redo();assert(!inputPresetState(app)&&app.d.getElementById('old-input-test'),'redo legacy');
+  }finally{app.element.remove();}
+});
+
+await check('Input restore keeps a failed calculation editable and uses current interchangeable methods without overwriting the recorded input',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    const tool=inputDraft(app,'convexHull');inputPresetAction(app,'record');await tick();const host=app.w.toolManager.host,before=inputPresetState(app),history=app.w.undoStack.length;
+    host.registerImplementation('convexHull',{id:'input-preset-failure',label:'Failure',algorithm:'Explicit test failure',run:()=>{throw Error('input preset test failure');}});host.selectImplementation('convexHull','input-preset-failure');
+    tool.reset();inputPresetAction(app,'restore');assert(tool.points.length===4&&!tool.previewElement&&app.d.querySelector('[data-construction-input-status]').textContent.includes('input preset test failure'),'failed calculation leaves editable restored input');
+    assert(app.w.undoStack.length===history&&JSON.stringify(inputPresetState(app))===JSON.stringify(before),'restore does not alter history or stored data');
+    host.selectImplementation('convexHull','exact');inputPresetAction(app,'restore');constructionEnter(app);const element=app.d.querySelector('[data-construction-tool="convexHull"]');
+    assert(JSON.parse(element.getAttribute('data-vector-implementation')).calculation.id==='exact'&&JSON.stringify(inputPresetState(app))===JSON.stringify(before),'retry uses actual selected algorithm');
+  }finally{app.element.remove();}
+});
+
+await check('Input presets work despite denied storage and real SVG downloads retain the recorded drafts alongside method presets',async()=>{
+  const app=await preferenceEditor('{preferences:{storage:()=>{throw Error("blocked");}}}');
+  try{
+    inputDraft(app,'bSplineCurve');presetAction(app,'record');inputPresetAction(app,'record');const methods=documentSettings(app),inputs=inputPresetState(app);let blob;
+    const create=app.w.URL.createObjectURL,revoke=app.w.URL.revokeObjectURL,click=app.w.HTMLAnchorElement.prototype.click;
+    app.w.URL.createObjectURL=b=>{blob=b;return 'blob:input-preset-test';};app.w.URL.revokeObjectURL=()=>{};app.w.HTMLAnchorElement.prototype.click=function(){};
+    try{app.d.getElementById('save-btn').click();assert(blob?.type==='image/svg+xml','real SVG download');const text=await blob.text();inputPresetAction(app,'remove');app.w.DrawingDocument.open(text);assert(JSON.stringify(inputPresetState(app))===JSON.stringify(inputs)&&JSON.stringify(documentSettings(app))===JSON.stringify(methods),'both independent records survive');}
+    finally{app.w.URL.createObjectURL=create;app.w.URL.revokeObjectURL=revoke;app.w.HTMLAnchorElement.prototype.click=click;}
+    app.d.getElementById('bSplineCurve-tool').click();inputPresetAction(app,'restore');constructionEnter(app);assert(app.d.querySelector('[data-construction-tool="bSplineCurve"]'),'restored drawing works without storage');
+  }finally{app.element.remove();}
+});
+
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
 </script>
