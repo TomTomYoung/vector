@@ -1869,6 +1869,80 @@ await check('Delaunay rejects invalid indices, mutating plugins and incompatible
   }finally{host.restorePreferences(before);}
 });
 
+const voronoiSites=[{x:120,y:160},{x:240,y:160},{x:120,y:160},{x:900,y:160}];
+const voronoiBox={x:80,y:80,width:240,height:160};
+async function addEditableVoronoi(content=''){
+  fixture(content);await tick();const host=w.toolManager.host,input={sites:voronoiSites,box:voronoiBox};host.selectImplementation('voronoiCells','default');host.selectRenderer('voronoiCells','default');const computed=host.execute('voronoiCells',input);
+  const el=host.render(w.VectorUtils.pointSetSource.pointSetGeometry('voronoiCells',input,computed),null,{toolName:'voronoiCells',sourceInput:input,sourceResult:computed});
+  el.id='editable-voronoi';el.setAttribute('stroke','#345678');el.setAttribute('stroke-width','3');el.setAttribute('fill','#eef4ff');el.setAttribute('data-layer',w.layers[0].id);canvas.append(el);return el;
+}
+const setVoronoiBox=box=>{for(const [key,label] of [['x','X'],['y','Y'],['width','幅'],['height','高さ']])pointsetField('切り取り範囲 '+label,String(box[key]));};
+
+await check('Voronoi toolbar stores singleton, two-site and duplicate inputs with a fixed drawing box and selects cells as a group',async()=>{
+  const host=w.toolManager.host,before=host.exportPreferences(),snap=w.snapToGrid;w.snapToGrid=false;
+  try{
+    for(const sites of [[{x:150,y:160}],[{x:150,y:160},{x:250,y:160}],voronoiSites]){
+      fixture();await tick();host.selectImplementation('voronoiCells','default');host.selectRenderer('voronoiCells','default');activate('voronoiCells');for(const p of sites)click(p.x,p.y);
+      const input=JSON.parse(JSON.stringify(w.toolManager.tools.voronoiCells.input()));assert(!w.DrawingDocument.capture().querySelector('[data-vector-pointset]'),'uncommitted Voronoi excluded');key('Enter');let el=canvas.querySelector('[data-construction-tool="voronoiCells"]');
+      assert(el?.tagName==='g'&&JSON.stringify(hullRecord(el).input)===JSON.stringify(input),'actual input and box saved');const record=JSON.parse(el.getAttribute('data-vector-implementation'));assert(record.parameters.pointCount===sites.length&&record.rendering.algorithm.includes('SVG g'),'recorded algorithms and counts');
+      activate('select');click(120,160,meshFaces(el)[0]);assert(w.selectedObject===el,'face selects whole diagram');pointsetAction('begin');assert(pointsetHandle(sites.length-1)&&!doc.querySelector('[aria-label="点群の再描画分割数"]'),'all sites editable');pointsetAction('cancel');
+      const xml=w.DrawingDocument.serialize();w.DrawingDocument.open(xml);el=canvas.querySelector('[data-construction-tool="voronoiCells"]');const oldViewBox=canvas.getAttribute('viewBox');canvas.setAttribute('viewBox','10 20 1000 700');openMesh(el);assert(JSON.stringify(w.toolPropertiesPanel.pointSetEditor.input())===JSON.stringify(input),'saved box independent of changed drawing viewBox');pointsetAction('cancel');if(oldViewBox===null)canvas.removeAttribute('viewBox');else canvas.setAttribute('viewBox',oldViewBox);
+    }
+  }finally{host.restorePreferences(before);w.snapToGrid=snap;}
+});
+
+await check('Voronoi edits sites and clipping bounds atomically, retains the group and metadata, and restores exact cells with Undo and Redo',async()=>{
+  const host=w.toolManager.host,before=host.exportPreferences();
+  try{
+    let el=await addEditableVoronoi('<g id="voronoi-parent" transform="translate(30 20) rotate(12)"/>');doc.getElementById('voronoi-parent').append(el);el.setAttribute('transform','scale(-0.8 1.2) translate(-450 0)');el.setAttribute('style','opacity:0.7');const title=w.SvgUtils.createElement('title'),metadata=w.SvgUtils.createElement('metadata');title.textContent='cells';metadata.textContent='notes';el.prepend(title);el.append(metadata);
+    w.saveState();await tick();w.undoStack.length=0;const original=meshState(el),appearance=['transform','style','fill','stroke','data-layer'].map(k=>el.getAttribute(k)),preferences=JSON.stringify(host.exportPreferences());openMesh(el);
+    assert(hullRecord(el).result.at(-1).points.length===0&&meshFaces(el).length===2,'outside empty cell saved');const box={x:60,y:70,width:340,height:220};setVoronoiBox(box);pointsetField('元の点群（1行に x, y）',arcText([...voronoiSites.slice(0,3),{x:280,y:240},{x:180,y:100}]));pointsetAction('preview');const preview=canvas.querySelector('[data-vector-preview="pointset-edit"]'),a=el.getScreenCTM(),b=preview.getScreenCTM();
+    // SVG transform attributes are rounded by Chrome; compare screen-space corner error in pixels.
+    const corners=[[box.x,box.y],[box.x+box.width,box.y],[box.x,box.y+box.height],[box.x+box.width,box.y+box.height]],screenError=Math.max(...corners.map(([x,y])=>{const p=new w.DOMPoint(x,y).matrixTransform(a),q=new w.DOMPoint(x,y).matrixTransform(b);return Math.hypot(p.x-q.x,p.y-q.y);}));
+    assert(screenError<0.001&&meshFaces(preview).length===4,'aligned cells preview: screen error '+screenError);assert(meshState(el)===original&&!w.DrawingDocument.capture().querySelector('[data-vector-preview]'),'no preview mutation');pointsetAction('apply');await tick();
+    assert(doc.getElementById('editable-voronoi')===el&&el.querySelector('title')===title&&el.querySelector('metadata')===metadata&&w.selectedObject===el,'root and metadata identity');assert(['transform','style','fill','stroke','data-layer'].every((k,i)=>el.getAttribute(k)===appearance[i]),'appearance');assert(JSON.stringify(hullRecord(el).input.box)===JSON.stringify(box)&&w.undoStack.length===1&&JSON.stringify(host.exportPreferences())===preferences,'box, one history and independent settings');const saved=meshState(el);
+    key('z',{ctrlKey:true});await tick();el=doc.getElementById('editable-voronoi');assert(meshState(el)===original,'undo inputs and empty cells');key('Z',{ctrlKey:true,shiftKey:true});await tick();el=doc.getElementById('editable-voronoi');assert(meshState(el)===saved,'redo full diagram');openMesh(el);pointsetField('元の点群（1行に x, y）','150,160');pointsetAction('apply');assert(meshFaces(el).length===1&&meshFaces(el)[0].points.length===4,'removal leaves a rectangle for one site');
+  }finally{host.restorePreferences(before);}
+});
+
+await check('Voronoi site handles track affine transforms, keep the clipping box fixed and cancel only the current gesture',async()=>{
+  frame.scrollIntoView();const host=w.toolManager.host,before=host.exportPreferences(),viewport=w.zoomPanManager.getTransform(),snap=w.snapToGrid,ortho=w.orthoMode;w.snapToGrid=false;w.orthoMode=false;
+  try{
+    const el=await addEditableVoronoi('<g id="voronoi-drag" transform="matrix(-0.8 0.3 0.2 1.2 500 20)"/>');doc.getElementById('voronoi-drag').append(el);w.zoomPanManager.setTransform(1.3,20,10);openMesh(el);const original=meshState(el);
+    pointer('pointerdown',pointsetHandle(0),localScreen(el,{x:122,y:161}));pointer('pointermove',doc,localScreen(el,{x:172,y:201}));await paint();pointer('pointerup',doc,localScreen(el,{x:182,y:211}));assert(closePoint(w.toolPropertiesPanel.pointSetEditor.input().sites[0],{x:180,y:210}),'local site and final pointer');assert(JSON.stringify(w.toolPropertiesPanel.pointSetEditor.input().box)===JSON.stringify(voronoiBox)&&meshState(el)===original,'fixed box and source');
+    pointer('pointerdown',pointsetHandle(1),localScreen(el,{x:240,y:160}));pointer('pointermove',doc,localScreen(el,{x:250,y:180}));await paint();key('Escape');assert(closePoint(w.toolPropertiesPanel.pointSetEditor.input().sites[1],voronoiSites[1])&&closePoint(w.toolPropertiesPanel.pointSetEditor.input().sites[0],{x:180,y:210}),'only latest gesture rolled back');pointsetAction('apply');assert(closePoint(hullRecord(el).input.sites[0],{x:180,y:210}),'drag applied');
+  }finally{host.restorePreferences(before);w.zoomPanManager.setTransform(viewport.zoom,viewport.panX,viewport.panY);w.snapToGrid=snap;w.orthoMode=ortho;}
+});
+
+await check('Voronoi blocks invalid bounds, edited or locked cells and changed source data without partial replacement',async()=>{
+  const host=w.toolManager.host,before=host.exportPreferences();
+  try{
+    let el=await addEditableVoronoi();openMesh(el);const original=meshState(el);pointsetField('切り取り範囲 幅','0');pointsetAction('apply');assert(meshState(el)===original&&doc.querySelector('[data-pointset-edit-status]').textContent.includes('正の幅'),'zero width refused');pointsetField('切り取り範囲 幅','240');pointsetAction('preview');assert(pointsetHandle(0)&&canvas.querySelector('[data-vector-preview="pointset-edit"]'),'valid bounds recover');pointsetAction('cancel');
+    for(const change of ['face','source','lock']){
+      el=await addEditableVoronoi();openMesh(el);pointsetAction('preview');if(change==='face')meshFaces(el)[0].setAttribute('fill','red');if(change==='source'){const s=hullRecord(el);s.input.box.width=400;el.setAttribute('data-vector-pointset',JSON.stringify(s));}if(change==='lock'){w.layers.push({id:2,name:'locked cell',visible:true,locked:true});meshFaces(el)[0].setAttribute('data-layer','2');}
+      const modified=meshState(el);await paint();await paint();assert(!pointsetHandle(0)&&!canvas.querySelector('[data-vector-preview]'),'changed target clears helpers '+change);pointsetAction('apply');assert(meshState(el)===modified,'preserves edited cell or input '+change);pointsetAction('cancel');
+    }
+    el=await addEditableVoronoi();openMesh(el);el.setAttribute('transform','scale(0 1)');await paint();await paint();assert(!pointsetHandle(0),'singular transform');el.removeAttribute('transform');await paint();await paint();assert(pointsetHandle(0),'frame recovers');activate('line');assert(!w.toolPropertiesPanel.pointSetEditor.draft&&!canvas.querySelector('[data-vector-preview]'),'switch cleanup');
+  }finally{host.restorePreferences(before);}
+});
+
+await check('Voronoi swaps registered calculations and closed-path renderers, stores provenance and reopens after SVG roundtrip',async()=>{
+  const host=w.toolManager.host,before=host.exportPreferences();
+  try{
+    let el=await addEditableVoronoi();host.registerImplementation('voronoiCells',{id:'test-voronoi-delegate',label:'Delegated cells',algorithm:'Explicit default delegation',run:(input,ops,execute)=>execute('voronoiCells',input,{implementation:'default'})});host.registerRenderer({id:'test-voronoi-paths',label:'Cell paths',algorithm:'Closed M/L/Z cells',supports:n=>n==='voronoiCells',prepare:s=>({...s,children:s.children.map(p=>({kind:'path',start:p.points[0],segments:p.points.slice(1).map(end=>({kind:'segment',end})),closed:true}))})});const preferences=JSON.stringify(host.exportPreferences());openMesh(el);pointsetField('点群の再計算実装','test-voronoi-delegate','change');pointsetField('点群の再描画実装','test-voronoi-paths','change');pointsetAction('apply');
+    assert(meshFaces(el).every(f=>f.tagName==='path')&&JSON.parse(el.getAttribute('data-vector-implementation')).calculation.id==='test-voronoi-delegate'&&JSON.stringify(host.exportPreferences())===preferences,'actual methods and preferences');assert(doc.querySelector('[data-recorded-implementation]').textContent.includes('元の生成 voronoiCells'),'origin shown');w.DrawingDocument.open(w.DrawingDocument.serialize());el=doc.getElementById('editable-voronoi');activate('select');click(120,160,meshFaces(el)[0]);assert(w.selectedObject===el,'saved cell path selects diagram');pointsetAction('begin');pointsetField('点群の再計算実装','default','change');pointsetField('点群の再描画実装','default','change');pointsetAction('apply');assert(meshFaces(el).every(f=>f.tagName==='polygon')&&hullRecord(el).input.sites.length===4,'native cells restored');
+  }finally{host.restorePreferences(before);}
+});
+
+await check('Voronoi rejects invalid cell correspondence, mutating inputs, incompatible output and missing implementations atomically',async()=>{
+  const host=w.toolManager.host,before=host.exportPreferences();
+  try{
+    const el=await addEditableVoronoi();host.registerImplementation('voronoiCells',{id:'test-voronoi-bad',label:'Bad indices',algorithm:'Invalid cell index',run:()=>[{index:100,site:voronoiSites[0],points:[]}]});host.registerImplementation('voronoiCells',{id:'test-voronoi-mutate',label:'Mutating',algorithm:'Changes clipping box',run:input=>{input.box.width=1;return [];}});host.registerRenderer({id:'test-voronoi-single',label:'Single',algorithm:'Drops group',supports:n=>n==='voronoiCells',prepare:s=>s.children[0]});host.registerRenderer({id:'test-voronoi-open',label:'Open',algorithm:'Open cell paths',supports:n=>n==='voronoiCells',prepare:s=>({...s,children:s.children.map(p=>({kind:'path',start:p.points[0],segments:p.points.slice(1).map(end=>({kind:'segment',end}))}))})});
+    const original=meshState(el),preferences=JSON.stringify(host.exportPreferences());openMesh(el);for(const id of ['test-voronoi-bad','test-voronoi-mutate']){pointsetField('点群の再計算実装',id,'change');pointsetAction('apply');assert(meshState(el)===original,'invalid calculation '+id);}pointsetField('点群の再計算実装','default','change');for(const id of ['test-voronoi-single','test-voronoi-open']){pointsetField('点群の再描画実装',id,'change');pointsetAction('apply');assert(meshState(el)===original,'incompatible renderer '+id);}assert(JSON.stringify(host.exportPreferences())===preferences,'preferences unchanged');pointsetAction('cancel');
+    const record=JSON.parse(el.getAttribute('data-vector-implementation'));record.calculation.id='missing-voronoi';record.rendering.id='missing-voronoi-renderer';el.setAttribute('data-vector-implementation',JSON.stringify(record));pointsetAction('begin');pointsetAction('apply');assert(doc.querySelector('[data-pointset-edit-status]').textContent.includes('計算実装がありません'),'missing calculation');pointsetField('点群の再計算実装','default','change');pointsetAction('apply');assert(doc.querySelector('[data-pointset-edit-status]').textContent.includes('描画実装がありません'),'missing renderer');pointsetField('点群の再描画実装','default','change');pointsetAction('apply');assert(JSON.parse(el.getAttribute('data-vector-implementation')).rendering.id==='default','explicit recovery');
+  }finally{host.restorePreferences(before);}
+});
+
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
 </script>

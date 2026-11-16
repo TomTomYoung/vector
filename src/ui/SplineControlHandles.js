@@ -57,7 +57,7 @@ class SplineControlHandles {
     if(!this.editor.draft)return;
     try {
       this.editor.assertTarget();
-      const points=this.editor.input().points,frame=this.frame(),text=window.VectorUtils.splineControlGeometry.splineMatrixText;
+      const points=(this.editor.controlPoints?.()??this.editor.input().points),frame=this.frame(),text=window.VectorUtils.splineControlGeometry.splineMatrixText;
       this.editor.manager.tools.select.removeControlPoints();
       if(!this.group) {
         this.group=this.create('g',{'data-vector-preview':this.namespace+'-controls','pointer-events':'none'});
@@ -88,7 +88,7 @@ class SplineControlHandles {
     if(!handle || !this.group?.contains(handle) || event.button!==0 || event.isPrimary===false || this.drag || window.zoomPanManager?.spacePressed || window.zoomPanManager?.isPanning)return;
     event.preventDefault();event.stopImmediatePropagation();
     try {
-      this.editor.assertTarget();const points=this.editor.input().points,index=Number(handle.getAttribute(this.indexAttribute)),frame=this.frame();
+      this.editor.assertTarget();const points=(this.editor.controlPoints?.()??this.editor.input().points),index=Number(handle.getAttribute(this.indexAttribute)),frame=this.frame();
       const pointer=frame.fromScreen({x:event.clientX,y:event.clientY}),point=points[index];
       this.drag={id:event.pointerId,index,points,handle,before:this.editor.draft.pointsText,start:{x:event.clientX,y:event.clientY},moved:false,anchor:frame.toCanvas(point),offset:{x:point.x-pointer.x,y:point.y-pointer.y}};
       handle.setAttribute('cursor','grabbing');

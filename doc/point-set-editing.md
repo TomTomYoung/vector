@@ -1,6 +1,6 @@
 # 点群の保存と再編集
 
-更新日: 2026-11-16（日本時間）。対象は `fitLine`（直線当てはめ）、`fitCircle`（円当てはめ）、`minimumEnclosingCircle`（最小包含円）、`convexHull`（凸包）、`delaunayTriangles`（Delaunay三角分割）です。三角分割のグループ編集・インデックス契約は [delaunay-editing.md](delaunay-editing.md) を参照してください。凸包の操作・方式切替・保存形式の詳細は [convex-hull-editing.md](convex-hull-editing.md) を参照してください。
+更新日: 2026-11-16（日本時間）。対象は `fitLine`（直線当てはめ）、`fitCircle`（円当てはめ）、`minimumEnclosingCircle`（最小包含円）、`convexHull`（凸包）、`delaunayTriangles`（Delaunay三角分割）、`voronoiCells`（Voronoi図）です。Voronoiの母点・切り取り矩形・空セルの保存と換装契約は [voronoi-editing.md](voronoi-editing.md) を参照してください。三角分割のグループ編集・インデックス契約は [delaunay-editing.md](delaunay-editing.md) を参照してください。凸包の操作・方式切替・保存形式の詳細は [convex-hull-editing.md](convex-hull-editing.md) を参照してください。
 
 ## 画面操作
 
@@ -28,9 +28,9 @@
 
 `data-vector-implementation` には実際の計算・描画ID、アルゴリズム、実装元、委譲履歴、描画設定、`parameters.pointCount` と任意の `parameters.rms` を記録します。再編集後の `pointSetEdit.origin` は最初の生成方式を保持し、履歴を入れ子に蓄積しません。円の中心・半径編集も可能にするため、円の出力には既存の `data-vector-circle` も保存します。
 
-計算登録は既存の `registerImplementation(method, {id, label, algorithm, run})` を使用し、入力は `{points}`、出力は上記の直線・円・凸包・Delaunayの契約です。座標・半径・RMSと描画範囲は有限、方向は零でないことが必要です。円の半径は0以上、RMSは0以上です。計算が `null` を返す場合は適用しません。実装を選んだ再計算が失敗しても、元の計算選択へ戻します。再編集用の選択・分割数は次の作図用設定へ保存しません。
+計算登録は既存の `registerImplementation(method, {id, label, algorithm, run})` を使用し、入力は `{points}`（Voronoiのみ `{sites, box}`）、出力は各専用文書の契約です。座標・半径・RMSと描画範囲は有限、方向は零でないことが必要です。円の半径は0以上、RMSは0以上です。計算が `null` を返す場合は適用しません。実装を選んだ再計算が失敗しても、元の計算選択へ戻します。再編集用の選択・分割数は次の作図用設定へ保存しません。
 
-`editorHost.render(shape, target, options)` に `sourceInput: {points}` と `sourceResult` を渡すと点群を記録します。`shape` への変換は `pointSetGeometry(method, input, result)` を使います。この2つの予約オプションは描画実装の設定に渡さず、図形の再計算用データにだけ使います。元入力のない既存の呼出しには架空の点群を追加しません。再編集で受け付けるSVG表現は直線が `line` または `path`、円が `circle` または `path`、凸包が `polygon` または閉じた `path`、Delaunayが各面を直下に並べた `g` です。
+`editorHost.render(shape, target, options)` に `sourceInput: {points}`（Voronoiのみ `{sites, box}`）と `sourceResult` を渡すと点群を記録します。`shape` への変換は `pointSetGeometry(method, input, result)` を使います。この2つの予約オプションは描画実装の設定に渡さず、図形の再計算用データにだけ使います。元入力のない既存の呼出しには架空の点群を追加しません。再編集で受け付けるSVG表現は直線が `line` または `path`、円が `circle` または `path`、凸包が `polygon` または閉じた `path`、Delaunay・Voronoiが各面を直下に並べた `g` です。
 
 保存・照合・投影は [pointSetSource.js](../src/adapters/pointSetSource.js)、UIは [PointSetEditor.js](../src/ui/PointSetEditor.js)、ドラッグは既存の [SplineControlHandles.js](../src/ui/SplineControlHandles.js)、作図は [PointConstructionTool.js](../src/tools/PointConstructionTool.js) です。
 

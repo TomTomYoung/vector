@@ -17,26 +17,26 @@ const faceTags=['polygon','path'];
 const tag=el=>el?.tagName?.toLowerCase();
 
 export function meshGeometrySnapshot(element) {
-  if(tag(element)!=='g')throw Error('三角分割の再編集にはSVGグループが必要です。');
+  if(tag(element)!=='g')throw Error('領域分割の再編集にはSVGグループが必要です。');
   const faces=[];
   for(const el of element.children){
     if(metadataTags.includes(tag(el)))continue;
-    if(!faceTags.includes(tag(el))||el.children.length)throw Error('三角分割は直接の多角形または閉じたパスで描画してください。');
+    if(!faceTags.includes(tag(el))||el.children.length)throw Error('領域分割は直接の多角形または閉じたパスで描画してください。');
     faces.push({tag:tag(el),attributes:[...el.attributes].map(a=>[a.name,a.value]).sort(([a],[b])=>a<b?-1:a>b?1:0)});
   }
-  if(!faces.length||faces.length>2000)throw Error('描画する三角形がありません、または上限を超えています。');
+  if(!faces.length||faces.length>2000)throw Error('描画する面がありません、または上限を超えています。');
   return {tag:'g',faces};
 }
 
-export function validateMeshSnapshot(saved,current,count) {
-  if(current?.tag!=='g'||!Array.isArray(current.faces)||current.faces.length!==count||JSON.stringify(saved)!==JSON.stringify(current))throw Error('現在の三角形と点群の元データが一致しません。');
+export function validateMeshSnapshot(saved,current,count,{triangles=true}={}) {
+  if(current?.tag!=='g'||!Array.isArray(current.faces)||current.faces.length!==count||JSON.stringify(saved)!==JSON.stringify(current))throw Error('現在の面と点群の元データが一致しません。');
   for(const face of current.faces){
-    if(!faceTags.includes(face?.tag)||!Array.isArray(face.attributes)||!face.attributes.every(a=>Array.isArray(a)&&a.length===2&&a.every(v=>typeof v==='string')))throw Error('三角形の描画記録が不正です。');
+    if(!faceTags.includes(face?.tag)||!Array.isArray(face.attributes)||!face.attributes.every(a=>Array.isArray(a)&&a.length===2&&a.every(v=>typeof v==='string')))throw Error('面の描画記録が不正です。');
     const attrs=Object.fromEntries(face.attributes);
     if(face.tag==='polygon'){
       const values=typeof attrs.points==='string'?attrs.points.trim().split(/[\s,]+/).map(Number):[];
-      if(values.length!==6||!values.every(Number.isFinite))throw Error('三角形の描画には有限な3頂点が必要です。');
-    }else if(typeof attrs.d!=='string'||!attrs.d.trim()||/NaN|Infinity/.test(attrs.d)||!/[zZ]\s*$/.test(attrs.d))throw Error('三角形の描画には閉じた有限のSVGパスが必要です。');
+      if((triangles?values.length!==6:values.length<6||values.length>4000||values.length%2!==0)||!values.every(Number.isFinite))throw Error('面の描画に必要な有限の頂点を指定してください。');
+    }else if(typeof attrs.d!=='string'||!attrs.d.trim()||/NaN|Infinity/.test(attrs.d)||!/[zZ]\s*$/.test(attrs.d))throw Error('面の描画には閉じた有限のSVGパスが必要です。');
   }
 }
 
