@@ -1307,6 +1307,106 @@ await check('Point-set plugins preserve actual results, restore failed selection
   assert(JSON.stringify(host.exportPreferences())===before,'successful plugin leaves preferences');pointsetAction('begin');pointsetAction('preview');activate('line');assert(!pointsetHandle(0) && !canvas.querySelector('[data-vector-preview]'),'switch clears source helpers');
 });
 
+const filletAction=id=>{const b=doc.querySelector(`[data-fillet-action="${id}"]`);assert(b,'fillet action '+id);b.click();};
+const filletField=(label,value,event='input')=>splineField(label,value,event);
+const filletLines='<line id="fh" x1="120" y1="160" x2="240" y2="160" stroke="#345678" stroke-width="5"/><line id="fv" x1="240" y1="160" x2="240" y2="280" stroke="#345678" stroke-width="5"/>';
+async function addEditableFillet(renderer='default',content=filletLines){
+  fixture(content);await tick();const host=w.toolManager.host;host.selectImplementation('fillet','default');host.selectRenderer('fillet',renderer,{sampleCount:16});
+  activate('fillet');w.toolManager.tools.fillet.radius=10;click(180,160,doc.getElementById('fh'));click(240,220,doc.getElementById('fv'));
+  const bridge=canvas.querySelector('[data-vector-fillet]');assert(bridge,'fillet created: '+w.toolManager.tools.fillet.implementationError);bridge.id='editable-fillet';return bridge;
+}
+const filletState=()=>['fh','fv','editable-fillet'].map(id=>{const el=doc.getElementById(id);return el?['x1','y1','x2','y2','d','data-vector-fillet','data-vector-implementation'].map(k=>el.getAttribute(k)):null;});
+const openFillet=bridge=>{activate('select');w.selectTool.selectObject(bridge);filletAction('begin');};
+
+await check('Fillet toolbar saves untrimmed inputs and unique line associations for every renderer and SVG reload',async()=>{
+  const host=w.toolManager.host,before=host.exportPreferences();
+  try{
+    for(const renderer of ['default','sampled','cubic']){
+      const bridge=await addEditableFillet(renderer),source=JSON.parse(bridge.getAttribute('data-vector-fillet'));
+      assert(source.input.radius===10 && source.input.first[1].x===240 && Number(doc.getElementById('fh').getAttribute('x2'))===230,'original input and trimmed endpoint');
+      assert(source.bindings[0].id!==source.bindings[1].id && !bridge.hasAttribute('data-vector-arc'),'distinct references and no invented three-point arc');
+      assert(JSON.parse(bridge.getAttribute('data-vector-implementation')).rendering.id===renderer,'renderer saved');
+      assert(JSON.parse(doc.getElementById('fh').getAttribute('data-vector-implementation')).rendering.id==='native-segment','incident line rendering recorded accurately');
+      w.DrawingDocument.open(w.DrawingDocument.serialize());const loaded=doc.getElementById('editable-fillet');openFillet(loaded);
+      assert(w.toolPropertiesPanel.filletEditor.draft?.input.first[1].x===240 && w.toolPropertiesPanel.filletEditor.lines.length===2,'source and associations reload');filletAction('cancel');
+    }
+  }finally{host.restorePreferences(before);}
+});
+
+await check('Fillet radius editing commits three geometries together, keeps the original lines and supports one-step Undo/Redo',async()=>{
+  const host=w.toolManager.host,before=host.exportPreferences();
+  try{
+    let bridge=await addEditableFillet();w.saveState();await tick();w.undoStack.length=0;const original=JSON.stringify(filletState());openFillet(bridge);
+    filletField('フィレットの半径',25);filletField('フィレットの再描画実装','cubic','change');filletAction('preview');
+    const preview=canvas.querySelector('[data-vector-preview="fillet-edit"]');assert(preview?.children.length===3 && preview.querySelector('path').getAttribute('d').includes('C'),'all three preview shapes');
+    assert(JSON.stringify(filletState())===original && !w.DrawingDocument.capture().querySelector('[data-vector-preview]'),'preview does not mutate or save helpers');filletAction('apply');await tick();
+    assert(Number(doc.getElementById('fh').getAttribute('x2'))===215 && Number(doc.getElementById('fv').getAttribute('y1'))===185 && w.undoStack.length===1,'both contacts and single history');
+    assert(JSON.parse(bridge.getAttribute('data-vector-fillet')).input.first[1].x===240 && doc.querySelector('[data-recorded-implementation]').textContent.includes('元の生成 fillet'),'original input and provenance retained');
+    key('z',{ctrlKey:true});await tick();assert(JSON.stringify(filletState())===original,'undo restores all three');key('Z',{ctrlKey:true,shiftKey:true});await tick();bridge=doc.getElementById('editable-fillet');
+    openFillet(bridge);filletField('フィレットの半径',5);filletField('フィレットの再描画実装','sampled','change');filletField('フィレットの再描画分割数',24);filletAction('apply');
+    assert(Number(doc.getElementById('fh').getAttribute('x2'))===235 && Number(doc.getElementById('fv').getAttribute('y1'))===165 && bridge.getAttribute('d').match(/L/g).length===24,'smaller radius restores formerly trimmed lengths');
+    filletAction('begin');filletField('フィレットの半径',40);filletAction('preview');doc.querySelector('[aria-label="フィレットの半径"]').dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));
+    assert(!w.toolPropertiesPanel.filletEditor.draft && !canvas.querySelector('[data-vector-preview]') && Number(doc.getElementById('fh').getAttribute('x2'))===235,'Escape cancels entire draft');
+  }finally{host.restorePreferences(before);}
+});
+
+await check('Fillet preserves separately transformed source lines, shared affine changes, styling and transformed preview alignment',async()=>{
+  const host=w.toolManager.host,before=host.exportPreferences();
+  try{
+    const bridge=await addEditableFillet('default','<g id="fillet-nest" transform="translate(20 10) rotate(12) scale(1.2 0.8)">'+filletLines+'</g>');
+    const group=w.SvgUtils.createElement('g',{id:'fillet-common',transform:'translate(500 20) scale(-0.9 1.1)'});canvas.append(group);group.append(doc.getElementById('fillet-nest'),bridge);
+    bridge.setAttribute('style','opacity:0.7');bridge.setAttribute('stroke-dasharray','7 3');const title=w.SvgUtils.createElement('title');title.textContent='fillet';bridge.append(title);
+    const h=doc.getElementById('fh'),v=doc.getElementById('fv'),attrs=['stroke','stroke-width','style','stroke-dasharray','data-layer'],appearance=attrs.map(k=>bridge.getAttribute(k));
+    openFillet(bridge);assert(w.toolPropertiesPanel.filletEditor.draft,'shared reflection and nonuniform scale accepted');filletField('フィレットの半径',20);filletAction('preview');
+    const preview=canvas.querySelector('[data-vector-preview="fillet-edit"]'),a=bridge.getScreenCTM(),b=preview.getScreenCTM();assert(['a','b','c','d','e','f'].every(k=>Math.abs(a[k]-b[k])<1e-5),'common frame preview');filletAction('apply');
+    assert(doc.getElementById('editable-fillet')===bridge && h.parentElement.id==='fillet-nest' && v.parentElement===h.parentElement && attrs.every((k,i)=>bridge.getAttribute(k)===appearance[i]) && bridge.querySelector('title').textContent==='fillet','parent, identity and appearance');
+    const source=w.VectorUtils.filletSource.readFilletSource(bridge.getAttribute('data-vector-fillet'),bridge.getAttribute('data-vector-implementation'),bridge.getAttribute('d'));
+    assert(w.VectorUtils.filletSource.resolveFilletLines(canvas,bridge,source,()=>true).length===2,'updated association frames match');
+    source.result.segments.forEach((s,i)=>s.forEach((p,j)=>{const line=[h,v][i],local={x:Number(line.getAttribute('x'+(j+1))),y:Number(line.getAttribute('y'+(j+1)))},frame=w.VectorUtils.splineControlGeometry.splineControlFrame(bridge.getScreenCTM(),line.getScreenCTM());assert(closePoint(frame.toCanvas(local),p),'line endpoint in bridge coordinates');}));
+    openFillet(bridge);filletAction('preview');activate('line');assert(!canvas.querySelector('[data-vector-preview]') && !w.toolPropertiesPanel.filletEditor.draft,'switch closes preview');
+  }finally{host.restorePreferences(before);}
+});
+
+await check('Fillet refuses invalid radii, stale outlines, locked, missing, duplicate and independently transformed incident lines atomically',async()=>{
+  const host=w.toolManager.host,before=host.exportPreferences();
+  try{
+    const bridge=await addEditableFillet(),h=doc.getElementById('fh');openFillet(bridge);const original=JSON.stringify(filletState());
+    for(const value of [0,-2,'','Infinity']){filletField('フィレットの半径',value);filletAction('apply');assert(JSON.stringify(filletState())===original,'invalid radius leaves all shapes');}
+    filletField('フィレットの半径',20);filletField('フィレットの再描画分割数',10001);filletAction('apply');assert(JSON.stringify(filletState())===original,'invalid detail');filletField('フィレットの再描画分割数',16);
+    w.layers.push({id:2,name:'locked source',visible:true,locked:true});h.setAttribute('data-layer','2');filletAction('apply');assert(JSON.stringify(filletState())===original && doc.querySelector('[data-fillet-edit-status]').textContent.includes('ロック'),'locked line blocked');h.removeAttribute('data-layer');
+    const clone=h.cloneNode(true);clone.removeAttribute('id');canvas.append(clone);filletAction('apply');assert(JSON.stringify(filletState())===original && doc.querySelector('[data-fillet-edit-status]').textContent.includes('重複'),'duplicate reference blocked');clone.remove();
+    h.setAttribute('transform','translate(1 0)');filletAction('apply');assert(JSON.stringify(filletState())===original && doc.querySelector('[data-fillet-edit-status]').textContent.includes('相対変形'),'independent line move blocked');h.removeAttribute('transform');
+    const next=h.nextSibling;h.remove();filletAction('apply');assert(bridge.getAttribute('data-vector-fillet')===JSON.parse(original)[2][5] && doc.querySelector('[data-fillet-edit-status]').textContent.includes('削除'),'missing line blocked');canvas.insertBefore(h,next);
+    const x=h.getAttribute('x2');h.setAttribute('x2','999');filletAction('apply');assert(h.getAttribute('x2')==='999','external endpoint retained');filletAction('cancel');filletAction('begin');assert(!w.toolPropertiesPanel.filletEditor.draft,'stale saved binding refused');h.setAttribute('x2',x);filletAction('begin');
+    const path=bridge.getAttribute('d');bridge.setAttribute('d',path+' L0 0');filletAction('apply');assert(bridge.getAttribute('d').endsWith('L0 0'),'external arc retained');filletAction('cancel');filletAction('begin');assert(!w.toolPropertiesPanel.filletEditor.draft,'stale arc refused');
+  }finally{host.restorePreferences(before);}
+});
+
+await check('Fillet plugin failures and unavailable implementations leave all shapes and drawing preferences unchanged',async()=>{
+  const host=w.toolManager.host,before=host.exportPreferences();
+  try{
+    const bridge=await addEditableFillet();host.registerImplementation('fillet',{id:'test-fillet-fail',label:'Fail',algorithm:'Intentional failure',run:()=>{throw Error('fillet failure');}});
+    host.registerImplementation('fillet',{id:'test-fillet-plugin',label:'Plugin',algorithm:'Delegating fillet',run:(input,ops,execute)=>execute('fillet',input,{implementation:'default'})});
+    host.registerRenderer({id:'test-fillet-line',label:'Wrong renderer',algorithm:'Only a chord',supports:name=>name==='fillet',prepare:shape=>({kind:'segment',start:shape.start,end:shape.end})});
+    const preferences=JSON.stringify(host.exportPreferences()),original=JSON.stringify(filletState());openFillet(bridge);filletField('フィレットの再計算実装','test-fillet-fail','change');filletAction('apply');
+    assert(JSON.stringify(filletState())===original && JSON.stringify(host.exportPreferences())===preferences,'failed execution restores preferences');
+    filletField('フィレットの再計算実装','test-fillet-plugin','change');filletField('フィレットの再描画実装','test-fillet-line','change');filletAction('apply');assert(JSON.stringify(filletState())===original,'wrong renderer no partial update');
+    filletField('フィレットの再描画実装','sampled','change');filletField('フィレットの半径',15);filletAction('apply');assert(JSON.parse(bridge.getAttribute('data-vector-implementation')).calculation.id==='test-fillet-plugin' && JSON.stringify(host.exportPreferences())===preferences,'actual implementation saved independently');
+    const record=JSON.parse(bridge.getAttribute('data-vector-implementation'));record.calculation.id='missing-fillet';bridge.setAttribute('data-vector-implementation',JSON.stringify(record));filletAction('begin');filletAction('apply');assert(doc.querySelector('[data-fillet-edit-status]').textContent.includes('計算実装がありません'),'missing implementation visible');filletField('フィレットの再計算実装','default','change');filletAction('apply');
+  }finally{host.restorePreferences(before);}
+});
+
+await check('Fillet creation rejects invalid results before trimming, and splitting a bridge detaches its saved source',async()=>{
+  const host=w.toolManager.host,before=host.exportPreferences();
+  try{
+    fixture(filletLines);await tick();const first=doc.getElementById('fh'),second=doc.getElementById('fv'),original=[first.outerHTML,second.outerHTML];
+    activate('fillet');w.toolManager.tools.fillet.radius=Infinity;click(180,160,first);click(240,220,second);assert(first.outerHTML===original[0] && second.outerHTML===original[1] && !canvas.querySelector('[data-vector-fillet]'),'invalid creation is atomic');
+    const bridge=await addEditableFillet('sampled'),middle=bridge.getPointAtLength(bridge.getTotalLength()/2),parts=w.VectorUtils.linearEditing.split(bridge,canvas,{x:middle.x,y:middle.y});
+    assert(parts?.length===2 && parts.every(el=>!el.hasAttribute('data-vector-fillet')),'split removes both bridge sources');
+    fixture('<path id="legacy-fillet" d="M230 160 A10 10 0 0 1 240 170"/>');await tick();w.selectTool.selectObject(doc.getElementById('legacy-fillet'));assert(!doc.querySelector('[data-fillet-editor]'),'legacy arc gets no invented line associations');
+  }finally{host.restorePreferences(before);}
+});
+
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
 </script>

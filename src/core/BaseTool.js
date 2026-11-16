@@ -44,6 +44,20 @@ class BaseTool {
     const {outline, writePoints} = window.VectorUtils.linearEditing;
     const shapes = lines.map(line => outline(line, this.canvas));
     if (shapes.length !== 2 || shapes.some(shape => !shape)) return;
+    if(name==='fillet') {
+      const api=window.VectorUtils.filletSource,host=this.toolManager.host;
+      if(lines[0]===lines[1]||lines.some(line=>line.tagName!=='line'||!this.selectTool.canSelect(line)))throw Error('表示中でロックされていない異なる2線分を指定してください。');
+      const input=api.filletInput({...params,first:shapes[0].points,second:shapes[1].points}),result=this.run(name,input);
+      if(!result)throw Error('この2線分と半径ではフィレットを作れません。');
+      const matrices=lines.map(line=>api.filletRelativeMatrix(this.canvas,line));
+      const ids=lines.map(line=>{
+        const id=line.getAttribute('data-vector-fillet-line-id');
+        return id && [...this.canvas.querySelectorAll('[data-vector-fillet-line-id]')].filter(el=>el.getAttribute('data-vector-fillet-line-id')===id).length===1?id:crypto.randomUUID();
+      });
+      const prepared=api.prepareFilletOutput(host,input,result,lines,matrices,ids);
+      window.SvgUtils.setAttributes(prepared.bridge,{stroke:lines[0].getAttribute('stroke'),'stroke-width':lines[0].getAttribute('stroke-width'),fill:'none','data-layer':window.currentLayerId});
+      api.applyFilletLines(lines,prepared.lines);this.canvas.append(prepared.bridge);this.saveState();return;
+    }
     const edit = this.run(name, {...params, first: shapes[0].points, second: shapes[1].points});
     if (!edit) return;
     const bridge = this.toolManager.host.render(edit.bridge, null, {toolName: name});
