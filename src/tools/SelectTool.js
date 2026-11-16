@@ -410,7 +410,7 @@ class SelectTool extends BaseTool {
     // 図形本体クリックならドラッグ開始
     if (event.target !== this.canvas) {
       this.selectObject(event.target, isMultiSelect);
-      if (!window.selectedObjects.includes(event.target)) return;
+      if (!window.selectedObjects.includes(this.selectionTarget(event.target))) return;
       this.isDragging = true;
 
       // 複数選択の場合は各オブジェクトの初期状態を保存
@@ -496,7 +496,11 @@ class SelectTool extends BaseTool {
     return true;
   }
 
+  selectionTarget(el) {return el?.closest?.('g[data-vector-pointset]')??el;}
+
   selectObject(el, addToSelection = false) {
+    if (!this.canSelect(el)) return;
+    el=this.selectionTarget(el);
     if (!this.canSelect(el)) return;
 
     const previous = window.selectedObjects;

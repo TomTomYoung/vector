@@ -121,7 +121,7 @@ $$
 | `intersectConvexPolygons` | `clipCell` で各辺の内側半平面を順次適用する Sutherland–Hodgman型クリッピング [R6](#r6) |
 | `polygonBoolean` | 単純多角形を耳切りで三角形に分け、凸セルの半平面クリッピングで積・差・和・対称差を構成 [R6](#r6), [R7](#r7) |
 | `voronoiCells` | 各点について全ての他点との垂直二等分線の近い側を選び、指定箱を順次クリップ。半平面交差による Voronoi セル |
-| `delaunayTriangles` | 凸包の扇形分割に残りの点を挿入し、外接円判定による Lawson型の edge flipping（辺反転）[R8](#r8) |
+| `delaunayTriangles` | 凸包の扇形分割に残りの点を挿入し、外接円判定による Lawson型の edge flipping（辺反転）[R8](#r8)。[元入力の保存・再編集](delaunay-editing.md)に対応 |
 | `regionBoundary` | 頂点を許容距離で統合、辺上の頂点で分割、逆向き共有辺を相殺、残る辺を角度順に接続して閉路・穴・包含関係を復元 |
 | `constrainedDelaunay` | 初期Delaunay分割、制約辺を横切る三角形帯の除去と両側の耳切り再分割、制約辺を固定した辺反転、穴・外部の flood fill [R7](#r7), [R8](#r8), [R9](#r9) |
 
