@@ -1604,6 +1604,98 @@ await check('Chamfer and fillet sharing incident lines retain separate reference
   }finally{host.restorePreferences(before);}
 });
 
+const chamferHandle=i=>canvas.querySelector('[data-chamfer-distance-control="'+i+'"]');
+const chamferDistances=()=>{const i=w.toolPropertiesPanel.chamferEditor.input();return [i.distance1,i.distance2];};
+const distancesNear=values=>chamferDistances().every((v,i)=>Math.abs(v-values[i])<1e-6);
+
+await check('Chamfer drags both distances independently through affine transforms and commits three lines in one history step',async()=>{
+  frame.scrollIntoView();const host=w.toolManager.host,preferences=host.exportPreferences(),viewport=w.zoomPanManager.getTransform(),snap=w.snapToGrid,ortho=w.orthoMode;w.snapToGrid=false;w.orthoMode=false;
+  try{
+    let bridge=await addEditableChamfer();const group=w.SvgUtils.createElement('g',{transform:'matrix(-0.8 0.3 0.2 1.2 500 20)'});canvas.append(group);group.append(doc.getElementById('ch'),doc.getElementById('cv'),bridge);
+    w.zoomPanManager.setTransform(1.4,20,10);w.saveState();await tick();w.undoStack.length=0;const original=JSON.stringify(chamferState());openChamfer(bridge);
+    assert(chamferHandle(0)&&chamferHandle(1)&&!canvas.querySelector('.control-handle'),'two named handles only');
+    pointer('pointerdown',chamferHandle(0),localScreen(bridge,{x:232,y:161}));pointer('pointermove',doc,localScreen(bridge,{x:222,y:170}));await paint();assert(distancesNear([20,20]),'first offset and projection');
+    pointer('pointerup',doc,localScreen(bridge,{x:212,y:180}));assert(distancesNear([30,20]),'first final position flushed');
+    pointer('pointerdown',chamferHandle(1),localScreen(bridge,{x:241,y:182}));pointer('pointerup',doc,localScreen(bridge,{x:260,y:207}));assert(distancesNear([30,45]),'second moves independently with grab offset');
+    assert(Math.abs(Number(doc.querySelector('[aria-label="面取りの距離1"]').value)-30)<1e-6&&Math.abs(Number(doc.querySelector('[aria-label="面取りの距離2"]').value)-45)<1e-6,'both numeric fields synchronized');
+    const preview=canvas.querySelector('[data-vector-preview="chamfer-edit"]'),a=bridge.getScreenCTM(),b=preview.getScreenCTM();
+    assert(preview.children.length===3&&canvas.lastElementChild.getAttribute('data-vector-preview')==='chamfer-controls'&&['a','b','c','d','e','f'].every(k=>Math.abs(a[k]-b[k])<1e-5),'three aligned preview lines below controls');
+    assert(JSON.stringify(chamferState())===original&&w.undoStack.length===0&&!w.DrawingDocument.capture().querySelector('[data-vector-preview]'),'draft changes neither saved document nor history');
+    chamferAction('apply');await tick();assert(w.undoStack.length===1&&!chamferHandle(0),'single applied edit');const saved=JSON.stringify(chamferState());
+    key('z',{ctrlKey:true});await tick();assert(JSON.stringify(chamferState())===original,'undo restores all three lines');key('Z',{ctrlKey:true,shiftKey:true});await tick();assert(JSON.stringify(chamferState())===saved,'redo restores all three lines');
+    w.DrawingDocument.open(w.DrawingDocument.serialize());bridge=doc.getElementById('editable-chamfer');openChamfer(bridge);assert(distancesNear([30,45])&&chamferHandle(0)&&chamferHandle(1),'saved drag values reopen');chamferAction('cancel');
+  }finally{host.restorePreferences(preferences);w.zoomPanManager.setTransform(viewport.zoom,viewport.panX,viewport.panY);w.snapToGrid=snap;w.orthoMode=ortho;}
+});
+
+await check('Chamfer cancellation rolls back only the active gesture and keeps the previously edited other distance',async()=>{
+  frame.scrollIntoView();const host=w.toolManager.host,preferences=host.exportPreferences(),snap=w.snapToGrid,ortho=w.orthoMode;w.snapToGrid=false;w.orthoMode=false;
+  try{
+    const bridge=await addEditableChamfer();openChamfer(bridge);const original=JSON.stringify(chamferState());
+    pointer('pointerdown',chamferHandle(1),localScreen(bridge,{x:240,y:180}));pointer('pointerup',doc,localScreen(bridge,{x:240,y:195}));assert(distancesNear([10,35]),'second completed draft');
+    for(const action of ['escape','cancel','lost','blur']){
+      pointer('pointerdown',chamferHandle(0),localScreen(bridge,{x:230,y:160}));pointer('pointermove',doc,localScreen(bridge,{x:210,y:170}));await paint();assert(distancesNear([30,35]),'first moved '+action);
+      if(action==='escape')key('Escape');else if(action==='blur')w.dispatchEvent(new w.Event('blur'));else pointer(action==='cancel'?'pointercancel':'lostpointercapture',action==='cancel'?doc:canvas,localScreen(bridge,{x:210,y:170}));
+      assert(distancesNear([10,35])&&!w.toolPropertiesPanel.chamferEditor.controls.drag&&JSON.stringify(chamferState())===original,'only current gesture rolls back '+action);
+    }
+    pointer('pointerdown',chamferHandle(0),localScreen(bridge,{x:230,y:160}));pointer('pointermove',doc,localScreen(bridge,{x:200,y:160}));key('Escape');await paint();assert(distancesNear([10,35]),'queued move discarded');
+    key('Escape');assert(!w.toolPropertiesPanel.chamferEditor.draft&&!chamferHandle(0)&&JSON.stringify(chamferState())===original,'idle Escape exits without committing');
+  }finally{host.restorePreferences(preferences);w.snapToGrid=snap;w.orthoMode=ortho;}
+});
+
+await check('Chamfer handles track numeric inputs and zoom, snap each distance and recover from zero',async()=>{
+  frame.scrollIntoView();const host=w.toolManager.host,preferences=host.exportPreferences(),viewport=w.zoomPanManager.getTransform(),snap=w.snapToGrid,ortho=w.orthoMode;w.snapToGrid=true;w.orthoMode=false;
+  try{
+    const bridge=await addEditableChamfer();openChamfer(bridge);const diameter=chamferHandle(0).getBoundingClientRect().width;
+    chamferField('面取りの距離1',18);w.zoomPanManager.setTransform(2,40,20);await paint();await paint();const expected=localScreen(bridge,{x:222,y:160}),bounds=chamferHandle(0).getBoundingClientRect();
+    assert(Math.abs(bounds.width-diameter)<0.05&&Math.abs(bounds.x+bounds.width/2-expected.x)<0.05,'fixed screen diameter and numeric position');
+    pointer('pointerdown',chamferHandle(0),expected);pointer('pointerup',doc,localScreen(bridge,{x:198,y:174}),{shiftKey:true});assert(distancesNear([40,20]),'first grid and Shift');
+    w.orthoMode=true;pointer('pointerdown',chamferHandle(1),localScreen(bridge,{x:240,y:180}));pointer('pointerup',doc,localScreen(bridge,{x:247,y:213}));assert(distancesNear([40,60]),'second grid and orthogonal mode');w.snapToGrid=false;w.orthoMode=false;
+    chamferField('面取りの距離2',0);pointer('pointerdown',chamferHandle(0),localScreen(bridge,{x:200,y:160}));pointer('pointerup',doc,localScreen(bridge,{x:240,y:160}));assert(distancesNear([40,0]),'two zero setbacks roll back');
+    pointer('pointerdown',chamferHandle(1),localScreen(bridge,{x:240,y:160}));pointer('pointerup',doc,localScreen(bridge,{x:240,y:180}));assert(distancesNear([40,20]),'second grows from zero');
+    pointer('pointerdown',chamferHandle(0),localScreen(bridge,{x:200,y:160}));pointer('pointerup',doc,localScreen(bridge,{x:240,y:160}));assert(distancesNear([0,20]),'one zero allowed');
+    pointer('pointerdown',chamferHandle(0),localScreen(bridge,{x:240,y:160}));pointer('pointerup',doc,localScreen(bridge,{x:225,y:170}));assert(distancesNear([15,20]),'first grows from zero');
+    chamferField('面取りの距離1','');assert(!chamferHandle(0),'invalid numeric field hides controls');chamferField('面取りの距離1',15);assert(chamferHandle(0)&&chamferHandle(1),'valid numeric repair restores controls');chamferAction('cancel');
+  }finally{host.restorePreferences(preferences);w.zoomPanManager.setTransform(viewport.zoom,viewport.panX,viewport.panY);w.snapToGrid=snap;w.orthoMode=ortho;}
+});
+
+await check('Chamfer drag refuses changed and locked lines, recovers from singular frames and cleans up on tool or selection change',async()=>{
+  frame.scrollIntoView();const host=w.toolManager.host,preferences=host.exportPreferences(),snap=w.snapToGrid,ortho=w.orthoMode;w.snapToGrid=false;w.orthoMode=false;
+  try{
+    const bridge=await addEditableChamfer(),h=doc.getElementById('ch'),original=JSON.stringify(chamferState());openChamfer(bridge);
+    pointer('pointerdown',chamferHandle(0),localScreen(bridge,{x:230,y:160}));pointer('pointermove',doc,localScreen(bridge,{x:220,y:160}));await paint();
+    w.layers.push({id:2,name:'locked incident',visible:true,locked:true});h.setAttribute('data-layer','2');pointer('pointerup',doc,localScreen(bridge,{x:210,y:160}));assert(distancesNear([10,20])&&!w.toolPropertiesPanel.chamferEditor.controls.drag&&JSON.stringify(chamferState())===original,'lock rolls back draft');h.removeAttribute('data-layer');chamferAction('cancel');chamferAction('begin');
+    pointer('pointerdown',chamferHandle(1),localScreen(bridge,{x:240,y:180}));h.setAttribute('x2','999');pointer('pointerup',doc,localScreen(bridge,{x:240,y:210}));assert(h.getAttribute('x2')==='999'&&distancesNear([10,20])&&!chamferHandle(0),'changed line preserved');h.setAttribute('x2','230');chamferAction('cancel');chamferAction('begin');
+    const group=w.SvgUtils.createElement('g');canvas.append(group);group.append(h,doc.getElementById('cv'),bridge);group.setAttribute('transform','scale(0 1)');await paint();await paint();assert(!chamferHandle(0)&&!canvas.querySelector('[data-vector-preview]'),'singular frame hides helpers');group.removeAttribute('transform');await paint();await paint();assert(chamferHandle(0)&&chamferHandle(1),'frame recovers');
+    pointer('pointerdown',chamferHandle(0),localScreen(bridge,{x:230,y:160}));activate('line');assert(!chamferHandle(0)&&!w.toolPropertiesPanel.chamferEditor.controls.drag,'tool change releases gesture');
+    openChamfer(bridge);pointer('pointerdown',chamferHandle(1),localScreen(bridge,{x:240,y:180}));w.selectTool.selectObject(h);assert(!chamferHandle(0)&&!w.toolPropertiesPanel.chamferEditor.draft,'selection change releases gesture');
+    openChamfer(bridge);h.remove();await paint();await paint();assert(!chamferHandle(0)&&!canvas.querySelector('[data-vector-preview]'),'removed reference clears helpers');
+  }finally{host.restorePreferences(preferences);w.snapToGrid=snap;w.orthoMode=ortho;}
+});
+
+await check('Chamfer gestures ignore panning, nonprimary and other pointers and rollback negative distances or calculation failures',async()=>{
+  frame.scrollIntoView();const host=w.toolManager.host,preferences=host.exportPreferences(),snap=w.snapToGrid,ortho=w.orthoMode;w.snapToGrid=false;w.orthoMode=false;
+  try{
+    const bridge=await addEditableChamfer();host.registerImplementation('chamfer',{id:'test-chamfer-drag-limit',label:'Limited chamfer',algorithm:'Fails above distance 25',run:(input,ops,execute)=>{if(input.distance1>25||input.distance2>25)throw Error('distance plugin limit');return execute('chamfer',input,{implementation:'default'});}});openChamfer(bridge);const original=JSON.stringify(chamferState());
+    w.zoomPanManager.spacePressed=true;pointer('pointerdown',chamferHandle(0),localScreen(bridge,{x:230,y:160}));assert(!w.toolPropertiesPanel.chamferEditor.controls.drag,'panning wins');w.zoomPanManager.spacePressed=false;
+    pointer('pointerdown',chamferHandle(1),localScreen(bridge,{x:240,y:180}),{isPrimary:false});assert(!w.toolPropertiesPanel.chamferEditor.controls.drag,'secondary pointer ignored');
+    pointer('pointerdown',chamferHandle(0),localScreen(bridge,{x:230,y:160}));pointer('pointerup',doc,localScreen(bridge,{x:210,y:160}),{pointerId:99});assert(w.toolPropertiesPanel.chamferEditor.controls.drag&&distancesNear([10,20]),'other pointer ignored');
+    pointer('pointerup',doc,localScreen(bridge,{x:245,y:160}));assert(distancesNear([10,20])&&!w.toolPropertiesPanel.chamferEditor.controls.drag,'negative distance rolls back');
+    chamferField('面取りの再計算実装','test-chamfer-drag-limit','change');const selected=JSON.stringify(host.exportPreferences());pointer('pointerdown',chamferHandle(1),localScreen(bridge,{x:240,y:180}));pointer('pointerup',doc,localScreen(bridge,{x:240,y:200}));await paint();await paint();
+    assert(distancesNear([10,20])&&JSON.stringify(chamferState())===original&&JSON.stringify(host.exportPreferences())===selected,'failure rolls back and restores preferences');chamferAction('cancel');
+  }finally{w.zoomPanManager.spacePressed=false;host.restorePreferences(preferences);w.snapToGrid=snap;w.orthoMode=ortho;}
+});
+
+await check('Chamfer alternate contacts retain numerical editing and reversed line renderers retain distance handles',async()=>{
+  frame.scrollIntoView();const host=w.toolManager.host,preferences=host.exportPreferences(),snap=w.snapToGrid,ortho=w.orthoMode;w.snapToGrid=false;w.orthoMode=false;
+  try{
+    const bridge=await addEditableChamfer();host.registerImplementation('chamfer',{id:'test-chamfer-shifted-contact',label:'Shifted chamfer',algorithm:'Translated contacts',run:(input,ops,execute)=>{const r=execute('chamfer',input,{implementation:'default'}),shift=p=>({x:p.x+5,y:p.y});return {bridge:{...r.bridge,start:shift(r.bridge.start),end:shift(r.bridge.end)},segments:r.segments.map(s=>s.map(shift))};}});
+    openChamfer(bridge);chamferField('面取りの再描画実装','test-chamfer-reverse','change');pointer('pointerdown',chamferHandle(0),localScreen(bridge,{x:230,y:160}));pointer('pointerup',doc,localScreen(bridge,{x:215,y:160}));assert(distancesNear([25,20])&&chamferHandle(1),'reversed renderer preserves logical controls');chamferAction('apply');
+    assert(JSON.parse(bridge.getAttribute('data-vector-implementation')).rendering.id==='test-chamfer-reverse'&&Number(bridge.getAttribute('y1'))===180,'actual renderer applied');chamferAction('begin');chamferField('面取りの再計算実装','test-chamfer-shifted-contact','change');chamferAction('preview');
+    assert(!chamferHandle(0)&&!chamferHandle(1)&&canvas.querySelector('[data-vector-preview="chamfer-edit"]')&&doc.querySelector('[data-chamfer-edit-status]').textContent.includes('接続点'),'incompatible contacts hide controls and retain preview');
+    chamferField('面取りの距離2',30);chamferAction('apply');assert(JSON.parse(bridge.getAttribute('data-vector-implementation')).calculation.id==='test-chamfer-shifted-contact','alternate contract remains numerically editable');
+  }finally{host.restorePreferences(preferences);w.snapToGrid=snap;w.orthoMode=ortho;}
+});
+
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
 </script>

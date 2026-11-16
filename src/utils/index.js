@@ -26,6 +26,7 @@ import * as arcSource from '../adapters/arcSource.js';
 import * as pointSetSource from '../adapters/pointSetSource.js';
 import * as filletSource from '../adapters/filletSource.js';
 import * as chamferSource from '../adapters/chamferSource.js';
+import * as chamferControlGeometry from '../adapters/chamferControlGeometry.js';
 import * as filletControlGeometry from '../adapters/filletControlGeometry.js';
 import {createImplementationPreferences} from '../adapters/implementationPreferences.js';
 import * as splineControlGeometry from '../adapters/splineControlGeometry.js';
@@ -47,6 +48,7 @@ window.VectorUtils = {
   pointSetSource,
   filletSource,
   chamferSource,
+  chamferControlGeometry,
   filletControlGeometry,
   createImplementationPreferences,
   splineControlGeometry,
