@@ -107,6 +107,8 @@ class PolylineTool extends BaseTool {
   deactivate() {
     super.deactivate();
     if(this.restoredDraft)this.resetDrawing();else this.finishPolyline();
+    // A failed ordinary draft must not leak into artwork after leaving this tool.
+    if(this.currentPolyline)this.resetDrawing();
     this.disconnectSelectedPolylineObserver();
     this.updatePanel();
   }
