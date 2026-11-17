@@ -55,10 +55,12 @@ $$
 
 関連原論文は W. Tiller, *Knot-removal algorithms for NURBS curves and surfaces*, Computer-Aided Design 24(8), 445–453, 1992、[DOI: 10.1016/0010-4485(92)90012-Y](https://doi.org/10.1016/0010-4485(92)90012-Y) です。出版社の書誌・概要を確認しています。論文本文のC実装を転用したものではなく、全ノット一括削除や曲面への適用を実装したものでもありません。Boehm挿入の原論文と既存実装の対応は [algorithms.md](algorithms.md#r2) を参照してください。
 
-周期曲線の内部ノット・継ぎ目の削除と、最後の継ぎ目の削除に伴うパラメータ区間変更は[実装済み](periodic-knot-removal.md)です。零・正負混在の重みでは、[Bernstein分母範囲と区間別偏差の検証](signed-knot-removal.md)を追加しました。極を含む曲線の枝ごとの削除、可除特異点の相殺、次数昇降、全ノット一括簡約、曲面、無限遠の同次制御点、厳密算術は未実装です。
+周期曲線の内部ノット・継ぎ目の削除と、最後の継ぎ目の削除に伴うパラメータ区間変更は[実装済み](periodic-knot-removal.md)です。零・正負混在の重みでは、[Bernstein分母範囲と区間別偏差の検証](signed-knot-removal.md)を追加しました。極を含む曲線の枝ごとの削除、可除特異点の相殺、最小ノット表現を保つ次数上げ・許容差付き次数下げ、全ノット一括簡約、曲面、無限遠の同次制御点、厳密算術は未実装です。
 
 [splineRemoval.test.mjs](../tests/splineRemoval.test.mjs) は次数1〜12、非一様・重複・端を固定しないノット、全重複位置、正負それぞれの共通重みスケール、許容差の採否と独立評価、非破壊性、不正入力・換装出力、SVG再構成を検証します。[editor.html](../tests/editor.html) は削除・プレビュー・適用・取消、Undo/Redo、保存、実装選択・偏差偽装の拒否、制御点ドラッグ、演算室Worker、119演算時点の保存データからの復元を確認します。
 
 低水準の `removeSplineKnot` は周期展開後の非周期評価用配列に対応するため制御点3012個まで受け付けます。通常の作図・再編集の元制御点上限は1000個です。周期入力の接続は [periodic-knot-removal.md](periodic-knot-removal.md) を参照してください。
 
 Bernstein分母検証を使った場合は、その方式・下限・除外幅・処理数を `removal.denominator` に追加し、プロパティとSVGにも記録します。詳細は [signed-knot-removal.md](signed-knot-removal.md) です。
+
+区間ベジェ化・同次Bernstein式・再接続による[形状を保つ次数上げ](spline-degree-elevation.md)は実装済みです。制御点とノットが増える表現を返します。
