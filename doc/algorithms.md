@@ -311,3 +311,7 @@ $$
 既存の `insertSplineKnot` を非周期B-spline・NURBSの[再編集画面](spline-knot-insertion.md)へ接続しました。2026-11-17にSheneの単一ノット挿入・NURBSへの拡張の資料を照合し、使用実装・最後の挿入方式・形状保持と描画近似の違いを記録しています。
 
 周期曲線の[形状保持ノット挿入](periodic-knot-insertion.md)も実装済みです。周期展開した曲線へ選択したBoehm系単一挿入を適用し、中央周期を抽出します。内部と継ぎ目への挿入、換装呼出しの検証、周期処理名・実装元・挿入値の表示とSVG保存に対応しています。参照履歴と有限精度の制約は同文書へ記録しています。
+
+## ノット削除の追加実装と参照履歴
+
+2026-11-17に `removeSplineKnot` を追加し、計算120機能としました。標準実装は [splineKnotRemoval.js](../src/model/splineKnotRemoval.js) のBoehm挿入の両側逆算と共通基底上の偏差上限推定です。MITのTillerノット削除解説と原論文の書誌・概要を照合しました。実際に参照した範囲、原論文との区別、数式、演算室・再編集の接続、換装、描画方式と未導入部分は [spline-knot-removal.md](spline-knot-removal.md) に記録しています。
