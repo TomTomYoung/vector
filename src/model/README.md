@@ -87,3 +87,5 @@ window.vectorEditorOptions = {
 B-spline・NURBSの形状を保つ `elevateSplineDegree` は非周期・周期に対応します。区間ベジェ化とBernstein次数上げを用い、検証済みの編集入力を返します。[契約・限界・参照資料](../../doc/spline-degree-elevation.md)を参照してください。
 
 `reduceSplineDegree` は非周期・周期B-spline/NURBSの次数を許容差内で1つ下げ、端点固定の区間ベジェ接続表現を返します。入力次数2〜12、出力1000制御点までです。[最小二乗・独立検証・換装契約と限界](../../doc/spline-degree-reduction.md)を参照してください。
+
+`reduceSplineDegree` の `continuity` は元の重複度−1の低次基底への全体最小二乗です。元の連続性を保持し、非周期の両端・不連続点の片側端点以外の接続点は許容差内で動かせます。[対応範囲・全区間検証・換装・参照論文](../../doc/spline-continuity-reduction.md)を参照してください。

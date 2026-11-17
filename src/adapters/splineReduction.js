@@ -4,7 +4,7 @@ export function reduceEditableSplineDegree(method,input,tolerance=1e-7,reduce=re
   if(!['bSplineCurve','nurbsCurve'].includes(method)||!input)throw Error('次数下げは標準B-spline・NURBSに対応しています。');
   const request={...input,tolerance,...(method==='nurbsCurve'?{weights:input.weights??input.points?.map(()=>1)}:{})};
   if(method==='bSplineCurve')delete request.weights;
-  if(!prepareSplineDegreeReduction(request))throw Error('次数2〜12、変換後1000制御点以下、ノット・重みと0〜1000000の許容差を確認してください。');
+  if(!prepareSplineDegreeReduction(request,{representation:reduce===reduceSplineDegree?'bezier':'either'}))throw Error('次数2〜12、変換後1000制御点以下、ノット・重みと0〜1000000の許容差を確認してください。');
   const result=reduce({...request,points:request.points.map(p=>({...p})),...(request.knots?{knots:[...request.knots]}:{}),
     ...(request.periodicKnots?{periodicKnots:[...request.periodicKnots]}:{}),...(request.weights?{weights:[...request.weights]}:{})});
   const checked=validateSplineDegreeReduction(request,result);

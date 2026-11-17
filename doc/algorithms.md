@@ -333,3 +333,7 @@ $$
 ## 許容差付きの次数下げ
 
 2026-11-17に `reduceSplineDegree` を追加し、計算122機能としました。計算は極形式de Boorの区間ベジェ抽出、端点固定の同次Bernstein係数最小二乗、Givens QR、再次数上げと全区間偏差検証です。描画は既存のSVG折れ線です。Piegl–Tiller、Eck、Zheng–Wangの関連論文と実装の相違、実装時に照合した式、換装条件と未導入方式は [spline-degree-reduction.md](spline-degree-reduction.md) に記録しています。
+
+## 連続性保持の次数下げ
+
+`reduceSplineDegree` の `continuity` は、ノット重複度と連続性の関係をSheneの教材で照合し、重複度−1の基底に対して同次Bernstein係数の全体最小二乗をGivens疎QRで解きます。描画は既存のSVG折れ線です。Yong・Hu・Sun・Tanの一般化B差商による関連論文の確認範囲と相違、単純周期継ぎ目などの未導入範囲は [spline-continuity-reduction.md](spline-continuity-reduction.md) に記録しています。
