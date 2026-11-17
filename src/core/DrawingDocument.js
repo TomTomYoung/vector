@@ -28,7 +28,8 @@ class DrawingDocument {
       implementationPreset: window.toolManager?.documentPreset?.snapshot(),
       namedImplementationPresets: window.toolManager?.namedImplementationPresets?.snapshot(),
       constructionInputs: window.toolManager?.inputPresets?.snapshot(),
-      namedConstructionInputs: window.toolManager?.namedInputPresets?.snapshot()
+      namedConstructionInputs: window.toolManager?.namedInputPresets?.snapshot(),
+      constructionSets: window.toolManager?.constructionSets?.snapshot()
     });
     svg.prepend(metadata);
     return svg;
@@ -72,6 +73,7 @@ class DrawingDocument {
     const namedMethods = window.VectorUtils.parseNamedImplementationPresets(state.namedImplementationPresets);
     const inputs = window.VectorUtils.parseConstructionInputPresets(state.constructionInputs);
     const namedInputs = window.VectorUtils.parseNamedConstructionInputs(state.namedConstructionInputs);
+    const sets = window.VectorUtils.parseConstructionSets(state.constructionSets);
 
     // Validate the complete new document before replacing the current one.
     const canvas = document.getElementById("canvas");
@@ -93,6 +95,7 @@ class DrawingDocument {
     window.toolManager.namedImplementationPresets.open(namedMethods);
     window.toolManager.inputPresets.open(inputs);
     window.toolManager.namedInputPresets.open(namedInputs);
+    window.toolManager.constructionSets.open(sets);
     window.updateLayerList();
     if (window.showGrid) GridManager.createGrid();
     window.toolPropertiesPanel.updatePanel();

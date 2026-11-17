@@ -3116,6 +3116,98 @@ await check('Named methods work with blocked storage and the real SVG download i
   }finally{app.element.remove();}
 });
 
+const setComparable=value=>JSON.stringify(value,(_key,item)=>item&&typeof item==='object'&&!Array.isArray(item)?Object.fromEntries(Object.entries(item).sort(([a],[b])=>a.localeCompare(b))):item);
+const setState=app=>JSON.parse(app.w.DrawingDocument.capture().querySelector('metadata[data-vector-document]').textContent).constructionSets;
+const setName=(app,value)=>{const input=app.d.querySelector('[data-construction-set-name]');input.value=value;input.dispatchEvent(new app.w.Event('input',{bubbles:true}));};
+const setAction=(app,id)=>{const b=app.d.querySelector(`[data-construction-set-action="${id}"]`);assert(b&&!b.disabled,'enabled set action '+id);b.click();};
+const setSelected=app=>app.d.querySelector('[data-construction-set-select]').value;
+const setChoose=(app,id)=>{const select=app.d.querySelector('[data-construction-set-select]');select.value=id;select.dispatchEvent(new app.w.Event('change',{bubbles:true}));};
+function setSVG(app,value){const root=app.w.DrawingDocument.capture(),meta=root.querySelector('metadata[data-vector-document]'),data=JSON.parse(meta.textContent);data.constructionSets=value;meta.textContent=JSON.stringify(data);return new app.w.XMLSerializer().serializeToString(root);}
+
+await check('All 25 controllers record paired input and methods, survive a fresh SVG load and restore without history or legacy changes',async()=>{
+  const source=await preferenceEditor('{preferences:false}');let target;
+  try{
+    const names=Object.keys(source.w.toolManager.tools).filter(n=>typeof source.w.toolManager.tools[n].exportInputPreset==='function');assert(names.length===25,'25 supported controllers');source.w.toolManager.host.selectImplementation('spline','centripetal');source.w.toolManager.host.selectRenderer('circle','cubic');
+    for(const name of names){source.d.getElementById(name+'-tool').click();setName(source,'セット '+name);setAction(source,'create');await tick();}
+    const saved=setState(source);assert(saved.entries.length===25&&saved.entries.every(e=>Object.keys(e.methods.calculation).length===119),'each pair covers all operations');assert(!methodState(source)&&!namedState(source)&&!inputPresetState(source)&&!documentSettings(source),'new sets do not create legacy records');
+    target=await preferenceEditor('{preferences:false}');const host=target.w.toolManager.host;host.selectImplementation('spline','chordal');target.w.DrawingDocument.open(source.w.DrawingDocument.serialize());target.w.saveState();await tick();const history=target.w.undoStack.length;assert(host.describe('spline').id==='chordal'&&host.describeRendering('circle').id==='default','load never applies');
+    for(const name of names){target.d.getElementById(name+'-tool').click();const item=saved.entries.find(e=>e.tool===name);assert(setSelected(target)===item.id,'stable set ID '+name);setAction(target,'restore');assert(JSON.stringify(target.w.toolManager.tools[name].exportInputPreset())===JSON.stringify(item.input),'restored input '+name);assert(host.describe('spline').id==='centripetal'&&host.describeRendering('circle').id==='cubic','restored method pair '+name);}
+    assert(JSON.stringify(setState(target))===JSON.stringify(saved)&&target.w.undoStack.length===history&&!methodState(target)&&!namedState(target),'sets and other records stay independent');
+  }finally{source.element.remove();target?.element.remove();}
+});
+
+await check('Choosing a circle set is inert and explicit paired restore produces the saved circle using its saved renderer',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    const tool=shapeDraftInput(app,'circle'),host=app.w.toolManager.host;host.selectRenderer('circle','cubic');setName(app,'小円ベジェ');setAction(app,'create');await tick();const first=setSelected(app),saved=setState(app).entries[0];draftKey(app,'p');parameterMouse(app,'mousemove',340,280);draftKey(app,'p');host.selectRenderer('circle','default');setName(app,'大円標準');setAction(app,'create');await tick();const large=JSON.stringify(tool.exportInputPreset()),history=app.w.undoStack.length;
+    setChoose(app,first);assert(JSON.stringify(tool.exportInputPreset())===large&&host.describeRendering('circle').id==='default','selection only');const text=app.d.querySelector('[data-construction-set-method="rendering"]').textContent;assert(text.includes('cubic')&&text.includes(host.renderers('circle').find(v=>v.id==='cubic').algorithm),'saved renderer ID and algorithm shown');setAction(app,'restore');assert(host.describeRendering('circle').id==='cubic'&&JSON.stringify(tool.exportInputPreset())===JSON.stringify(saved.input)&&app.w.undoStack.length===history&&!shapeDraftOutput(app,'circle'),'pair restored as draft only');constructionEnter(app);await tick();
+    const el=shapeDraftOutput(app,'circle'),[a,b]=saved.input.input.points;assert(el.tagName==='path'&&Math.abs(JSON.parse(el.getAttribute('data-vector-circle')).model.radius-Math.hypot(b.x-a.x,b.y-a.y))<1e-5,'saved geometry');assert(JSON.parse(el.getAttribute('data-vector-implementation')).rendering.id==='cubic'&&app.w.undoStack.length===history+1,'saved renderer recorded and single commit');app.w.undo();assert(!shapeDraftOutput(app,'circle'),'undo shape');app.w.redo();assert(shapeDraftOutput(app,'circle'),'redo shape');
+  }finally{app.element.remove();}
+});
+
+await check('Paired spline numeric and full-draft sets coexist and restore the intended input scope and calculation',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    const tool=curveDraftInput(app,'spline'),host=app.w.toolManager.host;host.selectImplementation('spline','uniform');setName(app,'数値と一様');setAction(app,'create');await tick();const numeric=setSelected(app);host.selectImplementation('spline','centripetal');setName(app,'下書きと求心');setAction(app,'create-draft');await tick();const draft=setSelected(app),points=JSON.stringify(tool.points);draftKey(app,'Escape');for(const p of [[300,200],[380,300],[460,200]])parameterClick(app,...p);const current=tool.points;tool.tension=4;host.selectImplementation('spline','chordal');const history=app.w.undoStack.length;
+    setChoose(app,numeric);setAction(app,'restore');assert(tool.points===current&&tool.tension===2&&host.describe('spline').id==='uniform','numeric scope preserves points');setChoose(app,draft);setAction(app,'restore');assert(JSON.stringify(tool.points)===points&&host.describe('spline').id==='centripetal'&&app.w.undoStack.length===history,'full draft restores original points and method');const expected=host.encodePath(host.execute('spline',{points:tool.points,tension:tool.tension}));constructionEnter(app);await tick();assert(curveDraftShape(app,'spline').getAttribute('d')===expected&&JSON.parse(curveDraftShape(app,'spline').getAttribute('data-vector-implementation')).calculation.id==='centripetal','paired real calculation');
+  }finally{app.element.remove();}
+});
+
+await check('Paired set creation, rename, duplicate, update and delete undo as single independent records',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    app.d.getElementById('text-tool').click();annotationText(app,'入力A');parameterClick(app,100,160);setName(app,'A');const history=app.w.undoStack.length;setAction(app,'create');await tick();const a=setSelected(app);assert(app.w.undoStack.length===history+1,'create one step');app.w.undo();assert(!setState(app),'undo create');app.w.redo();assert(setState(app).entries[0].id===a,'redo stable ID');
+    async function change(id,name,action,verify){if(app.w.toolManager.activeToolName!=='text')app.d.getElementById('text-tool').click();setChoose(app,id);if(name!==null)setName(app,name);const before=JSON.stringify(setState(app)),history=app.w.undoStack.length;setAction(app,action);await tick();const after=JSON.stringify(setState(app));assert(after!==before&&app.w.undoStack.length===history+1,'one step '+action);verify();app.w.undo();assert(JSON.stringify(setState(app))===before,'undo '+action);app.w.redo();assert(JSON.stringify(setState(app))===after,'redo '+action);}
+    await change(a,'改名A','rename',()=>assert(setState(app).entries[0].id===a,'stable ID on rename'));let copy;await change(a,'コピー','duplicate',()=>{copy=setSelected(app);assert(copy!==a,'new ID');});
+    app.d.getElementById('text-tool').click();setChoose(app,a);setAction(app,'restore');annotationText(app,'更新A');app.w.toolManager.host.selectImplementation('spline','uniform');await change(a,null,'update',()=>{const original=setState(app).entries.find(e=>e.id===a),duplicate=setState(app).entries.find(e=>e.id===copy);assert(original.input.input.content==='更新A'&&original.methods.calculation.spline==='uniform'&&duplicate.input.input.content==='入力A'&&duplicate.methods.calculation.spline==='default','both parts update independently of duplicate');});
+    await change(copy,null,'remove',()=>assert(!setState(app).entries.some(e=>e.id===copy),'remove selected copy'));assert(app.w.toolManager.host.describe('spline').id==='uniform','undo never selects methods');
+  }finally{app.element.remove();}
+});
+
+await check('Combining selected named input and methods copies saved values and survives deletion of both source records',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    const tool=shapeDraftInput(app,'circle'),host=app.w.toolManager.host;namedName(app,'保存した円');namedAction(app,'create');host.selectRenderer('circle','cubic');methodName(app,'保存した描画');methodAction(app,'create');await tick();const input=JSON.stringify(namedState(app)),methods=JSON.stringify(methodState(app));host.selectRenderer('circle','default');draftKey(app,'Escape');setName(app,'組み合わせ');setAction(app,'combine');await tick();const saved=setState(app).entries[0];assert(saved.input.input.points.length===2&&saved.methods.rendering.circle.id==='cubic'&&!tool.isDrawing,'copies stored values without applying');assert(JSON.stringify(namedState(app))===input&&JSON.stringify(methodState(app))===methods,'sources unchanged');
+    namedAction(app,'remove');methodAction(app,'remove');await tick();const history=app.w.undoStack.length;setAction(app,'restore');assert(tool.isDrawing&&host.describeRendering('circle').id==='cubic'&&!namedState(app)&&!methodState(app)&&app.w.undoStack.length===history,'source deletion does not break pair');constructionEnter(app);await tick();assert(shapeDraftOutput(app,'circle').tagName==='path','copied pair draws');
+  }finally{app.element.remove();}
+});
+
+await check('Invalid paired SVG data rejects atomically, future input versions stay inert and legacy drawings clear sets',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    app.d.getElementById('text-tool').click();annotationText(app,'現在の下書き');parameterClick(app,140,200);setName(app,'現在');setAction(app,'create');namedName(app,'入力');namedAction(app,'create');methodName(app,'方式');methodAction(app,'create');await tick();const tool=app.w.toolManager.tools.text,preview=tool.previewElement,before=app.w.DrawingDocument.serialize(),history=app.w.undoStack.length,id=setSelected(app),item=setState(app).entries[0],methods=JSON.stringify(app.w.toolManager.host.exportPreferences());
+    for(const value of [{version:2,entries:[]},{version:1,entries:[item,item]},{version:1,entries:[{...item,input:{version:1,input:{point:null,content:42}}}]},{version:1,entries:[{...item,methods:{version:2,calculation:{},rendering:{}}}]}]){let failed=false;try{app.w.DrawingDocument.open(setSVG(app,value));}catch{failed=true;}assert(failed&&app.w.DrawingDocument.serialize()===before&&tool.previewElement===preview&&setSelected(app)===id&&app.w.undoStack.length===history&&JSON.stringify(app.w.toolManager.host.exportPreferences())===methods,'invalid set preserves document draft selection methods and history');}
+    for(const value of ['現在',' ','x'.repeat(101)]){setName(app,value);setAction(app,value==='現在'?'duplicate':'rename');await tick();assert(app.w.DrawingDocument.serialize()===before&&setSelected(app)===id&&app.w.undoStack.length===history,'invalid set edit atomic');}
+    const unknown={version:1,entries:[{...item,name:'<b>未来</b>',input:{version:99,input:{future:'kept'}}},{id:'plugin-set',name:'外部',tool:'futureTool',input:{version:7,input:{a:1}},methods:{version:1,calculation:{futureTool:'future'},rendering:{}}}]};app.w.DrawingDocument.open(setSVG(app,unknown));app.d.getElementById('text-tool').click();assert(app.d.querySelector('[data-construction-set-action="restore"]').disabled&&app.d.querySelector('[data-construction-set-select] option').textContent.includes('<b>未来</b>')&&!app.d.querySelector('[data-construction-sets] b'),'future version disabled and name literal');assert(setComparable(setState(app))===setComparable(unknown),'unknown tool and entry retained');setName(app,'保持した名前');setAction(app,'rename');await tick();const saved=JSON.stringify(setState(app));app.w.DrawingDocument.open(app.w.DrawingDocument.serialize());assert(JSON.stringify(setState(app))===saved,'unknown roundtrip');
+    app.w.DrawingDocument.open('<svg xmlns="http://www.w3.org/2000/svg"><circle r="4"/></svg>');app.w.saveState();await tick();assert(!setState(app)&&JSON.stringify(app.w.toolManager.host.exportPreferences())===methods,'old drawing clears sets only');app.w.undo();assert(JSON.stringify(setState(app))===saved,'undo old drawing');app.w.redo();assert(!setState(app),'redo old drawing');
+  }finally{app.element.remove();}
+});
+
+await check('Unavailable paired methods prevent every change and retry after registration restores the whole set',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    const tool=shapeDraftInput(app,'circle'),host=app.w.toolManager.host;setName(app,'後から登録');setAction(app,'create');await tick();const data=setState(app);data.entries[0].methods.calculation.circle='later-set';data.entries[0].methods.rendering.circle={id:'cubic',options:{}};app.w.DrawingDocument.open(setSVG(app,data));shapeDraftInput(app,'circle');const beforeInput=JSON.stringify(tool.exportInputPreset()),preview=tool.drawingObject,beforeMethods=JSON.stringify(host.exportPreferences()),history=app.w.undoStack.length;setAction(app,'restore');assert(JSON.stringify(tool.exportInputPreset())===beforeInput&&tool.drawingObject===preview&&JSON.stringify(host.exportPreferences())===beforeMethods&&app.w.undoStack.length===history,'incompatible pair changes nothing');assert(app.d.querySelector('[data-construction-set-status]').textContent.includes('circle/later-set'),'blocked reason');
+    host.registerImplementation('circle',{id:'later-set',label:'Later',algorithm:'Test circle delegation',run:(input,ops,execute)=>execute('circle',input,{implementation:'default'})});setAction(app,'restore');assert(host.describe('circle').id==='later-set'&&host.describeRendering('circle').id==='cubic'&&JSON.stringify(setState(app))===JSON.stringify(data),'full compatible retry');constructionEnter(app);await tick();const record=JSON.parse(shapeDraftOutput(app,'circle').getAttribute('data-vector-implementation'));assert(record.calculation.id==='later-set'&&record.rendering.id==='cubic','both saved methods used in real drawing');
+  }finally{app.element.remove();}
+});
+
+await check('Set restore exceptions roll back input and methods while preview failures remain editable for a successful set retry',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    const tool=shapeDraftInput(app,'circle'),host=app.w.toolManager.host;host.selectRenderer('circle','cubic');setName(app,'正常');setAction(app,'create');await tick();const good=setSelected(app);draftKey(app,'Escape');host.selectRenderer('circle','default');const beforeInput=JSON.stringify(tool.exportInputPreset()),beforeMethods=JSON.stringify(host.exportPreferences()),history=app.w.undoStack.length,restore=tool.restoreInputPreset;let fail=true;tool.restoreInputPreset=function(value){restore.call(this,value);if(fail){fail=false;throw Error('set restore exception');}};setAction(app,'restore');tool.restoreInputPreset=restore;assert(JSON.stringify(tool.exportInputPreset())===beforeInput&&JSON.stringify(host.exportPreferences())===beforeMethods&&app.w.undoStack.length===history&&app.d.querySelector('[data-construction-set-status]').textContent.includes('set restore exception'),'exception rolls back input and methods');
+    setAction(app,'restore');host.registerRenderer({id:'set-fail',label:'Fail',algorithm:'Test renderer failure',supports:n=>n==='circle',prepare:()=>{throw Error('set preview failed');}});host.selectRenderer('circle','set-fail');setName(app,'描画失敗');setAction(app,'create');await tick();const failing=setSelected(app),input=JSON.stringify(tool.exportInputPreset());setChoose(app,good);setAction(app,'restore');setChoose(app,failing);setAction(app,'restore');assert(tool.implementationError.includes('set preview failed')&&JSON.stringify(tool.exportInputPreset())===input&&!shapeDraftOutput(app,'circle'),'preview failure leaves restored inputs');setChoose(app,good);setAction(app,'restore');constructionEnter(app);await tick();assert(shapeDraftOutput(app,'circle').tagName==='path'&&JSON.parse(shapeDraftOutput(app,'circle').getAttribute('data-vector-implementation')).rendering.id==='cubic','working set retries and commits');
+  }finally{app.element.remove();}
+});
+
+await check('Paired fillet parameters preserve target selection, work without storage and roundtrip through actual SVG download',async()=>{
+  const app=await preferenceEditor('{preferences:{storage:()=>{throw Error("blocked");}}}');
+  try{
+    app.w.DrawingDocument.open(parameterCornerSVG);parameterPresetRecord(app,'fillet');const host=app.w.toolManager.host;preferenceChoose(app,'rendering','cubic');setName(app,'半径30とベジェ');setAction(app,'create');await tick();const saved=JSON.stringify(setState(app));let blob;const url=app.w.URL.createObjectURL,revoke=app.w.URL.revokeObjectURL,click=app.w.HTMLAnchorElement.prototype.click;app.w.URL.createObjectURL=value=>{blob=value;return 'blob:sets';};app.w.URL.revokeObjectURL=()=>{};app.w.HTMLAnchorElement.prototype.click=function(){};
+    try{app.d.getElementById('save-btn').click();assert(blob?.type==='image/svg+xml','actual SVG download');app.w.DrawingDocument.open(await blob.text());assert(JSON.stringify(setState(app))===saved,'paired download roundtrip');}finally{app.w.URL.createObjectURL=url;app.w.URL.revokeObjectURL=revoke;app.w.HTMLAnchorElement.prototype.click=click;}
+    app.d.getElementById('fillet-tool').click();const tool=app.w.toolManager.tools.fillet,h=app.d.getElementById('parameter-h'),v=app.d.getElementById('parameter-v');tool.radius=10;host.selectRenderer('fillet','default');parameterClick(app,180,100,h);const selected=tool.selectedLines,history=app.w.undoStack.length;setAction(app,'restore');assert(tool.radius===30&&tool.selectedLines===selected&&tool.selectedLines[0]===h&&host.describeRendering('fillet').id==='cubic'&&app.w.undoStack.length===history,'restore keeps chosen line and no commit');parameterClick(app,100,200,v);await tick();const bridge=app.d.querySelector('[data-vector-fillet]');assert(bridge&&JSON.parse(bridge.getAttribute('data-vector-fillet')).input.radius===30&&JSON.parse(bridge.getAttribute('data-vector-implementation')).rendering.id==='cubic','saved parameter and method used in real edit');assert(app.w.undoStack.length===history+1,'corner edit one step');
+  }finally{app.element.remove();}
+});
+
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
 </script>

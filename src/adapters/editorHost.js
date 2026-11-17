@@ -33,7 +33,7 @@ export function createEditorHost({
     const calculation = run.selection?.() ?? {};
     return parseImplementationPreferences({version:1,calculation,rendering:render ? {} : drawing.selection(Object.keys(calculation))});
   }
-  function restorePreferences(value) {
+  function preparePreferences(value) {
     const data = parseImplementationPreferences(value),pending = [],skipped = [];
     // Validate all entries before applying any of them. Unavailable plugins stay inactive.
     for (const type of ['calculation','rendering']) for (const [name,entry] of Object.entries(data[type])) {
@@ -49,14 +49,39 @@ export function createEditorHost({
         pending.push({type,name,id,options:entry.options});
       } catch (error) {skipped.push({type,name,id,reason:error.message});}
     }
+    return {pending,skipped};
+  }
+  function selectPreferences(pending) {
     for (const item of pending) {
       if (item.type === 'calculation') run.select(item.name,item.id);
       else drawing.replace(item.name,item.id,item.options);
     }
-    return {applied:pending.map(({type,name,id})=>({type,name,id})),skipped};
+    return pending.map(({type,name,id})=>({type,name,id}));
+  }
+  function restorePreferences(value) {
+    const {pending,skipped}=preparePreferences(value);
+    return {applied:selectPreferences(pending),skipped};
+  }
+  // A construction set must never combine saved input with silently skipped methods.
+  // The callback is synchronous; callers own input rollback if their controller throws.
+  function restorePreferencesAtomically(value,applyInput) {
+    if(typeof applyInput!=='function')throw TypeError('入力の復元関数が必要です。');
+    const {pending,skipped}=preparePreferences(value);
+    if(skipped.length)return {applied:[],skipped};
+    const before=exportPreferences();
+    try{
+      const applied=selectPreferences(pending);applyInput();return {applied,skipped};
+    }catch(error){
+      try{
+        const previous=preparePreferences(before);
+        if(previous.skipped.length)throw Error('元の方式が利用できなくなりました。');
+        selectPreferences(previous.pending);
+      }catch(rollback){throw new AggregateError([error,rollback],error.message+' 方式の巻戻しにも失敗しました: '+rollback.message);}
+      throw error;
+    }
   }
   return {operations, execute: run, readPoint, snap, readShape, encodePath, editOutline, save,
-    exportPreferences, restorePreferences, renderingConfigurable: !render,
+    exportPreferences, restorePreferences, restorePreferencesAtomically, renderingConfigurable: !render,
     describe, implementations: name => run.list?.(name) ?? [describe(name)],
     selectImplementation: (name, id) => {if (!run.select) throw Error('外部executeは方式選択に対応していません。'); run.select(name, id);},
     registerImplementation: (name, implementation) => run.register(name, implementation),
