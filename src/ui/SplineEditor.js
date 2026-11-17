@@ -76,7 +76,7 @@ class SplineEditor {
       const next=window.VectorUtils.removeEditableSplineKnot(d.method,this.input(),Number(d.removeKnotText),Number(d.removalToleranceText),
         input=>host.execute('removeSplineKnot',input,{implementation:d.removeImplementation}));
       d.refinement={tool:'removeSplineKnot',id:info.id,label:info.label,algorithm:info.algorithm,source:info.source??null,...next.removal,
-        verification:next.periodic?{algorithm:'周期再構成・標準再挿入後の1周期全体の偏差上限を推定',source:'src/adapters/periodicSplineRemoval.js'}:
+        verification:next.removal.denominator?{algorithm:(next.periodic?'周期再構成・標準再挿入後の':'')+'Bernstein分母範囲と区間別偏差上限を検証',source:'src/model/splineDeviation.js'}:next.periodic?{algorithm:'周期再構成・標準再挿入後の1周期全体の偏差上限を推定',source:'src/adapters/periodicSplineRemoval.js'}:
           {algorithm:'共通ノット列の制御点から偏差上限を推定',source:'src/model/splineKnotRemoval.js'}};
       d.pointsText=next.points.map(p=>p.x+', '+p.y).join('\n');
       if(next.periodic)d.periodicKnotsText=next.periodicKnots.join(', ');else d.knotsText=next.knots.join(', ');
@@ -206,7 +206,7 @@ class SplineEditor {
     }
 
     const removalInfo=document.createElement('p');removalInfo.dataset.splineRemovalInfo='';removalInfo.style.fontSize='12px';
-    removalInfo.textContent=(d.periodic?'3周期展開・1周期抽出・再挿入照合でノットを削除します。両端は同じ継ぎ目として扱います。継ぎ目の最後のノットを削除すると、周期を保ってパラメータ区間の始端を次のノットへ移します。':'内部ノットを1個削除し、制御点から推定した偏差上限が許容差以下の場合に下書きを更新します。')+'NURBSの重みは全て正、または全て負が対象です。許容差は図形のローカル座標で指定し、各削除の直前の曲線と比較します。';container.append(removalInfo);
+    removalInfo.textContent=(d.periodic?'3周期展開・1周期抽出・再挿入照合でノットを削除します。両端は同じ継ぎ目として扱います。継ぎ目の最後のノットを削除すると、周期を保ってパラメータ区間の始端を次のノットへ移します。':'内部ノットを1個削除し、制御点から推定した偏差上限が許容差以下の場合に下書きを更新します。')+'零・正負混在のNURBS重みも、全区間の分母を零から分離して検証できる場合に対応します。極や未検証区間を含む曲線は削除しません。許容差は図形のローカル座標で指定し、各削除の直前の曲線と比較します。';container.append(removalInfo);
     {
       for(const [labelText,key] of [['削除するノット値','removeKnotText'],['ノット削除の許容差','removalToleranceText']]){
         const label=document.createElement('label');label.textContent=labelText;label.style.cssText='display:block;font-size:12px;margin:10px 0';

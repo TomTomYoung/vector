@@ -1,5 +1,5 @@
 import {expandPeriodicSpline} from '../model/periodicSplineExpansion.js';
-import {homogeneousSplineDeviation} from '../model/splineDeviation.js';
+import {boundedSplineDeviation} from '../model/splineDeviation.js';
 import {insertSplineKnot} from '../model/splines.js';
 import {insertEditableSplineKnot} from './splineRefinement.js';
 
@@ -15,8 +15,25 @@ function canonical(model,create) {
 
 function normalizedInsertion(input) {
   if(!input.weights)return insertSplineKnot(input);
-  const sign=Math.sign(input.weights[0]),scale=Math.max(...input.weights.map(Math.abs));
-  const result=insertSplineKnot({...input,weights:input.weights.map(w=>sign*(w/scale))});
+  const sign=Math.sign(input.weights.find(w=>w!==0)),scale=Math.max(...input.weights.map(Math.abs));
+  const weights=input.weights.map(w=>sign*(w/scale));
+  if(weights.some((w,i)=>input.weights[i]!==0&&w===0))return null;
+  if(!weights.every(w=>w>0)) {
+    // Insert numerator and denominator as polynomial splines. A (0,0,0)
+    // homogeneous control is representable by a finite point of weight zero.
+    const origin=input.points[0],numerator=insertSplineKnot({...input,weights:undefined,points:input.points.map((p,i)=>({x:(p.x-origin.x)*weights[i],y:(p.y-origin.y)*weights[i]}))});
+    const denominator=insertSplineKnot({...input,weights:undefined,points:weights.map(w=>({x:w,y:0}))});
+    if(!numerator||!denominator)return null;
+    const points=[],restored=[];
+    for(let i=0;i<numerator.points.length;i++) {
+      const h=numerator.points[i],w=denominator.points[i].x;
+      if(![h.x,h.y,w].every(Number.isFinite)||(w===0&&(h.x!==0||h.y!==0)))return null;
+      points.push(w===0?{...origin}:{x:origin.x+h.x/w,y:origin.y+h.y/w});restored.push(sign*w*scale);
+      if(w!==0&&restored.at(-1)===0)return null;
+    }
+    return {...numerator,points,weights:restored};
+  }
+  const result=insertSplineKnot({...input,weights});
   if(result)result.weights=result.weights.map(w=>sign*w*scale);
   return result;
 }
@@ -70,16 +87,17 @@ export function removePeriodicSplineKnot(method,model,requested,tolerance,create
   const before=canonical(comparison,create),after=rebuilt&&canonical(rebuilt,create);
   if(!before||!after||before.points.length!==after.points.length||before.knots.length!==after.knots.length||
     before.knots.some((k,i)=>k!==after.knots[i]))throw numericError();
-  const rational=!!before.weights,origin=before.points[0],sign=rational?Math.sign(before.weights[0]):1;
+  const rational=!!before.weights,origin=before.points[0],sign=rational?Math.sign(before.weights.find(w=>w!==0)):1;
   const scale=rational?Math.max(...before.weights.map(Math.abs)):1;
   const controls=shape=>shape.points.map((point,i)=>{
     const w=rational?sign*(shape.weights[i]/scale):1;
     return {x:(point.x-origin.x)*w,y:(point.y-origin.y)*w,w};
   });
+  if(rational&&[before,after].some(shape=>shape.weights.some(w=>w!==0&&w/scale===0)))throw numericError();
   const radius=rational?Math.max(...after.points.map(point=>Math.hypot(point.x-origin.x,point.y-origin.y))):0;
-  const errorBound=homogeneousSplineDeviation(controls(before),controls(after),radius,rational);
-  if(errorBound===null||errorBound>tolerance)throw Error('周期再構成後の偏差が許容差を超えるため、ノットを削除できません。');
-  return {...candidate,removal:{t:requested,tolerance,errorBound,periodic:{
+  const deviation=boundedSplineDeviation(controls(before),controls(after),radius,rational,p,before.knots);
+  if(!deviation||deviation.errorBound>tolerance)throw Error('周期再構成後の偏差が許容差を超えるか分母を検証できないため、ノットを削除できません。');
+  return {...candidate,removal:{t:requested,tolerance,...deviation,periodic:{
     algorithm:domainShift?'3周期展開・同値ノット削除・継ぎ目移動・1周期抽出・再挿入照合':'3周期展開・同値ノット削除・中央周期抽出・再挿入照合',
     source:'src/adapters/periodicSplineRemoval.js',t,copies:copies.length,...(domainShift?{domainShift}:{})}}};
 }

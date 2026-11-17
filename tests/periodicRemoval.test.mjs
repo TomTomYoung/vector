@@ -85,12 +85,11 @@ test('late failures malformed replacement results and caller mutations never lea
   assert.throws(()=>remove('nurbsCurve',added,0.7,1e-7,value=>{const result=removeSplineKnot(value);result.points[0].x+=100;result.removal.errorBound=0;return result;}),/出力が不正/);
   assert.deepEqual(added,before);const result=remove('nurbsCurve',added,0.7);result.points[0].x=999;result.weights[0]=999;assert.deepEqual(added,before);
 });
-test('invalid periodic removals reject unrepresentable seam shifts missing knots unsupported weights and unrepresentable expansion before callbacks',()=>{
+test('invalid periodic removals reject unrepresentable seam shifts missing knots and unrepresentable expansion before callbacks',()=>{
   let calls=0;const callback=v=>{calls++;return removeSplineKnot(v);};
   for(const t of [NaN,Infinity,0,0.7,2.1,0.1,2])assert.throws(()=>remove('bSplineCurve',base,t,1e-7,callback));
   for(const tolerance of [NaN,Infinity,-1,1e6+1])assert.throws(()=>remove('bSplineCurve',base,1,tolerance,callback));
   assert.throws(()=>remove('bSplineCurve',{points:points(4),degree:3,periodic:true},1,1e-7,callback),/制御点数/);
-  for(const weights of [[0,1,1,1,1],[1,-1,1,1,1]])assert.throws(()=>remove('nurbsCurve',{...base,weights},1,1e-7,callback),/正負混在/);
   const huge={...base,periodicKnots:[0,1e307,2e307,3e307,4e307,5e307]};assert.ok(bSplineCurve(huge));assert.throws(()=>remove('bSplineCurve',huge,2e307,1e-7,callback),/周期展開/);assert.equal(calls,0);
 });
 test('a thousand original controls use the bounded 3012-control evaluation path without changing editable curve limits',()=>{
