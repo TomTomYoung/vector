@@ -198,6 +198,7 @@ class ToolPropertiesPanel {
     this.createNamedImplementationPresetControls(section, name);
     this.createConstructionInputControls(section, name);
     this.createNamedConstructionInputControls(section, name);
+    this.createConstructionSetControls(section, name);
     if (this.currentTool.implementationError) {
       const p = document.createElement('p'); p.textContent = this.currentTool.implementationError; p.style.color = '#a22'; section.append(p);
     }
@@ -432,6 +433,51 @@ class ToolPropertiesPanel {
     if(!supported){const p=document.createElement('p');p.textContent='対応する作図ツールを選択すると記録を使用できます。';details.append(p);}
     const link=document.createElement('a');link.textContent='名前付き記録の保存・互換性・操作';link.href='https://github.com/TomTomYoung/vector/blob/master/doc/named-construction-inputs.md';link.target='_blank';link.rel='noopener';details.append(link);
     section.append(details);
+  }
+
+  createConstructionSetControls(section,name) {
+    const sets=this.toolManager.constructionSets,tool=this.currentTool;
+    if(!sets)return;
+    const supported=typeof tool.exportInputPreset==='function'&&typeof tool.restoreInputPreset==='function',stored=sets.snapshot();
+    if(!supported&&!stored)return;
+    const items=sets.list(name),saved=sets.entry(name),dual=typeof tool.exportInputDraftPreset==='function';
+    const canRestore=supported&&sets.canRestore&&window.VectorUtils.supportsConstructionInput(tool,saved?.input);
+    const inputSource=this.toolManager.namedInputPresets?.entry(name),methodSource=this.toolManager.namedImplementationPresets?.entry();
+    const details=document.createElement('details');details.dataset.constructionSets='';
+    const heading=document.createElement('summary');heading.textContent='作図セット（入力と方式をまとめて保存）';details.append(heading);
+    const note=document.createElement('p');note.textContent='このツールの入力と全ツールの計算・描画方式を組にして保存します。復元すると入力と方式が切り替わります。利用できない方式がある場合は復元を止めます。図形の確定は通常の操作で行います。';details.append(note);
+    const count=document.createElement('p');count.textContent='このツール: '+items.length+'件 / 図面全体: '+(stored?.entries.length??0)+'件';details.append(count);
+    if(stored){const names=document.createElement('p');names.textContent='記録のあるツール: '+[...new Set(stored.entries.map(e=>e.tool))].map(n=>this.toolManager.tools[n]?.getTitle()??n).join('、');details.append(names);}
+    const refresh=()=>{this.updatePanel();const next=this.panel.querySelector('[data-construction-sets]');if(next)next.open=true;};
+    const select=document.createElement('select');select.dataset.constructionSetSelect='';select.setAttribute('aria-label','作図セットの選択');select.style.width='100%';
+    if(!items.length)select.append(new Option('記録はありません',''));
+    for(const item of items)select.append(new Option(item.name+' / 入力形式 '+item.input.version,item.id));
+    select.value=saved?.id??'';select.disabled=!items.length;select.onchange=()=>{sets.choose(name,select.value);refresh();};details.append(select);
+    const label=document.createElement('label');label.textContent='セット名';
+    const input=document.createElement('input');input.type='text';input.maxLength=100;input.dataset.constructionSetName='';input.setAttribute('aria-label','作図セットの記録名');input.style.cssText='width:100%;box-sizing:border-box';input.value=sets.nameDraft(name);input.oninput=()=>sets.setNameDraft(name,input.value);label.append(input);details.append(label);
+    const status=document.createElement('p');status.dataset.constructionSetStatus='';status.setAttribute('role','status');status.textContent=sets.state.message;status.style.cssText='font-size:12px;line-height:1.6';if(sets.state.warning)status.style.color='#a22';details.append(status);
+    if(saved){
+      const p=document.createElement('p');p.dataset.constructionSetRecord='';p.textContent=this.describeConstructionInputRecord(name,saved.input,window.VectorUtils.supportsConstructionInput(tool,saved.input))+' / 計算 '+Object.keys(saved.methods.calculation).length+'項目、描画 '+Object.keys(saved.methods.rendering).length+'項目';details.append(p);
+      this.appendPresetMethods(details,saved.methods,name,'constructionSetMethod');
+    }
+    const button=(label,id,enabled,action,save=true)=>{
+      const b=document.createElement('button');b.type='button';b.textContent=label;b.dataset.constructionSetAction=id;b.disabled=!enabled;b.style.margin='3px';
+      b.onclick=()=>{if(action()&&save)this.toolManager.host.save();refresh();};details.append(b);
+    };
+    if(supported)button(dual?'現在の数値設定と方式をセット保存':'現在の入力と方式をセット保存','create',sets.canRecord,()=>sets.record(name,input.value,tool));
+    if(dual)button('現在の下書きと方式をセット保存','create-draft',sets.canRecord,()=>sets.record(name,input.value,tool,{draft:true}));
+    const sources=document.createElement('p');sources.dataset.constructionSetSources='';sources.textContent='組み合わせ元: 名前付き入力 '+(inputSource?.name??'未選択')+' / 名前付き方式 '+(methodSource?.name??'未選択');details.append(sources);
+    button('選択中の名前付き入力と方式からセット作成','combine',!!inputSource&&!!methodSource,()=>sets.add(name,input.value,inputSource.entry,methodSource.preset));
+    if(saved){
+      button('選択セットの入力と方式を復元','restore',canRestore,()=>sets.restore(name,saved.id,tool),false);
+      button(dual?'選択セットを現在の数値設定と方式で更新':'選択セットを現在の入力と方式で更新','update',supported&&sets.canRecord,()=>sets.update(name,saved.id,tool));
+      if(dual)button('選択セットを現在の下書きと方式で更新','update-draft',sets.canRecord,()=>sets.update(name,saved.id,tool,{draft:true}));
+      button('選択セットを改名','rename',true,()=>sets.rename(name,saved.id,input.value));
+      button('選択セットを別名で複製','duplicate',true,()=>sets.duplicate(name,saved.id,input.value));
+      button('選択セットを削除','remove',true,()=>sets.remove(name,saved.id));
+    }
+    if(!supported){const p=document.createElement('p');p.textContent='記録した作図ツールを選択すると、対応するセットを操作できます。';details.append(p);}
+    const link=document.createElement('a');link.textContent='作図セットの復元・互換性・保存範囲';link.href='https://github.com/TomTomYoung/vector/blob/master/doc/construction-sets.md';link.target='_blank';link.rel='noopener';details.append(link);section.append(details);
   }
 
   createInstructionsSection() {
