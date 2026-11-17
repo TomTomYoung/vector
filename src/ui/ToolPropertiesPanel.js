@@ -323,6 +323,8 @@ class ToolPropertiesPanel {
         if(saved.input.degree!==undefined)p.textContent+=' / 次数 '+saved.input.degree;
         if(saved.input.periodic!==undefined)p.textContent+=' / 周期 '+(saved.input.periodic?'あり':'なし');
         if(saved.input.box)p.textContent+=' / 切り取り範囲 '+JSON.stringify(saved.input.box);
+        if(saved.input.dimensionType)p.textContent+=' / 寸法種別 '+(saved.input.dimensionType==='linear'?'長さ':'角度');
+        if(name==='text')p.textContent+=' / 文字数 '+saved.input.content.length+' / '+(saved.input.point?'配置位置 '+saved.input.point.x+', '+saved.input.point.y:'配置位置は未指定');
         if(saved.input.pathMode)p.textContent+=' / 描画モード '+(saved.input.pathMode==='line'?'直線':'ベジェ');
         if(Object.hasOwn(window.VectorUtils.constructionParameterFields,name))for(const [key,label] of window.VectorUtils.constructionParameterFields[name])p.textContent+=' / '+label+' '+saved.input[key];
       }
