@@ -217,3 +217,5 @@ Bernstein直接評価、BigIntの2進整数化、登録API、SVGグループ化�
 ## 保存曲線へのノット挿入
 
 非周期のB-spline・NURBSの再編集で、既存のBoehm系 `insertSplineKnot` を利用できます。ノット挿入の実装を曲線計算とは別に選択し、下書きへ反映して最後に適用します。入出力検証と方式記録、換装契約は [spline-knot-insertion.md](spline-knot-insertion.md) に記録しています。
+
+周期曲線の[形状保持ノット挿入](periodic-knot-insertion.md)も実装済みです。周期展開した曲線へ選択したBoehm系単一挿入を適用し、中央周期を抽出します。内部と継ぎ目への挿入、換装呼出しの検証、周期処理名・実装元・挿入値の表示とSVG保存に対応しています。参照履歴と有限精度の制約は同文書へ記録しています。

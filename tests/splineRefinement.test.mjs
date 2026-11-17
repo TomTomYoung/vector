@@ -30,7 +30,7 @@ test('refinement validates before invocation and preserves inputs and unrelated 
   const input={points,degree:3},before=structuredClone(input);let calls=0;
   const execute=value=>{calls++;return insertSplineKnot(value);};
   for(const t of [NaN,Infinity,-1,0,1,2])assert.throws(()=>insertEditableSplineKnot('bSplineCurve',input,t,execute));
-  assert.equal(calls,0);assert.throws(()=>insertEditableSplineKnot('circle',input,0.5,execute));assert.throws(()=>insertEditableSplineKnot('bSplineCurve',{...input,periodic:true},0.5,execute));
+  assert.equal(calls,0);assert.throws(()=>insertEditableSplineKnot('circle',input,0.5,execute));assert.throws(()=>insertEditableSplineKnot('bSplineCurve',{...input,periodic:true,knots:[0,1]},0.5,execute));
   const next=insertEditableSplineKnot('bSplineCurve',input,0.5,execute);assert.equal(calls,1);assert.deepEqual(input,before);assert.deepEqual(next.points[0],points[0]);assert.deepEqual(next.points.at(-1),points.at(-1));next.points[0].x=900;assert.deepEqual(input,before);
 });
 test('full multiplicities capacity invalid models and unrepresentable homogeneous results fail without partial updates',()=>{
