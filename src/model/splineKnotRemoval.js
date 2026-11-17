@@ -1,10 +1,11 @@
-import {bSplineCurve,nurbsCurve} from './splineCurves.js';
+import {nonperiodicSplineEvaluation} from './splineCurves.js';
+import {homogeneousSplineDeviation} from './splineDeviation.js';
 
 // Reverse the local Boehm equations from both sides, then reinsert on the
 // original basis to estimate a deviation bound. See doc/spline-knot-removal.md.
 export function prepareSplineKnotRemoval(input) {
   if(!input||input.periodic||input.periodicKnots!==undefined)return null;
-  const rational=input.weights!==undefined,create=rational?nurbsCurve:bSplineCurve,model=create(input);
+  const rational=input.weights!==undefined,create=nonperiodicSplineEvaluation,model=create(input);
   if(!model)return null;
   if(!Array.from(model.points).every(p=>p&&Number.isFinite(p.x)&&Number.isFinite(p.y))||
     !Array.from(model.knots).every(Number.isFinite)||(rational&&!Array.from(model.weights).every(Number.isFinite)))return null;
@@ -40,7 +41,7 @@ function inspect(c,result) {
     return {x:(p.x-origin.x)*w,y:(p.y-origin.y)*w,w};
   });
   if(!controls.every(finite))return null;
-  let deltaH=0,deltaW=0;
+  const reconstructed=[];
   for(let i=0;i<model.points.length;i++){
     let rebuilt;
     if(i<=left)rebuilt=controls[i];
@@ -51,15 +52,13 @@ function inspect(c,result) {
       rebuilt={x:(1-a)*before.x+a*after.x,y:(1-a)*before.y+a*after.y,w:(1-a)*before.w+a*after.w};
     }
     if(!finite(rebuilt))return null;
-    const old=c.homogeneous[i];
-    deltaH=Math.max(deltaH,Math.hypot(old.x-rebuilt.x,old.y-rebuilt.y));
-    deltaW=Math.max(deltaW,Math.abs(old.w-rebuilt.w));
+    reconstructed.push(rebuilt);
   }
   // With positive normalized weights, the candidate lies in its control hull.
   // |C-D| <= (max |H-H'| + R max |w-w'|) / min w on the common basis.
   const radius=rational?Math.max(...candidate.points.map(p=>Math.hypot(p.x-origin.x,p.y-origin.y))):0;
-  const errorBound=rational?(deltaH+radius*deltaW)/Math.min(...c.homogeneous.map(h=>h.w)):deltaH;
-  if(!Number.isFinite(errorBound)||errorBound>tolerance)return null;
+  const errorBound=homogeneousSplineDeviation(c.homogeneous,reconstructed,radius,rational);
+  if(errorBound===null||errorBound>tolerance)return null;
   return {points:candidate.points.map(p=>({x:p.x,y:p.y})),degree:model.degree,knots:[...reduced],
     ...(rational?{weights:[...candidate.weights]}:{}),removal:{t,tolerance,errorBound}};
 }

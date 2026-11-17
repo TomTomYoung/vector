@@ -2,10 +2,10 @@ import {clampedKnots} from './splines.js';
 
 // One period contains N intervals (including zero widths) for N original controls. Extend U[i+N]
 // = U[i]+T and wrap the first p controls; see doc/nonuniform-periodic-knots.md.
-function curve(input, rational) {
+function curve(input, rational, maxControls=1000) {
   if (!input || typeof input !== 'object') return null;
   const {points, degree = 3, weights, periodic = false} = input;
-  if (!Array.isArray(points) || points.length > 1000 || !points.every(p => p && Number.isFinite(p.x) && Number.isFinite(p.y)) ||
+  if (!Array.isArray(points) || points.length > maxControls || !points.every(p => p && Number.isFinite(p.x) && Number.isFinite(p.y)) ||
     !Number.isInteger(degree) || degree < 1 || degree > 12 || points.length <= degree || typeof periodic !== 'boolean') return null;
   const data = {points: points.map(p => ({...p})), degree};
   if (rational) {
@@ -60,6 +60,10 @@ function curve(input, rational) {
 }
 export const bSplineCurve = input => curve(input, false);
 export const nurbsCurve = input => curve(input, true);
+
+// Temporary nonperiodic evaluation arrays for three periods of at most 1000
+// original controls, plus degree <= 12. Editable curve limits remain unchanged.
+export const nonperiodicSplineEvaluation = input => input?.periodic ? null : curve(input,input?.weights!==undefined,3012);
 
 const mix = (a, b, t) => ({x: (1-t)*a.x+t*b.x, y: (1-t)*a.y+t*b.y, w: (1-t)*a.w+t*b.w});
 
