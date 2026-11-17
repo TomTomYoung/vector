@@ -3774,6 +3774,119 @@ await check('Workbench Worker restores the continuity reduction method and handl
   }finally{await page.close();}
 });
 
+
+function selectionField(label,value,type='change') {
+  const field=doc.querySelector(`[aria-label="${label}"]`);assert(field,'selection field '+label);
+  field.value=value;field.dispatchEvent(new w.Event(type,{bubbles:true}));
+}
+function selectionSetup(options={}) {
+  activate('select');w.selectTool.setSelectionOptions({radius:0,shape:'rectangle',match:'contain',...options});
+}
+function selectionMouse(type,x,y,options={},target=canvas) {
+  const p=new w.DOMPoint(x,y).matrixTransform(canvas.getScreenCTM());
+  target.dispatchEvent(new w.MouseEvent(type,{clientX:p.x,clientY:p.y,button:0,bubbles:true,...options}));
+}
+function selectionDrag(a,b,options={}) {selectionMouse('mousedown',...a,options);selectionMouse('mousemove',...b,options);selectionMouse('mouseup',...b,options);}
+function selectionIDs(){return w.selectedObjects.map(el=>el.id).sort().join(',');}
+await check('Selection properties expose radius, four shapes, containment/contact and the real hit algorithm',async()=>{
+  fixture();await tick();activate('select');w.selectTool.setSelectionOptions({radius:6,shape:'rectangle',match:'contain'});
+  const shape=doc.querySelector('[aria-label="ドラッグ選択の形状"]');assert(shape.options.length===4,'four shapes');
+  selectionField('クリック選択半径（画面px）','9','input');assert(w.selectTool.selectionOptions.radius===9,'radius input');
+  selectionField('ドラッグ選択の形状','line');assert(doc.querySelector('[aria-label="ドラッグ選択の判定"]').disabled,'line disables containment');
+  assert(doc.querySelector('[aria-label="ドラッグ選択の判定"]').value==='touch','line intersection');
+  selectionField('ドラッグ選択の形状','circle');assert(!doc.querySelector('[aria-label="ドラッグ選択の判定"]').disabled&&w.selectTool.selectionOptions.match==='contain','restore area condition');
+  assert(doc.getElementById('tool-properties-panel').textContent.includes('Canvas Path2D'),'actual implementation');
+});
+await check('Click radius uses CSS pixels under zoom and zero requires a direct hit',async()=>{
+  fixture('<line id="near" x1="100" y1="100" x2="200" y2="100" stroke="black" stroke-width="2"/>');await tick();selectionSetup({radius:6});
+  const old=canvas.style.transform;canvas.style.transform='scale(2)';
+  try {
+    const p=new w.DOMPoint(150,100).matrixTransform(canvas.getScreenCTM());
+    const screenClick=dy=>{for(const type of ['mousedown','mouseup'])canvas.dispatchEvent(new w.MouseEvent(type,{clientX:p.x,clientY:p.y+dy,button:0,bubbles:true}));};
+    screenClick(7);assert(selectionIDs()==='near','within six CSS px from painted stroke');w.selectTool.deselectObject();
+    screenClick(9);assert(!selectionIDs(),'outside CSS radius');
+    w.selectTool.setSelectionOptions({radius:0});screenClick(3);assert(!selectionIDs(),'zero radius no proximity');
+    screenClick(0);assert(selectionIDs()==='near','direct geometry hit at zero');
+  } finally {canvas.style.transform=old;}
+});
+await check('Picking prefers direct hits then nearest paint, ties frontmost, excluding hidden and locked layers',async()=>{
+  fixture('<rect id="direct" x="80" y="80" width="40" height="40" fill="red"/><line id="near" x1="80" y1="125" x2="120" y2="125" stroke="black"/><line id="back" x1="200" y1="100" x2="260" y2="100" stroke="black"/><line id="front" x1="200" y1="108" x2="260" y2="108" stroke="black"/><line id="locked" data-layer="2" x1="300" y1="100" x2="350" y2="100" stroke="black"/><line id="hidden" x1="400" y1="100" x2="450" y2="100" stroke="black" style="display:none"/>');await tick();selectionSetup({radius:6});w.layers.find(l=>l.id===2).locked=true;
+  click(100,119);assert(selectionIDs()==='direct','direct first');w.selectTool.deselectObject();
+  click(230,104);assert(selectionIDs()==='front','equal distance frontmost');w.selectTool.deselectObject();
+  click(230,102);assert(selectionIDs()==='back','nearest before stacking');w.selectTool.deselectObject();
+  click(325,102);assert(!selectionIDs(),'locked excluded');click(425,102);assert(!selectionIDs(),'hidden excluded');
+});
+await check('Rectangle contact tests line and fill geometry instead of bounding boxes',async()=>{
+  fixture('<circle id="ring" cx="120" cy="120" r="50" fill="none" stroke="black" stroke-width="2"/><line id="diagonal" x1="220" y1="80" x2="320" y2="180" stroke="black" stroke-width="2"/>');await tick();selectionSetup({match:'touch'});
+  selectionDrag([100,100],[140,140]);assert(!selectionIDs(),'hollow center');
+  selectionDrag([222,145],[242,165]);assert(!selectionIDs(),'empty diagonal bbox corner');
+  selectionDrag([150,90],[180,150]);assert(selectionIDs()==='ring','touches ring');
+  selectionDrag([260,118],[275,135]);assert(selectionIDs()==='diagonal','crosses segment');
+});
+await check('Containment includes stroke width and excludes invisible descendants while preserving whole groups',async()=>{
+  fixture('<g id="group" transform="translate(100 100) rotate(25)"><rect x="0" y="0" width="30" height="20" fill="none" stroke="black" stroke-width="10"/><rect x="500" y="500" width="10" height="10" display="none"/></g><line id="wide" x1="200" y1="150" x2="250" y2="150" stroke="black" stroke-width="20"/>');await tick();selectionSetup();
+  selectionDrag([195,146],[255,154]);assert(!selectionIDs(),'centerline alone insufficient');
+  selectionDrag([190,130],[260,170]);assert(selectionIDs()==='wide','painted stroke fully inside');
+  selectionDrag([70,70],[150,150]);assert(selectionIDs()==='group','rotated group and hidden child');
+});
+await check('Circle uses its center and radius; line fence selects intersections and fill interiors',async()=>{
+  fixture('<circle id="inside" cx="140" cy="120" r="10"/><circle id="cross" cx="180" cy="120" r="15"/><rect id="filled" x="250" y="100" width="70" height="50"/>');await tick();selectionSetup({shape:'circle'});
+  selectionDrag([120,120],[170,120]);assert(selectionIDs()==='inside','circle contain');
+  w.selectTool.setSelectionOptions({match:'touch'});selectionDrag([120,120],[170,120]);assert(selectionIDs()==='cross,inside','circle overlap');
+  w.selectTool.deselectObject();w.selectTool.setSelectionOptions({shape:'line',match:'contain'});
+  selectionDrag([240,125],[300,125]);assert(selectionIDs()==='filled','line ends inside fill');
+  w.selectTool.deselectObject();selectionDrag([110,120],[210,120]);assert(selectionIDs()==='cross,inside','horizontal fence has no area requirement');
+});
+await check('Lasso closes on release, supports concave areas and uses even-odd self intersections',async()=>{
+  fixture('<circle id="yes" cx="120" cy="120" r="4"/><circle id="notch" cx="160" cy="160" r="4"/><circle id="lower" cx="120" cy="180" r="4"/>');await tick();selectionSetup({shape:'lasso'});
+  selectionMouse('mousedown',90,90);for(const p of [[190,90],[190,140],[140,140],[140,200],[90,200]])selectionMouse('mousemove',...p);selectionMouse('mouseup',90,90);
+  assert(selectionIDs()==='lower,yes','concave closure excludes notch');
+  w.selectTool.deselectObject();
+  selectionMouse('mousedown',90,90);for(const p of [[190,90],[190,200],[90,200],[90,90],[190,90],[190,200],[90,200]])selectionMouse('mousemove',...p);selectionMouse('mouseup',90,90);
+  assert(!selectionIDs(),'double winding cancels under even-odd');
+});
+await check('Selection candidates preview live and are removed on release, Escape, blur, switching and SVG export',async()=>{
+  fixture('<rect id="a" x="100" y="100" width="20" height="20" fill="red"/>');await tick();selectionSetup();const a=doc.getElementById('a');
+  selectionMouse('mousedown',80,80);selectionMouse('mousemove',140,140);
+  assert(a.hasAttribute('data-vector-selection-candidate')&&w.selectedObjects.length===0,'live candidate not committed');
+  const xml=w.DrawingDocument.serialize();assert(!xml.includes('selection-candidate')&&!xml.includes('marquee-selection')&&!xml.includes('selectionOptions'),'helper-free SVG');
+  key('Escape');assert(!w.selectTool.isMarqueeSelecting&&!canvas.querySelector('[data-vector-selection-candidate],.marquee-selection'),'empty Escape cancels');
+  selectionDrag([80,80],[140,140]);assert(selectionIDs()==='a'&&!a.hasAttribute('data-vector-selection-candidate'),'release commits');
+  selectionMouse('mousedown',80,80);selectionMouse('mousemove',140,140);w.dispatchEvent(new w.Event('blur'));assert(selectionIDs()==='a'&&!canvas.querySelector('.marquee-selection'),'blur keeps previous');
+  selectionMouse('mousedown',80,80);selectionMouse('mousemove',140,140);activate('line');assert(!canvas.querySelector('[data-vector-selection-candidate],.marquee-selection'),'switch cleanup');
+});
+await check('Shift and Ctrl drag toggle only hit objects and selected objects still move together',async()=>{
+  fixture('<rect id="a" x="100" y="100" width="20" height="20"/><rect id="b" x="150" y="100" width="20" height="20"/>');await tick();selectionSetup();
+  selectionDrag([80,80],[130,130]);selectionDrag([140,80],[180,130],{shiftKey:true});assert(selectionIDs()==='a,b','shift adds');
+  selectionDrag([80,80],[130,130],{ctrlKey:true});assert(selectionIDs()==='b','ctrl removes');
+  selectionDrag([80,80],[130,130],{shiftKey:true});const a=doc.getElementById('a'),b=doc.getElementById('b');
+  selectionMouse('mousedown',110,110,{},a);selectionMouse('mousemove',120,120);selectionMouse('mouseup',120,120);
+  assert(selectionIDs()==='a,b'&&a.getAttribute('transform')&&b.getAttribute('transform'),'selected body moves group');
+  selectionDrag([300,300],[320,320]);assert(!selectionIDs(),'plain empty drag clears selection');
+});
+await check('Selection honors dash gaps, round caps, fill holes and curved SVG paths',async()=>{
+  fixture('<line id="dash" x1="100" y1="100" x2="200" y2="100" stroke="black" stroke-width="4" stroke-dasharray="10 20"/><line id="cap" x1="250" y1="100" x2="280" y2="100" stroke="black" stroke-width="20" stroke-linecap="round"/><path id="hole" fill-rule="evenodd" d="M 350 80 h 100 v 100 h -100 Z M 370 100 h 60 v 60 h -60 Z"/><path id="curve" d="M 100 250 Q 150 150 200 250" fill="none" stroke="black" stroke-width="2"/>');await tick();selectionSetup({match:'touch'});
+  selectionDrag([114,95],[124,105]);assert(!selectionIDs(),'dash gap');
+  selectionDrag([238,94],[245,104]);assert(selectionIDs()==='cap','round cap');w.selectTool.deselectObject();
+  selectionDrag([380,110],[420,150]);assert(!selectionIDs(),'fill hole');
+  selectionDrag([145,240],[155,248]);assert(!selectionIDs(),'curve bbox false positive');
+  selectionDrag([145,195],[155,205]);assert(selectionIDs()==='curve','quadratic curve');
+});
+await check('Mouseup final coordinates and outside-canvas release complete the same selection gesture',async()=>{
+  fixture('<rect id="a" x="100" y="100" width="20" height="20"/>');await tick();selectionSetup();
+  selectionMouse('mousedown',80,80);selectionMouse('mouseup',140,140);assert(selectionIDs()==='a','mouseup updates final region');
+  w.selectTool.deselectObject();selectionMouse('mousedown',80,80);selectionMouse('mouseleave',90,90);assert(w.selectTool.isMarqueeSelecting,'leaving canvas keeps gesture');
+  selectionMouse('mousemove',140,140,{},doc.body);selectionMouse('mouseup',140,140,{},doc.body);assert(selectionIDs()==='a'&&!w.selectTool.marqueeListeners,'outside release and listener cleanup');
+});
+await check('Selection preferences survive a new editor and remain independent of SVG and Undo',async()=>{
+  const prefKey='vector-selection-test-'+Date.now(),other=doc.createElement('iframe');other.width=1200;other.height=720;
+  const setup='{preferences:false,selectionPreferences:{enabled:true,key:'+JSON.stringify(prefKey)+'}}';
+  async function load(){const ready=new Promise(resolve=>other.addEventListener('load',resolve,{once:true}));other.srcdoc=configuredEditor(setup);if(!other.isConnected)doc.body.append(other);await ready;return other.contentWindow;}
+  try {let cw=await load();cw.selectTool.setSelectionOptions({radius:12,shape:'lasso',match:'touch'});const xml=cw.DrawingDocument.serialize();cw.DrawingDocument.open(xml);assert(cw.selectTool.selectionOptions.radius===12,'SVG load preserves settings');
+    cw=await load();assert(cw.selectTool.selectionOptions.radius===12&&cw.selectTool.selectionOptions.shape==='lasso'&&cw.selectTool.selectionOptions.match==='touch','new editor restores');assert(!xml.includes(prefKey)&&!xml.includes('selectionPreferences'),'not stored in SVG');
+  } finally {w.localStorage.removeItem(prefKey);other.remove();}
+});
+
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
 </script>

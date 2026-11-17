@@ -21,6 +21,11 @@ class SelectTool extends BaseTool {
     this.isMarqueeSelecting = false;
     this.marqueeStart = null;
     this.marqueeRect = null;
+    this.selectionPreferences = window.VectorUtils.createSelectionPreferences(toolManager.selectionPreferenceOptions);
+    this.selectionOptions = this.selectionPreferences.value;
+    this.selectionGeometry = (toolManager.selectionGeometryFactory ?? window.VectorUtils.createSelectionGeometry)({canvas,canSelect:el=>this.canSelect(el)});
+    this.selectionMessage = '';
+    this.selectionCandidatesPreview = [];
   }
 
   sanitizeColorValue(value, fallback = "#000000") {
@@ -80,7 +85,9 @@ class SelectTool extends BaseTool {
       "中心ハンドルドラッグ: 平行移動",
       "ハンドルをドラッグ: サイズ変更",
       "回転ハンドルをドラッグ: 回転",
-      "空白ドラッグ: 矩形選択（非選択時）",
+      "空白ドラッグ: 指定形状で範囲選択。Shift/Ctrlで選択を反転",
+      "円: 開始点が中心。直線: 交差した対象。なげなわ: 離すと閉じる",
+      "Esc: 範囲選択を取り消す",
       "Delete: 選択削除",
       "Ctrl+C/V/X: コピー/貼り付け/切り取り",
       "Ctrl+A: すべて選択",
@@ -89,6 +96,22 @@ class SelectTool extends BaseTool {
 
   getToolProperties() {
     return [
+      {type:'number',label:'クリック選択半径（画面px）',value:this.selectionOptions.radius,min:0,max:100,step:0.5,
+        onChange:value=>this.setSelectionOptions({radius:value})},
+      {type:'select',label:'ドラッグ選択の形状',value:this.selectionOptions.shape,
+        options:[{value:'rectangle',label:'矩形'},{value:'circle',label:'円（開始点が中心）'},{value:'line',label:'直線（交差選択）'},{value:'lasso',label:'なげなわ'}],
+        onChange:value=>this.setSelectionOptions({shape:value})},
+      {type:'select',label:'ドラッグ選択の判定',value:this.selectionOptions.shape==='line'?'touch':this.selectionOptions.match,
+        disabled:this.selectionOptions.shape==='line',
+        options:[{value:'contain',label:'完全に内包した対象'},{value:'touch',label:'触れた対象（内包も含む）'}],
+        onChange:value=>this.setSelectionOptions({match:value})},
+      {type:'custom',label:'選択判定の実装',render:container=>{
+        const description=document.createElement('p');description.textContent=this.selectionGeometry.algorithm;
+        const note=document.createElement('p');note.textContent='半径0は直接ヒットのみ。境界付近は約0.5pxの差が生じる場合があります。';
+        const link=document.createElement('a');link.href='doc/selection.md';link.textContent='対応形状・計算方法・参照資料';link.target='_blank';link.rel='noopener';
+        const status=document.createElement('p');status.dataset.selectionStatus='';status.setAttribute('role','status');status.textContent=this.selectionMessage||this.selectionPreferences.state.message;
+        container.append(description,note,link,status);
+      }},
       {
         type: "checkbox",
         label: "リサイズハンドル",
@@ -146,16 +169,12 @@ class SelectTool extends BaseTool {
 
   deactivate() {
     this.isDragging = this.isResizing = this.isRotating = false; // isRotizing → isRotating
-    this.isMarqueeSelecting = false;
-    this.marqueeStart = null;
-    if (this.marqueeRect && this.marqueeRect.parentNode) {
-      this.marqueeRect.parentNode.removeChild(this.marqueeRect);
-    }
-    this.marqueeRect = null;
+    this.cancelMarqueeSelection();
     super.deactivate();
   }
 
   deselectObject(trigger = "deselect") {
+    this.cancelMarqueeSelection();
     const selections = Array.isArray(window.selectedObjects)
       ? window.selectedObjects
       : [];
@@ -170,12 +189,7 @@ class SelectTool extends BaseTool {
     this.selectedObject = null;
     window.selectedObject = null;
     window.selectedObjects = [];
-    this.isMarqueeSelecting = false;
-    this.marqueeStart = null;
-    if (this.marqueeRect && this.marqueeRect.parentNode) {
-      this.marqueeRect.parentNode.removeChild(this.marqueeRect);
-    }
-    this.marqueeRect = null;
+    this.cancelMarqueeSelection();
 
     if (
       this.toolManager &&
@@ -382,6 +396,7 @@ class SelectTool extends BaseTool {
         this.initialMatrix = this.selectedObject.getCTM() || new DOMMatrix();
       }
       this.startPoint = { ...this.currentPoint };
+      this.captureMoveMatrices();
       this.isDragging = true;
       return;
     }
@@ -407,31 +422,21 @@ class SelectTool extends BaseTool {
       return;
     }
 
-    // 図形本体クリックならドラッグ開始
-    if (event.target !== this.canvas) {
-      this.selectObject(event.target, isMultiSelect);
-      if (!window.selectedObjects.includes(this.selectionTarget(event.target))) return;
+    // Native event hits keep their priority. Radius picking runs only on empty space.
+    let target = event.target !== this.canvas && this.canSelect(event.target) ? this.selectionTarget(event.target) : null;
+    try {
+      if (!target) target = this.selectionGeometry.pick(this.selectionGeometry.snapshot(this.getSelectionCandidates(false)), {x:event.clientX,y:event.clientY},this.selectionOptions.radius);
+    } catch(error) {this.reportSelection(error.message);return;}
+    if (target) {
+      if (isMultiSelect || !window.selectedObjects.includes(target)) this.selectObject(target,isMultiSelect);
+      if (!window.selectedObjects.includes(target)) return;
       this.isDragging = true;
-
-      // 複数選択の場合は各オブジェクトの初期状態を保存
-      if (window.selectedObjects.length > 1) {
-        this.multiInitialMatrices = window.selectedObjects.map(obj =>
-          obj.getCTM() || new DOMMatrix()
-        );
-      } else {
-        this.initialMatrix = this.selectedObject.getCTM() || new DOMMatrix();
-      }
-      this.startPoint = { ...this.currentPoint };
+      if (window.selectedObjects.length > 1) this.multiInitialMatrices = window.selectedObjects.map(obj=>obj.getCTM()||new DOMMatrix());
+      else this.initialMatrix = this.selectedObject.getCTM()||new DOMMatrix();
+      this.startPoint = {...this.currentPoint};
+      this.captureMoveMatrices();
     } else {
-      // キャンバスクリック時は複数選択でなければ選択解除し、矩形選択を開始
-      if (!isMultiSelect && window.selectedObjects.length > 0) {
-        this.deselectObject();
-        return;
-      }
-
-      if (window.selectedObjects.length === 0) {
-        this.startMarqueeSelection(this.currentPoint);
-      }
+      this.startMarqueeSelection({x:event.clientX,y:event.clientY},isMultiSelect);
     }
   }
 
@@ -443,7 +448,7 @@ class SelectTool extends BaseTool {
     this.currentPoint = this.getSVGPoint(event);
 
     if (this.isMarqueeSelecting) {
-      this.updateMarqueeSelection(this.currentPoint);
+      this.updateMarqueeSelection({x:event.clientX,y:event.clientY});
       return;
     }
 
@@ -463,6 +468,7 @@ class SelectTool extends BaseTool {
 
   handleMouseUp(event) {
     if (this.isMarqueeSelecting) {
+      this.updateMarqueeSelection({x:event.clientX,y:event.clientY});
       this.finalizeMarqueeSelection();
       return;
     }
@@ -476,6 +482,7 @@ class SelectTool extends BaseTool {
 
   handleKeyDown(event) {
     if (event.key === "Escape") {
+      if (this.isMarqueeSelecting) {this.cancelMarqueeSelection();return;}
       if (this.isDragging || this.isResizing || this.isRotating) {
         this.isDragging = this.isResizing = this.isRotating = false;
         this.resizeHandle = null;
@@ -492,6 +499,11 @@ class SelectTool extends BaseTool {
       const id = Number(node.getAttribute("data-layer"));
       const layer = window.layers.find((item) => item.id === id);
       if (layer && (layer.locked || !layer.visible)) return false;
+    }
+    const style=getComputedStyle(el);
+    if(style.visibility!=='visible')return false;
+    for(let node=el;node&&node!==this.canvas;node=node.parentElement) {
+      const s=getComputedStyle(node);if(s.display==='none'||Number(s.opacity)===0)return false;
     }
     return true;
   }
@@ -519,28 +531,21 @@ class SelectTool extends BaseTool {
     if (!addToSelection) this.updatePanel();
   }
 
-  // 移動処理
-  moveObject() {
-    if (!this.isDragging || !this.selectedObject || !this.startPoint) return;
-    const dx = this.currentPoint.x - this.startPoint.x;
-    const dy = this.currentPoint.y - this.startPoint.y;
-    if (!isFinite(dx) || !isFinite(dy)) return;
+  captureMoveMatrices() {
+    this.moveInitialMatrices=new Map(window.selectedObjects.map(obj=>[obj,obj.parentElement.getScreenCTM().inverse().multiply(obj.getScreenCTM())]));
+  }
 
-    // 複数選択の場合は全てのオブジェクトを移動
-    if (window.selectedObjects.length > 1) {
-      window.selectedObjects.forEach((obj, index) => {
-        const initialMatrix =
-          this.multiInitialMatrices[index] || new DOMMatrix();
-        const delta = new DOMMatrix().translate(dx, dy);
-        const m = delta.multiply(initialMatrix);
-        if (![m.a, m.b, m.c, m.d, m.e, m.f].every(isFinite)) return;
-        obj.setAttribute("transform", m.toString());
-      });
-    } else {
-      const delta = new DOMMatrix().translate(dx, dy);
-      const m = delta.multiply(this.initialMatrix);
-      if (![m.a, m.b, m.c, m.d, m.e, m.f].every(isFinite)) return;
-      this.selectedObject.setAttribute("transform", m.toString());
+  // Pointer deltas are projected into each object's parent frame, including nested groups/viewBox.
+  moveObject() {
+    if(!this.isDragging||!this.selectedObject||!this.startPoint)return;
+    const screen=this.canvas.getScreenCTM();
+    for(const obj of window.selectedObjects) {
+      const initial=this.moveInitialMatrices?.get(obj);if(!initial)continue;
+      const parent=obj.parentElement.getScreenCTM().inverse().multiply(screen);
+      const start=new DOMPoint(this.startPoint.x,this.startPoint.y).matrixTransform(parent);
+      const end=new DOMPoint(this.currentPoint.x,this.currentPoint.y).matrixTransform(parent);
+      const m=new DOMMatrix().translate(end.x-start.x,end.y-start.y).multiply(initial);
+      if([m.a,m.b,m.c,m.d,m.e,m.f].every(Number.isFinite))obj.setAttribute('transform',m.toString());
     }
   }
 
@@ -730,89 +735,101 @@ class SelectTool extends BaseTool {
       });
   }
 
-  startMarqueeSelection(point) {
-    this.isMarqueeSelecting = true;
-    this.marqueeStart = { ...point };
-    if (this.marqueeRect && this.marqueeRect.parentNode) {
-      this.marqueeRect.parentNode.removeChild(this.marqueeRect);
+  setSelectionOptions(patch) {
+    this.cancelMarqueeSelection();
+    try {this.selectionOptions=this.selectionPreferences.set(patch);this.selectionMessage='';}
+    catch(error){this.selectionMessage=error.message;}
+    this.updatePanel();
+  }
+
+  reportSelection(message) {
+    this.selectionMessage=message;
+    const status=document.querySelector('[data-selection-status]');if(status)status.textContent=message;
+  }
+
+  getSelectionCandidates(area=true) {
+    const elements=area?[...this.canvas.children]:[...this.canvas.querySelectorAll('path,line,rect,circle,ellipse,polygon,polyline,text,image,use')];
+    return [...new Set(elements.filter(el=>this.canSelect(el)).map(el=>this.selectionTarget(el)))];
+  }
+
+  clearSelectionPreview() {
+    this.selectionCandidatesPreview?.forEach(el=>el.removeAttribute('data-vector-selection-candidate'));
+    this.selectionCandidatesPreview=[];
+  }
+
+  cancelMarqueeSelection() {
+    this.isMarqueeSelecting=false;
+    this.marqueeRect?.remove();this.marqueeRect=null;this.marqueeStart=null;this.marqueeItems=null;
+    this.clearSelectionPreview();
+    if(this.marqueeListeners) {
+      for(const [name,listener] of Object.entries(this.marqueeListeners))window.removeEventListener(name,listener);
+      this.marqueeListeners=null;
     }
-    this.marqueeRect = document.createElementNS(this.svgNS, "rect");
-    this.marqueeRect.classList.add("marquee-selection");
-    this.marqueeRect.setAttribute("x", point.x);
-    this.marqueeRect.setAttribute("y", point.y);
-    this.marqueeRect.setAttribute("width", 0);
-    this.marqueeRect.setAttribute("height", 0);
-    this.canvas.appendChild(this.marqueeRect);
+  }
+
+  handleMouseLeave(event) {
+    if(!this.isMarqueeSelecting)super.handleMouseLeave(event);
+  }
+
+  startMarqueeSelection(point,additive=false) {
+    this.cancelMarqueeSelection();this.selectionMessage='';
+    try {this.marqueeItems=this.selectionGeometry.snapshot(this.getSelectionCandidates());}
+    catch(error){this.reportSelection(error.message);return;}
+    this.isMarqueeSelecting=true;this.marqueeStart={...point};this.marqueeEnd={...point};
+    this.marqueePoints=[{...point}];this.marqueeAdditive=additive;
+    this.marqueeRect=document.createElementNS(this.svgNS,'path');this.marqueeRect.classList.add('marquee-selection');
+    this.marqueeRect.setAttribute('fill-rule','evenodd');this.marqueeRect.setAttribute('vector-effect','non-scaling-stroke');
+    this.canvas.append(this.marqueeRect);
+    this.marqueeListeners={
+      mousemove:event=>{if(!this.canvas.contains(event.target))this.updateMarqueeSelection({x:event.clientX,y:event.clientY});},
+      mouseup:event=>{if(this.isMarqueeSelecting)this.handleMouseUp(event);},
+      blur:()=>this.cancelMarqueeSelection(),
+      pointercancel:()=>this.cancelMarqueeSelection(),
+    };
+    for(const [name,listener] of Object.entries(this.marqueeListeners))window.addEventListener(name,listener);
   }
 
   updateMarqueeSelection(point) {
-    if (!this.isMarqueeSelecting || !this.marqueeRect || !this.marqueeStart) {
-      return;
-    }
-
-    const x = Math.min(this.marqueeStart.x, point.x);
-    const y = Math.min(this.marqueeStart.y, point.y);
-    const width = Math.abs(this.marqueeStart.x - point.x);
-    const height = Math.abs(this.marqueeStart.y - point.y);
-
-    this.marqueeRect.setAttribute("x", x);
-    this.marqueeRect.setAttribute("y", y);
-    this.marqueeRect.setAttribute("width", width);
-    this.marqueeRect.setAttribute("height", height);
+    if(!this.isMarqueeSelecting)return;
+    this.marqueeEnd={...point};
+    const last=this.marqueePoints.at(-1);
+    if(Math.hypot(point.x-last.x,point.y-last.y)>=1)this.marqueePoints.push({...point});
+    if(this.marqueePoints.length>8192){this.cancelMarqueeSelection();this.reportSelection('なげなわの入力点数上限です。短い範囲に分けて選択してください。');return;}
+    const shape=this.selectionOptions.shape;
+    const points=[...this.marqueePoints];if(points.at(-1).x!==point.x||points.at(-1).y!==point.y)points.push(point);
+    const region=window.VectorUtils.makeSelectionRegion(shape,this.marqueeStart,point,points);
+    this.marqueeRegion=region;
+    let path;
+    if(shape==='circle') {
+      const {x,y}=region.center,r=region.radius;
+      path=`M ${x-r} ${y} A ${r} ${r} 0 1 0 ${x+r} ${y} A ${r} ${r} 0 1 0 ${x-r} ${y} Z`;
+    } else path=region.points.map((p,i)=>`${i?'L':'M'} ${p.x} ${p.y}`).join(' ')+(shape==='line'?'':' Z');
+    this.marqueeRect.setAttribute('d',path);
+    this.marqueeRect.style.fill=shape==='line'?'none':'';
+    this.marqueeRect.setAttribute('transform',this.canvas.getScreenCTM().inverse().toString());
+    try {
+      const candidates=this.selectionGeometry.query(this.marqueeItems.filter(item=>item.element.isConnected&&this.canSelect(item.element)),region,this.selectionOptions.match);
+      this.clearSelectionPreview();this.selectionCandidatesPreview=candidates;
+      candidates.forEach(el=>el.setAttribute('data-vector-selection-candidate',''));
+      this.reportSelection(`${candidates.length}個の候補${this.marqueeAdditive?'（選択を反転）':''}`);
+    } catch(error) {this.cancelMarqueeSelection();this.reportSelection(error.message);}
   }
 
   finalizeMarqueeSelection() {
-    if (!this.isMarqueeSelecting) {
-      return;
-    }
-
-    this.isMarqueeSelecting = false;
-
-    if (!this.marqueeRect) {
-      return;
-    }
-
-    const rect = {
-      x: parseFloat(this.marqueeRect.getAttribute("x")) || 0,
-      y: parseFloat(this.marqueeRect.getAttribute("y")) || 0,
-      width: parseFloat(this.marqueeRect.getAttribute("width")) || 0,
-      height: parseFloat(this.marqueeRect.getAttribute("height")) || 0,
-    };
-
-    if (this.marqueeRect.parentNode) {
-      this.marqueeRect.parentNode.removeChild(this.marqueeRect);
-    }
-    this.marqueeRect = null;
-    this.marqueeStart = null;
-
-    if (rect.width < 2 || rect.height < 2) {
-      return;
-    }
-
-    const candidates = Array.from(this.canvas.children).filter(el => this.canSelect(el));
-    const boxes = candidates.map((el, id) => ({id, box: this.getBoundingBox(el)}));
-    const objects = this.run("select", {bounds: rect, candidates: boxes}).map(id => candidates[id]);
-
-    if (objects.length === 0) {
-      return;
-    }
-
-    const previousSelection = Array.isArray(window.selectedObjects)
-      ? window.selectedObjects
-      : [];
-    previousSelection.forEach((obj) =>
-      obj.removeAttribute("data-vector-selected")
-    );
-
-    window.selectedObjects = [];
-    objects.forEach((obj) => {
-      obj.setAttribute("data-vector-selected", "");
-      window.selectedObjects.push(obj);
-    });
-
-    this.selectedObject = window.selectedObjects[0];
-    window.selectedObject = this.selectedObject;
-    this.addControlPoints();
+    if(!this.isMarqueeSelecting)return;
+    const start=this.marqueeStart,end=this.marqueeEnd,region=this.marqueeRegion;
+    const additive=this.marqueeAdditive,objects=[...this.selectionCandidatesPreview];
+    const traveled=this.marqueePoints.some(p=>Math.hypot(p.x-start.x,p.y-start.y)>=2)||Math.hypot(end.x-start.x,end.y-start.y)>=2;
+    const valid=traveled&&region&&(region.shape==='line'||region.shape==='circle'||(region.bounds.width>=2&&region.bounds.height>=2));
+    this.cancelMarqueeSelection();
+    if(!valid){if(!additive&&!traveled)this.deselectObject();return;}
+    const previous=window.selectedObjects;
+    const next=additive?[...previous.filter(el=>!objects.includes(el)),...objects.filter(el=>!previous.includes(el))]:objects;
+    previous.forEach(el=>el.removeAttribute('data-vector-selected'));this.removeControlPoints();
+    next.forEach(el=>el.setAttribute('data-vector-selected',''));
+    window.selectedObjects=next;this.selectedObject=next[0]??null;window.selectedObject=this.selectedObject;
+    if(this.selectedObject)this.addControlPoints();
+    this.reportSelection(`${next.length}個を選択`);this.updatePanel();
   }
 
   getBoundingBox(obj) {
