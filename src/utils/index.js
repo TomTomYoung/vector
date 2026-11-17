@@ -22,6 +22,7 @@
 import {createEditorHost} from "../adapters/editorHost.js";
 import {readSplineSource} from '../adapters/splineSource.js';
 import {insertEditableSplineKnot} from '../adapters/splineRefinement.js';
+import {removeEditableSplineKnot} from '../adapters/splineRemoval.js';
 import * as circleSource from '../adapters/circleSource.js';
 import * as arcSource from '../adapters/arcSource.js';
 import * as pointSetSource from '../adapters/pointSetSource.js';
@@ -52,6 +53,7 @@ window.VectorUtils = {
   createEditorHost,
   readSplineSource,
   insertEditableSplineKnot,
+  removeEditableSplineKnot,
   circleSource,
   arcSource,
   pointSetSource,

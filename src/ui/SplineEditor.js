@@ -16,7 +16,9 @@ class SplineEditor {
       const source=window.VectorUtils.readSplineSource(this.element.getAttribute('data-vector-spline'),this.element.getAttribute('data-vector-implementation'),this.element.getAttribute('d'));
       this.originalPath=this.element.getAttribute('d');this.originalSource=this.element.getAttribute('data-vector-spline');
       const {input,options}=source;
-      this.draft={...source,insertKnotText:'',knotImplementation:this.manager.host.describe('insertSplineKnot').id,pointsText:input.points.map(p=>p.x+', '+p.y).join('\n'),degree:input.degree,periodic:!!input.periodic,
+      this.draft={...source,insertKnotText:'',knotImplementation:this.manager.host.describe('insertSplineKnot').id,
+        removeKnotText:'',removalToleranceText:'0.0000001',removeImplementation:this.manager.host.describe('removeSplineKnot').id,
+        pointsText:input.points.map(p=>p.x+', '+p.y).join('\n'),degree:input.degree,periodic:!!input.periodic,
         knotsText:input.knots?.join(', ') ?? '',periodicKnotsText:input.periodicKnots?.join(', ') ?? '',weightsText:input.weights?.join(', ') ?? '',options:{...options}};
       this.message='座標は図形のローカル座標です。移動・回転・色・線幅・レイヤーは保持します。';
     } catch(error){this.message=error.message;}
@@ -60,6 +62,26 @@ class SplineEditor {
       this.changed();this.showPreview(false);
       this.message='ノットを下書きへ1個挿入しました。「適用」で図形へ反映します。 '+this.message;
     } catch(error){this.message=error.message;}
+    this.refresh();
+  }
+  removeKnot() {
+    try {
+      this.assertTarget();
+      const d=this.draft,host=this.manager.host;
+      if(d.implementation!=='default'||host.implementations(d.method).find(v=>v.id==='default')?.source!=='src/model/splineCurves.js')
+        throw Error('ノット削除は標準の曲線計算を選択してください。');
+      if(!d.removeKnotText.trim()||!d.removalToleranceText.trim())throw Error('削除するノット値と許容差を入力してください。');
+      const info=host.implementations('removeSplineKnot').find(v=>v.id===d.removeImplementation);
+      if(!info)throw Error('選択したノット削除実装がありません。');
+      const next=window.VectorUtils.removeEditableSplineKnot(d.method,this.input(),Number(d.removeKnotText),Number(d.removalToleranceText),
+        input=>host.execute('removeSplineKnot',input,{implementation:d.removeImplementation}));
+      d.refinement={tool:'removeSplineKnot',id:info.id,label:info.label,algorithm:info.algorithm,source:info.source??null,...next.removal,
+        verification:{algorithm:'共通ノット列の制御点から偏差上限を推定',source:'src/model/splineKnotRemoval.js'}};
+      d.pointsText=next.points.map(p=>p.x+', '+p.y).join('\n');d.knotsText=next.knots.join(', ');
+      if(next.weights)d.weightsText=next.weights.join(', ');
+      this.changed();this.showPreview(false);
+      this.message=`ノットを下書きから1個削除しました。推定偏差上限 ${next.removal.errorBound}、許容差 ${next.removal.tolerance}。「適用」で反映します。 `+this.message;
+    }catch(error){this.message=error.message;}
     this.refresh();
   }
   build() {
@@ -178,6 +200,18 @@ class SplineEditor {
       knot.addEventListener('input',()=>{d.insertKnotText=knot.value;});label.append(knot);container.append(label);
       choice('ノット挿入の実装','knotImplementation',this.manager.host.implementations('insertSplineKnot'));
       button('形状を保ってノットを挿入',()=>this.insertKnot(),'insert-knot');
+    }
+
+    const removalInfo=document.createElement('p');removalInfo.dataset.splineRemovalInfo='';removalInfo.style.fontSize='12px';
+    removalInfo.textContent=d.periodic?'周期曲線のノット削除は未対応です。':'内部ノットを1個削除し、制御点から推定した偏差上限が許容差以下の場合に下書きを更新します。NURBSの重みは全て正、または全て負が対象です。許容差は図形のローカル座標で指定し、各削除の直前の曲線と比較します。';container.append(removalInfo);
+    if(!d.periodic){
+      for(const [labelText,key] of [['削除するノット値','removeKnotText'],['ノット削除の許容差','removalToleranceText']]){
+        const label=document.createElement('label');label.textContent=labelText;label.style.cssText='display:block;font-size:12px;margin:10px 0';
+        const value=document.createElement('input');value.type='text';value.value=d[key];value.setAttribute('aria-label',labelText);value.style.width='100%';
+        value.addEventListener('input',()=>{d[key]=value.value;});label.append(value);container.append(label);
+      }
+      choice('ノット削除の実装','removeImplementation',this.manager.host.implementations('removeSplineKnot'));
+      button('許容差内でノットを削除',()=>this.removeKnot(),'remove-knot');
     }
 
     container.append(message);

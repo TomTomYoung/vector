@@ -545,6 +545,11 @@ export const toolMetadata = Object.freeze({
     "algorithm": "曲線形状を保つ単一ノット挿入（Boehm系）。有理曲線は重みつきで補間",
     "source": "src/model/splines.js"
   },
+  "removeSplineKnot": {
+    "label": "標準",
+    "algorithm": "Boehm挿入の両側逆算と再挿入による偏差上限の推定（非周期・同符号重み）",
+    "source": "src/model/splineKnotRemoval.js"
+  },
   "bSplineDerivative": {
     "label": "標準",
     "algorithm": "ノット間隔で割った制御点差分を作り、次数を1下げて de Boor 法で評価",

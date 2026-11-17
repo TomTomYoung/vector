@@ -67,7 +67,7 @@ window.vectorEditorOptions = {
 
 ## 領域復元・交点・制約を組み合わせる
 
-全119機能に、次の4つを含みます。演算室の「領域復元・交点・拘束」から入力例を実行できます。B-spline・NURBSの作図データを返す追加2機能は上記の方式選択文書を参照してください。
+全120機能に、次の4つを含みます。演算室の「領域復元・交点・拘束」から入力例を実行できます。B-spline・NURBSの作図データを返す追加2機能は上記の方式選択文書を参照してください。
 
 - `regionBoundary.js` の `regionBoundary({cells,tolerance?})` は、内部が重ならない凸セル群から外周・穴・包含関係と面積を復元します。
 - `bezierIntersections.js` の `bezierIntersections({first,second,...})` は、制御点列から交点と重複区間を返します。`complete: false` のときは `unresolved` に未確定のパラメータ区間が残ります。一般の非線形再パラメータ化による重なりは未確定になる場合があります。
@@ -75,3 +75,7 @@ window.vectorEditorOptions = {
 - `constraints.js` の `solveConstraints({points,fixed?,constraints?,...})` は、距離・水平・垂直・一致・直交を数値的に解きます。固定頂点を保ち、拘束ごとの残差と `converged` を返します。未収束を解の不存在とは解釈しません。
 
 [入出力・数式・許容差・計算上限](../../doc/文章.md#612-領域交点三角形分割寸法拘束を組み合わせる)
+
+## ノット削除
+
+[splineKnotRemoval.js](splineKnotRemoval.js) の `removeSplineKnot({points,degree,knots?,weights?,t,tolerance?})` は、非周期B-spline・同符号重みのNURBSから既存の内部ノットを1個削除します。結果は制御点・次数・ノット・任意の重みと `removal: {t,tolerance,errorBound}`、削除不能では `null` です。許容差の既定値は1e-7。再挿入した制御点から偏差上限を推定し、許容差内の候補だけ返します。[計算・API・換装・参照資料・制約](../../doc/spline-knot-removal.md)を参照してください。
