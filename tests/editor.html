@@ -3955,6 +3955,44 @@ await check('Workbench Worker reduces a shifted thousand-control period and rest
   }finally{await page.close();}
 });
 
+function adaptiveReductionInput(name='bSplineCurve',periodic=false){return {degree:3,periodic,points:[{x:100,y:100},{x:120,y:180},{x:160,y:80},{x:190,y:140},{x:220,y:100}],...(name==='nurbsCurve'?{weights:[1,-.125,1,1,1]}:{})};}
+await check('Adaptive degree reduction displays subdivision and retains identity, Undo/Redo and SVG provenance',async()=>{
+  for(const name of ['bSplineCurve','nurbsCurve']){
+    fixture();await tick();let curve=addEditableSpline(name,adaptiveReductionInput(name));curve.setAttribute('transform','translate(20 30) scale(0.8)');w.saveState();await tick();w.undoStack.length=0;const original=curve.getAttribute('data-vector-spline'),preferences=JSON.stringify(w.toolManager.host.exportPreferences());
+    activate('select');w.selectTool.selectObject(curve);splineAction('begin');splineField('次数下げの許容差','.02');splineField('次数下げの実装','default','change');splineAction('preview');const editor=w.toolPropertiesPanel.splineEditor,before=JSON.stringify(editor.input()),preview=editor.preview;
+    splineAction('reduce-degree');assert(JSON.stringify(editor.input())===before&&editor.preview===preview,'fixed intervals fail atomically');
+    splineField('次数下げの実装','adaptive','change');assert(doc.querySelector('[aria-label="次数下げの実装"]').parentElement.textContent.includes('適応二分割'),'algorithm selectable');splineAction('reduce-degree');
+    const subdivision=editor.draft.refinement.subdivision;assert(editor.input().degree===2&&subdivision.splits>0&&subdivision.resultSpans>subdivision.originalSpans&&editor.message.includes('自動分割')&&editor.preview,'subdivided preview');assert(curve.getAttribute('data-vector-spline')===original&&w.undoStack.length===0,'source and history unchanged before apply');
+    splineAction('apply');await tick();const changed=curve.getAttribute('data-vector-spline'),record=JSON.parse(curve.getAttribute('data-vector-implementation'));
+    assert(record.refinement.id==='adaptive'&&record.refinement.source==='src/model/adaptiveSplineReduction.js'&&record.refinement.errorBound<=.02&&record.refinement.subdivision.splits===subdivision.splits,'verified metadata');assert(doc.querySelector('[data-recorded-implementation]').textContent.includes(`区間 ${subdivision.originalSpans} → ${subdivision.resultSpans}`),'partition counts visible');
+    assert(curve===doc.getElementById('editable-spline')&&curve.getAttribute('transform')==='translate(20 30) scale(0.8)'&&curve.getAttribute('stroke')==='#624382'&&w.undoStack.length===1,'identity appearance one undo');w.undo();assert(doc.getElementById('editable-spline').getAttribute('data-vector-spline')===original,'undo');w.redo();assert(doc.getElementById('editable-spline').getAttribute('data-vector-spline')===changed,'redo');
+    w.DrawingDocument.open(w.DrawingDocument.serialize());curve=doc.getElementById('editable-spline');activate('select');w.selectTool.selectObject(curve);splineAction('begin');assert(w.toolPropertiesPanel.splineEditor.draft.refinement.subdivision.resultSpans===subdivision.resultSpans,'restored subdivision');splineAction('apply');assert(JSON.stringify(w.toolManager.host.exportPreferences())===preferences,'scoped operation');
+  }
+});
+await check('Adaptive periodic signed curves remain closed and their subdivided controls stay draggable',async()=>{
+  frame.scrollIntoView();fixture();await tick();const input=adaptiveReductionInput('nurbsCurve',true);input.periodicKnots=[.1,.1,.6,1,1.7,2];const curve=addEditableSpline('nurbsCurve',input);activate('select');w.selectTool.selectObject(curve);splineAction('begin');splineField('次数下げの実装','adaptive','change');splineField('次数下げの許容差','.05');splineAction('reduce-degree');const editor=w.toolPropertiesPanel.splineEditor;
+  assert(editor.input().degree===2&&editor.draft.refinement.subdivision&&editor.input().periodicKnots[0]===.1&&editor.input().periodicKnots.at(-1)===2,'period and adaptive output');const snap=w.snapToGrid,ortho=w.orthoMode;w.snapToGrid=false;w.orthoMode=false;
+  try{const from=draftPoints()[2],to={x:from.x+4,y:from.y+3};pointer('pointerdown',splineHandle(2),localScreen(curve,from));pointer('pointerup',doc,localScreen(curve,to));assert(closePoint(draftPoints()[2],to),'subdivided control draggable');splineAction('apply');assert(curve.getAttribute('d').endsWith('Z'),'closed output');}finally{w.snapToGrid=snap;w.orthoMode=ortho;}
+});
+await check('Adaptive limits and poles preserve the draft and preview and successful subdivision remains cancellable',async()=>{
+  for(const input of [{degree:2,points:[{x:100,y:100},{x:150,y:180},{x:200,y:100}]},{degree:2,points:[{x:100,y:100},{x:150,y:180},{x:200,y:100}],weights:[1,-2,1]}]){
+    fixture();await tick();const curve=addEditableSpline(input.weights?'nurbsCurve':'bSplineCurve',input);w.saveState();await tick();w.undoStack.length=0;const original=curve.getAttribute('data-vector-spline');activate('select');w.selectTool.selectObject(curve);splineAction('begin');splineField('次数下げの実装','adaptive','change');splineField('次数下げの許容差',input.weights?'1000000':'0');splineAction('preview');const editor=w.toolPropertiesPanel.splineEditor,before=JSON.stringify(editor.input()),preview=editor.preview;
+    splineAction('reduce-degree');assert(JSON.stringify(editor.input())===before&&editor.preview===preview&&!editor.draft.refinement&&editor.message.includes('検証'),'failed operation atomic');if(!input.weights){splineField('次数下げの許容差','.1');splineAction('reduce-degree');assert(editor.draft.refinement.subdivision,'can retry');}splineAction('cancel');assert(curve.getAttribute('data-vector-spline')===original&&w.undoStack.length===0,'cancel preserves source');
+  }
+});
+await check('Adaptive replacement geometry and partition claims are independently rechecked before changing the draft',async()=>{
+  fixture();await tick();const curve=addEditableSpline('bSplineCurve',adaptiveReductionInput()),host=w.toolManager.host;let mode='throw';host.registerImplementation('reduceSplineDegree',{id:'adaptive-test',label:'Adaptive test',algorithm:'Delegated adaptive QR',run:(value,ops,execute)=>{
+    if(mode==='throw'){value.points[0].x=999;throw Error('adaptive failure');}const out=execute('reduceSplineDegree',value,{implementation:'adaptive'});if(mode==='corrupt')out.points[3].y+=100;else if(mode==='cuts')out.knots[4]+=.001;out.reduction={errorBound:0,subdivision:{resultSpans:1,depth:0}};return out;
+  }});activate('select');w.selectTool.selectObject(curve);splineAction('begin');splineField('次数下げの実装','adaptive-test','change');splineField('次数下げの許容差','.02');splineAction('preview');const editor=w.toolPropertiesPanel.splineEditor,before=JSON.stringify(editor.input()),preview=editor.preview;
+  for(mode of ['throw','corrupt','cuts']){splineAction('reduce-degree');assert(JSON.stringify(editor.input())===before&&editor.preview===preview&&!editor.draft.refinement,'invalid result atomic '+mode);}mode='valid';splineAction('reduce-degree');assert(editor.draft.refinement.subdivision.resultSpans>1&&editor.draft.refinement.subdivision.depth>0&&editor.draft.refinement.errorBound>0,'claims recomputed');splineAction('apply');assert(doc.querySelector('[data-recorded-implementation]').textContent.includes('Delegated adaptive QR'),'actual implementation retained');
+});
+await check('Workbench Worker performs adaptive reduction up to a thousand controls and restores its saved method',async()=>{
+  const page=await createWorkbench();try{
+    const n=488,input={degree:2,points:[{x:0,y:0},{x:.5,y:1},{x:1,y:0},...Array.from({length:2*(n-1)},()=>({x:1,y:0}))],knots:[0,0,0,...Array.from({length:n-1},(_,i)=>[i+1,i+1]).flat(),n,n,n],tolerance:1/512**2};page.choose('tool','reduceSplineDegree');page.choose('implementation','adaptive');page.edit(JSON.stringify(input));assert(page.get('algorithm').textContent.includes('適応二分割'),'method visible');const output=JSON.parse(await page.run());assert(output.points.length===1000&&output.reduction.subdivision.resultSpans===999&&output.reduction.errorBound<=input.tolerance,'Worker capacity');
+    const saved=await page.exportText();page.choose('implementation','default');await page.importText(saved);assert(page.get('implementation').value==='adaptive'&&JSON.parse(page.get('input').value).tolerance===input.tolerance,'session restored');assert(JSON.parse(await page.run()).reduction.subdivision.depth===9,'restored Worker computation');
+  }finally{await page.close();}
+});
+
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
 </script>

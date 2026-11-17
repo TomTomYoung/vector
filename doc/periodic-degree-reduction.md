@@ -44,8 +44,10 @@
 
 [SheneのB-spline基底の性質](https://pages.mtu.edu/~shene/COURSES/cs3621/NOTES/spline/B-spline/bspline-property.html)で重複度mと連続性 `C^(p-m)` の関係を再確認しました。極形式de Boor、Bernstein次数上げ、Givens回転、および関連する次数下げ論文の参照範囲は [連続性保持次数下げ](spline-continuity-reduction.md) にあります。今回の追加は元の係数最小二乗の周期領域を拡張するもので、別の論文の最適化手順へ変更したものではありません。
 
-任意位置への独立した継ぎ目移動、自動区間分割と全体誤差予算、曲線固有の不要ノットの一括最小化、極を含む枝単位の操作、無限遠・曲面・区間別次数、厳密偏差証明は残る範囲です。
+任意位置への独立した継ぎ目移動、複数操作の全体誤差予算、曲線固有の不要ノットの一括最小化、極を含む枝単位の操作、無限遠・曲面・区間別次数、厳密偏差証明は残る範囲です。
 
 [periodicDegreeReduction.test.mjs](../tests/periodicDegreeReduction.test.mjs) は次数2〜12、最小・1000制御点、非一様・重複新継ぎ目・複数の消失ノット、符号混在・零重み・極端な共通倍率、旧区間との独立したde Boor比較、許容差不足、数値的に表せない移動、偽装メタデータ、不正出力、SVG記録、制御点変更後のC2を検査します。[editor.html](../tests/editor.html) は表示・適用・Undo/Redo・SVG往復・取消・失敗時の保持・制御点ドラッグ・換装結果の再検証・演算室Workerと設定復元を操作して検査します。
 
 [PR #95](https://github.com/TomTomYoung/vector/pull/95) の実装コミット `9358c5a` に対する [CI 44124898242](https://github.com/TomTomYoung/vector/actions/runs/44124898242) で、Node 364件・実Chrome 275件が全て成功しました。新規はNode 8件・ブラウザー5件です。次数2〜12、最小・1000制御点、複数の単純ノット消失、非一様・重複新継ぎ目、零・負重みと共通倍率、全周の独立評価、C2、数値的に表せない移動、不正換装、表示・SVG・Undo/Redo・取消・ドラッグ、Worker・セッション復元を確認しました。
+
+自動区間分割の次数下げは [adaptive](adaptive-degree-reduction.md) に追加しました。元の周期・継ぎ目を保つ別方式です。
