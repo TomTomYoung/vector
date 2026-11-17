@@ -3,16 +3,16 @@ class PointConstructionTool extends BaseTool {
   constructor(canvas, manager, method, title) {
     super(canvas, manager);
     this.method = method; this.title = title; this.points = [];
-    this.degree = 3; this.sampleCount = 80; this.weightsText = ''; this.knotsText = '';
+    this.degree = 3; this.sampleCount = 80; this.weightsText = ''; this.knotsText = ''; this.periodicKnotsText = '';
     this.periodic = false; this.poleTolerance = 1e-8; this.poleMaxDepth = 18;
-    this.inputPresetVersion = 1; this.voronoiBox = null;
+    this.inputPresetVersion = 1; this.inputPresetVersions = this.isSpline() ? [1,2] : [1]; this.voronoiBox = null;
     this.previewElement = null; this.handles = null; this.implementationError = '';
   }
   getTitle() { return this.title; }
   getInstructions() {
     return ['クリックで点を追加', 'Enterで確定、Backspaceで最後の点を削除、Escで取り消し',
       this.isSpline() ? `次数${this.degree}には制御点${this.degree + 1}個以上が必要です（現在${this.points.length}個）` : `入力順の点列を使用します（現在${this.points.length}個）`,
-      ...(this.isSpline() ? [this.periodic ? '周期曲線：先頭の制御点と重みを循環させ、一様ノットで閉じます' : '内部ノットを次数+1回重ねると、そこで別の枝に分かれます'] : []),
+      ...(this.isSpline() ? [this.periodic ? '周期曲線：制御点数+1個の増加する周期ノットを指定できます。空欄は一様です' : '内部ノットを次数+1回重ねると、そこで別の枝に分かれます'] : []),
       ...(this.method === 'nurbsCurve' ? ['零・負の重みも使用できます。分母零付近と検査未完了の区間は省略します'] : []),
       ...(this.method === 'triangulatePolygon' ? ['境界順に頂点を指定します。末尾から先頭へ閉じ、自己交差や辺の重なりは扱いません'] : []),
       ...(this.method === 'voronoiCells' ? [this.voronoiBox?'Voronoiは復元した切り取り範囲を使用します':'Voronoiの切り取り範囲は図面全体です'] : [])];
@@ -31,7 +31,7 @@ class PointConstructionTool extends BaseTool {
       input.addEventListener('change', () => {this[key] = input.value; this.redraw(); this.refreshPanel();}); group.append(input);
     }});
     return [
-      {type: 'checkbox', label: '周期曲線', checkLabel: '一様ノットで閉じる', value: this.periodic, onChange: value => {
+      {type: 'checkbox', label: '周期曲線', checkLabel: '制御点とノットを循環して閉じる', value: this.periodic, onChange: value => {
         this.periodic = value; this.redraw(); this.refreshPanel();
       }},
       {type: 'number', label: '次数', value: this.degree, min: 1, max: 12, step: 1, onChange: value => {
@@ -40,7 +40,7 @@ class PointConstructionTool extends BaseTool {
       {type: 'number', label: '描画の分割数', value: rendering.sampleCount ?? this.sampleCount, min: 2, max: 10000, step: 1, onChange: value => {
         if (Number.isInteger(value) && value >= 2 && value <= 10000) this.setRenderingPreference('sampleCount',value);
       }},
-      ...(!this.periodic ? [text('ノット列（カンマ区切り、空欄で一様）', 'knotsText')] : []),
+      ...(this.periodic ? [text('周期ノット（制御点数+1個、空欄で一様）', 'periodicKnotsText')] : [text('ノット列（カンマ区切り、空欄で一様）', 'knotsText')]),
       ...(this.method === 'nurbsCurve' ? [text('重み（各制御点に1個、零・負も可）', 'weightsText'),
         {type: 'number', label: '分母の除外幅（最大重みで正規化）', value: rendering.poleTolerance ?? this.poleTolerance, min: 1e-14, max: 0.1, step: 'any', onChange: value => {
           if (Number.isFinite(value) && value >= 1e-14 && value <= 0.1) this.setRenderingPreference('poleTolerance',value);
@@ -61,7 +61,8 @@ class PointConstructionTool extends BaseTool {
   }
   refreshPanel() { window.toolPropertiesPanel?.updatePanel(); }
   exportInputPreset() {
-    return window.VectorUtils.parseConstructionInput(this.method,{version:1,input:{points:this.points,
+    return window.VectorUtils.parseConstructionInput(this.method,{version:this.isSpline() && this.periodicKnotsText ? 2 : 1,input:{points:this.points,
+      ...(this.isSpline() && this.periodicKnotsText ? {periodicKnotsText:this.periodicKnotsText} : {}),
       ...(this.isSpline()?{degree:this.degree,periodic:this.periodic,knotsText:this.knotsText}:{}),
       ...(this.method==='nurbsCurve'?{weightsText:this.weightsText}:{}),
       ...(this.method==='voronoiCells'?{box:this.input().box}:{})}});
@@ -70,7 +71,7 @@ class PointConstructionTool extends BaseTool {
     const {input}=window.VectorUtils.parseConstructionInput(this.method,entry);
     if(!this.isActive)throw Error('復元する作図ツールを先に選択してください。');
     this.reset();this.points=input.points;
-    if(this.isSpline()){this.degree=input.degree;this.periodic=input.periodic;this.knotsText=input.knotsText;}
+    if(this.isSpline()){this.degree=input.degree;this.periodic=input.periodic;this.knotsText=input.knotsText;this.periodicKnotsText=input.periodicKnotsText ?? '';}
     if(this.method==='nurbsCurve')this.weightsText=input.weightsText;
     if(this.method==='voronoiCells')this.voronoiBox=input.box;
     this.redraw();
@@ -101,6 +102,7 @@ class PointConstructionTool extends BaseTool {
     if (this.isSpline()) {
       const parse = text => text.trim().split(/[\s,]+/).map(Number);
       return {points, degree: this.degree, periodic: this.periodic, ...(!this.periodic && this.knotsText.trim() ? {knots: parse(this.knotsText)} : {}),
+        ...(this.periodic && this.periodicKnotsText.trim() ? {periodicKnots: parse(this.periodicKnotsText)} : {}),
         ...(this.method === 'nurbsCurve' && this.weightsText.trim() ? {weights: parse(this.weightsText)} : {})};
     }
     if (this.method === 'voronoiCells') {
