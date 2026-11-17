@@ -3261,6 +3261,33 @@ await check('Import collection limits reject all selected groups, and oversized 
  }finally{app.element.remove();}
 });
 
+function recordSection(app,kind){return app.d.querySelector(kind==='methods'?'[data-named-implementation-presets]':kind==='inputs'?'[data-named-construction-inputs]':'[data-construction-sets]');}
+function recordQuery(app,kind,value){const section=recordSection(app,kind);section.open=true;const search=section.querySelector('[data-preset-search]');search.focus();search.value=value;search.dispatchEvent(new app.w.Event('input',{bubbles:true}));return search;}
+function recordOrder(app,kind,action){const button=recordSection(app,kind).querySelector(`[data-preset-order="${action}"]`);assert(button&&!button.disabled,'enabled order '+kind+'/'+action);button.click();}
+function recordSeed(app,kind){const manager=app.w.toolManager,store=kind==='methods'?manager.namedImplementationPresets:kind==='inputs'?manager.namedInputPresets:manager.constructionSets;const input={version:1,input:{points:[]}},methods={version:1,calculation:{circle:'default'},rendering:{circle:{id:'cubic',options:{}}}};for(const name of ['円10','円2','円1']){if(kind==='methods')store.add(name,methods);else if(kind==='inputs')store.add('circle',name,input);else store.add('circle',name,input,methods);}manager.host.save();app.w.toolPropertiesPanel.updatePanel();return store;}
+
+await check('Record searches preserve focus, selected records, active input and methods across all three named collections',async()=>{
+ const app=await preferenceEditor('{preferences:false}');
+ try{
+  const tool=shapeDraftInput(app,'circle');for(const kind of ['inputs','methods','sets'])recordSeed(app,kind);await tick();const before=app.w.DrawingDocument.serialize(),input=JSON.stringify(tool.exportInputPreset()),history=app.w.undoStack.length,methods=JSON.stringify(app.w.toolManager.host.exportPreferences());
+  for(const kind of ['inputs','methods','sets']){const section=recordSection(app,kind),select=section.querySelector('select'),selected=select.value,search=recordQuery(app,kind,'円１０');assert(app.d.activeElement===search&&select.value===selected,'search focus and selection preserved');assert(section.querySelector('[data-preset-search-count]').textContent.includes('1 / 3'),'fullwidth numeric match');assert(Array.from(select.options).some(o=>o.text.includes('検索対象外')),'hidden current choice remains explicit');recordQuery(app,kind,'no-match');assert(section.querySelector('[data-preset-search-count]').textContent.includes('0 / 3')&&select.value===selected,'no match does not select something else');recordQuery(app,kind,selected);assert(section.querySelector('[data-preset-search-count]').textContent.includes('1 / 3'),'ID search');}
+  assert(app.w.DrawingDocument.serialize()===before&&JSON.stringify(tool.exportInputPreset())===input&&JSON.stringify(app.w.toolManager.host.exportPreferences())===methods&&app.w.undoStack.length===history,'filtering is transient only');app.w.toolPropertiesPanel.updatePanel();assert(recordSection(app,'sets').querySelector('[data-preset-search]').value===setSelected(app),'query retained across panel refresh');
+ }finally{app.element.remove();}
+});
+
+await check('Manual and name ordering persist in SVG and undo in one step for input, method and construction set records',async()=>{
+ for(const kind of ['inputs','methods','sets']){const app=await preferenceEditor('{preferences:false}');try{
+  app.d.getElementById('circle-tool').click();const store=recordSeed(app,kind),scope=kind==='methods'?[]:['circle'];await tick();const original=store.snapshot(),selected=store.selectedId(...scope),history=app.w.undoStack.length;recordQuery(app,kind,'円1');recordOrder(app,kind,'up');await tick();assert(store.selectedId(...scope)===selected&&store.list(...scope).map(e=>e.name).join(',')==='円10,円1,円2'&&app.w.undoStack.length===history+1,'move changes order once, including hidden records');app.w.undo();assert(setComparable(store.snapshot())===setComparable(original),'undo move');app.w.redo();assert(store.list(...scope).map(e=>e.name).join(',')==='円10,円1,円2','redo move');app.d.getElementById('circle-tool').click();recordOrder(app,kind,'sort');await tick();assert(store.list(...scope).map(e=>e.name).join(',')==='円1,円2,円10','numeric name sorting');const saved=store.snapshot();app.w.undo();assert(store.list(...scope).map(e=>e.name).join(',')==='円10,円1,円2','undo sort');app.w.redo();app.w.DrawingDocument.open(app.w.DrawingDocument.serialize());assert(setComparable(store.snapshot())===setComparable(saved),'order persists in SVG');app.d.getElementById('circle-tool').click();assert(recordSection(app,kind).querySelector('[data-preset-search]').value==='','opening resets transient filter');assert(app.w.toolManager.host.describeRendering('circle').id==='default','reorder never applies saved renderer');
+ }finally{app.element.remove();}}
+});
+
+await check('Ordering preserves other tools and future input data, disables boundaries and creates no history for unchanged order',async()=>{
+ const app=await preferenceEditor('{preferences:false}');
+ try{
+  const store=app.w.toolManager.namedInputPresets;store.open({version:1,entries:[{id:'c2',tool:'circle',name:'円2',entry:{version:99,input:{kept:'future'}}},{id:'line',tool:'line',name:'他ツール',entry:{version:1,input:{points:[]}}},{id:'c1',tool:'circle',name:'円1',entry:{version:1,input:{points:[]}}}]});app.w.toolManager.host.save();await tick();app.d.getElementById('circle-tool').click();recordOrder(app,'inputs','sort');await tick();assert(store.snapshot().entries.map(e=>e.id).join(',')==='c1,line,c2','other tool retains position');const before=app.w.DrawingDocument.serialize(),history=app.w.undoStack.length;recordOrder(app,'inputs','sort');await tick();assert(app.w.DrawingDocument.serialize()===before&&app.w.undoStack.length===history,'same order adds no history');namedChoose(app,'c2');assert(recordSection(app,'inputs').querySelector('[data-preset-order="down"]').disabled&&recordSection(app,'inputs').querySelector('[data-named-construction-action="restore"]').disabled,'last boundary and future restore disabled');recordOrder(app,'inputs','up');await tick();assert(store.entry('circle','c2').entry.input.kept==='future'&&recordSection(app,'inputs').querySelector('[data-preset-order="up"]').disabled,'unknown data retained and first boundary disabled');
+ }finally{app.element.remove();}
+});
+
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
 </script>

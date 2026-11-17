@@ -1,3 +1,4 @@
+import {movePreset,sortPresets} from './presetOrder.js';
 import {parseNamedConstructionInputs} from './namedConstructionInputs.js';
 import {parseImplementationPreferences} from './implementationPreferences.js';
 import {parseConstructionInputPresets,supportsConstructionInput,constructionInputMode} from './constructionInputPresets.js';
@@ -35,6 +36,8 @@ export function createConstructionSets(host,{createId=()=> 'set-'+crypto.randomU
     get canRecord(){return typeof host.exportPreferences==='function';},
     get canRestore(){return typeof host.restorePreferencesAtomically==='function';},
     replaceRecords(value){const next=parseConstructionSets(value);data=next?.entries.length?next:undefined;},
+    move(tool,id,direction){const selected=this.selectedId(tool),ok=mutate(next=>{movePreset(next.entries,id,direction,tool);},'記録の順序を変更しました。');if(ok){chosen.set(tool,selected);}return ok;},
+    sort(tool){const selected=this.selectedId(tool),ok=mutate(next=>{sortPresets(next.entries,tool);},'記録を名前順に並べ替えました。');if(ok){chosen.set(tool,selected);}return ok;},
     snapshot:()=>parseConstructionSets(data),
     list(tool){return this.snapshot()?.entries.filter(e=>e.tool===tool)??[];},
     selectedId(tool){const items=data?.entries.filter(e=>e.tool===tool)??[];return items.some(e=>e.id===chosen.get(tool))?chosen.get(tool):items[0]?.id;},

@@ -5,6 +5,7 @@ class ToolPropertiesPanel {
     this.toolManager = toolManager;
     this.panel = null;
     this.currentTool = null;
+    this.presetQueries = new Map();
     this.transformManagers = new WeakMap(); // オブジェクト -> TransformManager
     this.splineEditor = new SplineEditor(toolManager, () => this.updatePanel());
     this.circleEditor = new CircleEditor(toolManager, () => this.updatePanel());
@@ -68,6 +69,8 @@ class ToolPropertiesPanel {
   }
 
   updatePanel() {
+    const revision=window.DrawingDocument?.revision??0;
+    if(this.presetQueryRevision!==revision){this.presetQueries.clear();this.presetQueryRevision=revision;}
     const selected = window.selectedObjects?.length === 1 ? window.selectedObjects[0] : null;
     this.splineEditor.select(this.toolManager.activeToolName === 'select' && selected?.hasAttribute('data-vector-spline') ? selected : null);
     this.circleEditor.select(this.toolManager.activeToolName === 'select' && (selected?.tagName === 'circle' || selected?.hasAttribute('data-vector-circle')) ? selected : null);
@@ -321,6 +324,7 @@ class ToolPropertiesPanel {
     if(!items.length)select.append(new Option('記録はありません',''));
     for(const item of items)select.append(new Option(item.name,item.id));
     select.value=saved?.id??'';select.disabled=!items.length;select.onchange=()=>{presets.choose(select.value);refresh();};details.append(select);
+    this.appendPresetSearch(details,select,items,saved,'methods');
     const label=document.createElement('label');label.textContent='記録名';
     const input=document.createElement('input');input.type='text';input.maxLength=100;input.dataset.namedImplementationName='';input.setAttribute('aria-label','方式プリセットの記録名');input.style.cssText='width:100%;box-sizing:border-box';input.value=presets.nameDraft();
     input.oninput=()=>presets.setNameDraft(input.value);label.append(input);details.append(label);
@@ -336,6 +340,7 @@ class ToolPropertiesPanel {
     button('選択した方式を次の作図に適用','apply',!!saved&&presets.canApply,()=>{const result=presets.apply(saved.id);if(result)this.currentTool.onImplementationChanged?.();return result;},false);
     if(saved){
       button('選択記録を現在の方式で更新','update',presets.canRecord,()=>presets.update(saved.id));
+      this.appendPresetOrder(details,items,saved,()=>presets.move(saved.id,-1),()=>presets.move(saved.id,1),()=>presets.sort(),refresh);
       button('選択記録を改名','rename',true,()=>presets.rename(saved.id,input.value));
       button('選択記録を別名で複製','duplicate',true,()=>presets.duplicate(saved.id,input.value));
       button('選択記録を削除','remove',true,()=>presets.remove(saved.id));
@@ -410,6 +415,7 @@ class ToolPropertiesPanel {
     for(const item of items)select.append(new Option(item.name+' / 入力形式 '+item.entry.version,item.id));
     select.value=saved?.id??'';select.disabled=!items.length;
     select.onchange=()=>{presets.choose(name,select.value);refresh();};details.append(select);
+    this.appendPresetSearch(details,select,items,saved,'inputs:'+name);
     const label=document.createElement('label');label.textContent='記録名';
     const input=document.createElement('input');input.type='text';input.maxLength=100;input.dataset.namedConstructionName='';input.setAttribute('aria-label','作図入力の記録名');input.style.cssText='width:100%;box-sizing:border-box';input.value=presets.nameDraft(name);
     input.oninput=()=>presets.setNameDraft(name,input.value);label.append(input);details.append(label);
@@ -426,6 +432,7 @@ class ToolPropertiesPanel {
       button(parameters?'選択した数値設定を復元':'選択した入力を下書きへ復元','restore',canRestore,()=>presets.restore(name,saved.id,tool),false);
       button(dual?'選択記録を現在の数値設定で更新':'選択記録を現在の入力で更新','update',supported,()=>presets.update(name,saved.id,tool));
       if(dual)button('選択記録を現在の下書きで更新','update-draft',true,()=>presets.update(name,saved.id,tool,{draft:true}));
+      this.appendPresetOrder(details,items,saved,()=>presets.move(name,saved.id,-1),()=>presets.move(name,saved.id,1),()=>presets.sort(name),refresh);
       button('選択記録を改名','rename',true,()=>presets.rename(name,saved.id,input.value));
       button('選択記録を別名で複製','duplicate',true,()=>presets.duplicate(name,saved.id,input.value));
       button('選択記録を削除','remove',true,()=>presets.remove(name,saved.id));
@@ -453,6 +460,7 @@ class ToolPropertiesPanel {
     if(!items.length)select.append(new Option('記録はありません',''));
     for(const item of items)select.append(new Option(item.name+' / 入力形式 '+item.input.version,item.id));
     select.value=saved?.id??'';select.disabled=!items.length;select.onchange=()=>{sets.choose(name,select.value);refresh();};details.append(select);
+    this.appendPresetSearch(details,select,items,saved,'sets:'+name);
     const label=document.createElement('label');label.textContent='セット名';
     const input=document.createElement('input');input.type='text';input.maxLength=100;input.dataset.constructionSetName='';input.setAttribute('aria-label','作図セットの記録名');input.style.cssText='width:100%;box-sizing:border-box';input.value=sets.nameDraft(name);input.oninput=()=>sets.setNameDraft(name,input.value);label.append(input);details.append(label);
     const status=document.createElement('p');status.dataset.constructionSetStatus='';status.setAttribute('role','status');status.textContent=sets.state.message;status.style.cssText='font-size:12px;line-height:1.6';if(sets.state.warning)status.style.color='#a22';details.append(status);
@@ -472,12 +480,35 @@ class ToolPropertiesPanel {
       button('選択セットの入力と方式を復元','restore',canRestore,()=>sets.restore(name,saved.id,tool),false);
       button(dual?'選択セットを現在の数値設定と方式で更新':'選択セットを現在の入力と方式で更新','update',supported&&sets.canRecord,()=>sets.update(name,saved.id,tool));
       if(dual)button('選択セットを現在の下書きと方式で更新','update-draft',sets.canRecord,()=>sets.update(name,saved.id,tool,{draft:true}));
+      this.appendPresetOrder(details,items,saved,()=>sets.move(name,saved.id,-1),()=>sets.move(name,saved.id,1),()=>sets.sort(name),refresh);
       button('選択セットを改名','rename',true,()=>sets.rename(name,saved.id,input.value));
       button('選択セットを別名で複製','duplicate',true,()=>sets.duplicate(name,saved.id,input.value));
       button('選択セットを削除','remove',true,()=>sets.remove(name,saved.id));
     }
     if(!supported){const p=document.createElement('p');p.textContent='記録した作図ツールを選択すると、対応するセットを操作できます。';details.append(p);}
     const link=document.createElement('a');link.textContent='作図セットの復元・互換性・保存範囲';link.href='https://github.com/TomTomYoung/vector/blob/master/doc/construction-sets.md';link.target='_blank';link.rel='noopener';details.append(link);section.append(details);
+  }
+
+  appendPresetSearch(details,select,items,saved,key) {
+    const label=document.createElement('label');label.textContent='記録を検索';
+    const search=document.createElement('input');search.type='search';search.dataset.presetSearch=key;search.setAttribute('aria-label','記録名・IDを検索');search.value=this.presetQueries.get(key)??'';search.style.cssText='width:100%;box-sizing:border-box';label.append(search);details.insertBefore(label,select);
+    const count=document.createElement('p');count.dataset.presetSearchCount='';details.insertBefore(count,select);
+    const update=()=>{
+      const visible=window.VectorUtils.filterPresets(items,search.value);select.replaceChildren();
+      for(const item of visible){const version=item.entry?.version??item.input?.version;select.append(new Option(item.name+(version?' / 入力形式 '+version:''),item.id));}
+      if(saved&&!visible.some(e=>e.id===saved.id))select.prepend(new Option(saved.name+'（選択中・検索対象外）',saved.id));
+      if(!select.options.length)select.append(new Option('該当する記録はありません',''));
+      select.value=saved?.id??'';select.disabled=!items.length;count.textContent='検索結果: '+visible.length+' / '+items.length+'件';
+    };
+    search.oninput=()=>{this.presetQueries.set(key,search.value);update();};update();
+  }
+
+  appendPresetOrder(details,items,saved,up,down,sort,refresh) {
+    const at=items.findIndex(e=>e.id===saved.id);
+    for(const [label,id,enabled,action] of [['上へ','up',at>0,up],['下へ','down',at<items.length-1,down],['名前順に並べ替え','sort',items.length>1,sort]]){
+      const b=document.createElement('button');b.type='button';b.textContent=label;b.dataset.presetOrder=id;b.disabled=!enabled;b.style.margin='3px';b.onclick=()=>{if(action())this.toolManager.host.save();refresh();};details.append(b);
+    }
+    const note=document.createElement('p');note.textContent='並べ替えは検索で隠れている記録も含めて保存します。';note.style.fontSize='12px';details.append(note);
   }
 
   createInstructionsSection() {
