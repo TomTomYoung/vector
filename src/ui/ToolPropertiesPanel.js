@@ -195,6 +195,7 @@ class ToolPropertiesPanel {
     show('描画', rendering);
     this.createPreferenceControls(section);
     this.createDocumentPresetControls(section, name);
+    this.createNamedImplementationPresetControls(section, name);
     this.createConstructionInputControls(section, name);
     this.createNamedConstructionInputControls(section, name);
     if (this.currentTool.implementationError) {
@@ -281,15 +282,7 @@ class ToolPropertiesPanel {
     const saved=preset.snapshot(), host=this.toolManager.host;
     if(saved){
       const count=document.createElement('p');count.textContent='記録済み: 計算 '+Object.keys(saved.calculation).length+'項目、描画 '+Object.keys(saved.rendering).length+'項目';details.append(count);
-      for(const type of ['calculation','rendering']){
-        const entry=saved[type][name],id=type==='calculation'?entry:entry?.id;
-        const p=document.createElement('p');p.dataset.documentPresetMethod=type;
-        const variants=type==='calculation'?host.implementations?.(name):host.renderers?.(name);
-        const info=variants?.find(v=>v.id===id);
-        p.textContent=(type==='calculation'?'記録された計算: ':'記録された描画: ')+(id ? id+' / '+(info?.algorithm??'この環境では未登録') : 'このツールの記録はありません。');
-        if(type==='rendering'&&entry)p.textContent+=' / 設定 '+JSON.stringify(entry.options);
-        p.style.cssText='font-size:12px;line-height:1.6';details.append(p);
-      }
+      this.appendPresetMethods(details,saved,name,'documentPresetMethod');
     }
     const button=(label,id,enabled,action)=>{
       const b=document.createElement('button');b.type='button';b.textContent=label;b.dataset.documentPresetAction=id;b.disabled=!enabled;b.style.margin='3px';
@@ -299,6 +292,54 @@ class ToolPropertiesPanel {
     button('図面の方式を次の作図に適用','apply',!!saved&&preset.canApply,()=>{if(preset.apply())this.currentTool.onImplementationChanged?.();});
     button('図面の方式記録を削除','clear',!!saved,()=>{preset.clear();host.save();});
     const link=document.createElement('a');link.textContent='図面プリセットの仕様と保存範囲';link.href='https://github.com/TomTomYoung/vector/blob/master/doc/document-implementation-presets.md';link.target='_blank';link.rel='noopener';details.append(link);
+    section.append(details);
+  }
+
+  appendPresetMethods(details,saved,name,dataset) {
+    const host=this.toolManager.host;
+    for(const type of ['calculation','rendering']){
+      const entry=saved[type][name],id=type==='calculation'?entry:entry?.id;
+      const p=document.createElement('p');p.dataset[dataset]=type;
+      const variants=type==='calculation'?host.implementations?.(name):host.renderers?.(name);
+      const info=variants?.find(v=>v.id===id);
+      p.textContent=(type==='calculation'?'記録された計算: ':'記録された描画: ')+(id ? id+' / '+(info?.algorithm??'この環境では未登録') : 'このツールの記録はありません。');
+      if(type==='rendering'&&entry)p.textContent+=' / 設定 '+JSON.stringify(entry.options);
+      p.style.cssText='font-size:12px;line-height:1.6';details.append(p);
+    }
+  }
+
+  createNamedImplementationPresetControls(section,name) {
+    const presets=this.toolManager.namedImplementationPresets;
+    if(!presets)return;
+    const items=presets.list(),saved=presets.entry(),legacy=this.toolManager.documentPreset?.snapshot();
+    const details=document.createElement('details');details.dataset.namedImplementationPresets='';
+    const heading=document.createElement('summary');heading.textContent='名前付きの計算・描画方式（SVGに複数保存）';details.append(heading);
+    const note=document.createElement('p');note.textContent='全ツールの方式を1組として名前付き保存します。名前を選び、適用ボタンで次の作図の方式を切り替えます。記録の変更・削除は元に戻せます。';details.append(note);
+    const refresh=()=>{this.updatePanel();const next=this.panel.querySelector('[data-named-implementation-presets]');if(next)next.open=true;};
+    const select=document.createElement('select');select.dataset.namedImplementationSelect='';select.setAttribute('aria-label','名前付き方式プリセットの選択');select.style.width='100%';
+    if(!items.length)select.append(new Option('記録はありません',''));
+    for(const item of items)select.append(new Option(item.name,item.id));
+    select.value=saved?.id??'';select.disabled=!items.length;select.onchange=()=>{presets.choose(select.value);refresh();};details.append(select);
+    const label=document.createElement('label');label.textContent='記録名';
+    const input=document.createElement('input');input.type='text';input.maxLength=100;input.dataset.namedImplementationName='';input.setAttribute('aria-label','方式プリセットの記録名');input.style.cssText='width:100%;box-sizing:border-box';input.value=presets.nameDraft();
+    input.oninput=()=>presets.setNameDraft(input.value);label.append(input);details.append(label);
+    const status=document.createElement('p');status.dataset.namedImplementationStatus='';status.setAttribute('role','status');status.textContent=presets.state.message;status.style.cssText='font-size:12px;line-height:1.6';if(presets.state.warning)status.style.color='#a22';details.append(status);
+    const count=document.createElement('p');count.textContent='記録数: '+items.length+(saved?' / 選択記録: 計算 '+Object.keys(saved.preset.calculation).length+'項目、描画 '+Object.keys(saved.preset.rendering).length+'項目':'');details.append(count);
+    if(saved)this.appendPresetMethods(details,saved.preset,name,'namedImplementationMethod');
+    const button=(label,id,enabled,action,save=true)=>{
+      const b=document.createElement('button');b.type='button';b.textContent=label;b.dataset.namedImplementationAction=id;b.disabled=!enabled;b.style.margin='3px';
+      b.onclick=()=>{if(action()&&save)this.toolManager.host.save();refresh();};details.append(b);
+    };
+    button('現在の全ツールの方式を名前付き保存','create',presets.canRecord,()=>presets.record(input.value));
+    if(legacy)button('従来の図面記録を名前付きで複製','copy-legacy',true,()=>presets.add(input.value,legacy));
+    button('選択した方式を次の作図に適用','apply',!!saved&&presets.canApply,()=>{const result=presets.apply(saved.id);if(result)this.currentTool.onImplementationChanged?.();return result;},false);
+    if(saved){
+      button('選択記録を現在の方式で更新','update',presets.canRecord,()=>presets.update(saved.id));
+      button('選択記録を改名','rename',true,()=>presets.rename(saved.id,input.value));
+      button('選択記録を別名で複製','duplicate',true,()=>presets.duplicate(saved.id,input.value));
+      button('選択記録を削除','remove',true,()=>presets.remove(saved.id));
+    }
+    const link=document.createElement('a');link.textContent='名前付き方式の保存・適用・互換性';link.href='https://github.com/TomTomYoung/vector/blob/master/doc/named-implementation-presets.md';link.target='_blank';link.rel='noopener';details.append(link);
     section.append(details);
   }
 

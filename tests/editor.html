@@ -3007,6 +3007,115 @@ await check('Named records survive actual SVG download without browser storage a
   }finally{app.element.remove();}
 });
 
+const methodState=app=>JSON.parse(app.w.DrawingDocument.capture().querySelector('metadata[data-vector-document]').textContent).namedImplementationPresets;
+const methodName=(app,value)=>{const input=app.d.querySelector('[data-named-implementation-name]');input.value=value;input.dispatchEvent(new app.w.Event('input',{bubbles:true}));};
+const methodAction=(app,id)=>{const b=app.d.querySelector(`[data-named-implementation-action="${id}"]`);assert(b&&!b.disabled,'enabled named method action '+id);b.click();};
+const methodSelected=app=>app.d.querySelector('[data-named-implementation-select]').value;
+const methodChoose=(app,id)=>{const select=app.d.querySelector('[data-named-implementation-select]');select.value=id;select.dispatchEvent(new app.w.Event('change',{bubbles:true}));};
+function methodSVG(app,value){const root=app.w.DrawingDocument.capture(),meta=root.querySelector('metadata[data-vector-document]'),data=JSON.parse(meta.textContent);data.namedImplementationPresets=value;meta.textContent=JSON.stringify(data);return new app.w.XMLSerializer().serializeToString(root);}
+
+await check('Multiple named method presets travel to a fresh editor, remain inert until apply, and control actual calculation and drawing',async()=>{
+  const key='vector.test.named-methods';localStorage.removeItem(key);const source=await preferenceEditor('{preferences:false}');let target;
+  try{
+    source.w.DrawingDocument.open('<svg xmlns="http://www.w3.org/2000/svg"><circle id="named-kept" cx="10" cy="20" r="5" data-layer="2"/></svg>');
+    const h=source.w.toolManager.host;h.selectImplementation('spline','centripetal');h.selectRenderer('circle','cubic');h.selectRenderer('nurbsCurve','default',{sampleCount:130,poleTolerance:1e-6});
+    methodName(source,'精密');methodAction(source,'create');await tick();const precise=methodSelected(source);
+    h.selectImplementation('spline','uniform');h.selectRenderer('circle','default');methodName(source,'標準');methodAction(source,'create');await tick();const standard=methodSelected(source),saved=JSON.stringify(methodState(source));
+    assert(methodState(source).entries.every(e=>Object.keys(e.preset.calculation).length===119&&Object.keys(e.preset.rendering).length===119),'both snapshots cover all registered operations');
+    target=await preferenceEditor('{preferences:{key:'+JSON.stringify(key)+'}}');const host=target.w.toolManager.host;host.selectImplementation('spline','chordal');target.w.toolManager.preferences.save();const browser=localStorage.getItem(key);
+    target.w.DrawingDocument.open(source.w.DrawingDocument.serialize());target.w.saveState();await tick();const before=target.w.DrawingDocument.serialize(),history=target.w.undoStack.length;
+    assert(host.describe('spline').id==='chordal'&&host.describeRendering('circle').id==='default','opening is inert');
+    target.d.getElementById('spline-tool').click();methodChoose(target,standard);methodChoose(target,precise);
+    const info=target.d.querySelector('[data-named-implementation-method="calculation"]').textContent;assert(info.includes('centripetal')&&info.includes(host.implementations('spline').find(v=>v.id==='centripetal').algorithm),'recorded ID and algorithm displayed');
+    assert(host.describe('spline').id==='chordal'&&target.w.undoStack.length===history,'choosing is inert');methodAction(target,'apply');
+    assert(host.describe('spline').id==='centripetal'&&host.describeRendering('circle').id==='cubic','explicit apply uses selected record');assert(target.w.DrawingDocument.serialize()===before&&localStorage.getItem(key)===browser&&target.w.undoStack.length===history,'apply leaves SVG history and browser defaults unchanged');
+    for(const p of [[80,80],[100,160],[210,90]])parameterClick(target,...p);constructionEnter(target);await tick();
+    const spline=curveDraftShape(target,'spline');assert(JSON.parse(spline.getAttribute('data-vector-implementation')).calculation.id==='centripetal','actual spline calculation');
+    target.d.getElementById('circle-tool').click();parameterMouse(target,'mousedown',350,180);parameterMouse(target,'mousemove',390,180);parameterMouse(target,'mouseup',390,180);await tick();
+    const circle=target.d.querySelector('#canvas [data-vector-circle]');assert(circle.tagName==='path'&&JSON.parse(circle.getAttribute('data-vector-implementation')).rendering.id==='cubic','actual circle renderer');
+    target.d.getElementById('nurbsCurve-tool').click();assert(target.d.querySelector('input[aria-label="描画の分割数"]').value==='130','rendering options restored');
+    assert(target.d.getElementById('named-kept').getAttribute('r')==='5'&&target.w.layers.some(l=>l.id===2)&&JSON.stringify(methodState(target))===saved,'existing geometry layers and both records preserved');
+  }finally{source.element.remove();target?.element.remove();localStorage.removeItem(key);}
+});
+
+await check('Named method creation, updates, rename, duplicate and removal each undo and redo in one step',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    const host=app.w.toolManager.host;await tick();const history=app.w.undoStack.length;methodName(app,'A');methodAction(app,'create');await tick();const a=methodSelected(app);assert(app.w.undoStack.length===history+1,'create once');app.w.undo();assert(!methodState(app),'undo create');app.w.redo();assert(methodState(app).entries[0].id===a,'redo stable ID');
+    host.selectImplementation('spline','uniform');methodName(app,'B');methodAction(app,'create');await tick();const b=methodSelected(app);
+    async function change(id,value,action,check){methodChoose(app,id);if(value!==null)methodName(app,value);const before=JSON.stringify(methodState(app)),history=app.w.undoStack.length;methodAction(app,action);await tick();const after=JSON.stringify(methodState(app));assert(after!==before&&app.w.undoStack.length===history+1,'single named method mutation '+action);check();app.w.undo();assert(JSON.stringify(methodState(app))===before&&host.describe('spline').id==='uniform','undo data only '+action);app.w.redo();assert(JSON.stringify(methodState(app))===after,'redo '+action);}
+    await change(a,'改名A','rename',()=>assert(methodState(app).entries.find(e=>e.id===a).name==='改名A','rename stable ID'));
+    let copy;await change(a,'コピーA','duplicate',()=>{copy=methodSelected(app);assert(copy!==a&&methodState(app).entries.find(e=>e.id===copy).preset.calculation.spline==='default','copy saved methods');});
+    await change(a,null,'update',()=>assert(methodState(app).entries.find(e=>e.id===a).preset.calculation.spline==='uniform'&&methodState(app).entries.find(e=>e.id===copy).preset.calculation.spline==='default','update independent'));
+    await change(copy,null,'remove',()=>assert(!methodState(app).entries.some(e=>e.id===copy)&&methodState(app).entries.some(e=>e.id===b),'remove only selected copy'));
+    methodChoose(app,b);const count=app.w.undoStack.length;methodAction(app,'apply');await tick();assert(app.w.undoStack.length===count,'apply has no document history');
+  }finally{app.element.remove();}
+});
+
+await check('Unknown named methods survive round trips, display reasons and become applicable after registration',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    const host=app.w.toolManager.host,value={version:1,entries:[{id:'future',name:'<b>外部方式</b>',preset:{version:1,calculation:{spline:'later-named',futureTool:'custom'},rendering:{circle:{id:'cubic',options:{}},line:{id:'adaptive',options:{}},nurbsCurve:{id:'default',options:{maxDepth:25}}}}}]};
+    app.w.DrawingDocument.open(methodSVG(app,value));app.d.getElementById('spline-tool').click();const section=app.d.querySelector('[data-named-implementation-presets]');assert(section.querySelector('option').textContent==='<b>外部方式</b>'&&!section.querySelector('b'),'name stays literal');assert(section.querySelector('[data-named-implementation-method="calculation"]').textContent.includes('未登録'),'unknown implementation identified');methodAction(app,'apply');
+    assert(host.describe('spline').id==='default'&&host.describeRendering('circle').id==='cubic','compatible subset only');assert(app.d.querySelector('[data-named-implementation-status]').textContent.includes('futureTool/custom')&&app.w.toolManager.namedImplementationPresets.state.warning,'skipped reason visible');
+    app.w.DrawingDocument.open(app.w.DrawingDocument.serialize());assert(JSON.stringify(methodState(app))===JSON.stringify(value),'all unavailable IDs and options retained');
+    let calls=0;host.registerImplementation('spline',{id:'later-named',label:'Later named',algorithm:'Registered test method',run:(input,ops,execute)=>{calls++;return execute('spline',input,{implementation:'uniform'});}});methodAction(app,'apply');assert(host.describe('spline').id==='later-named'&&calls===0,'retry without implicit calculation');
+    app.d.getElementById('spline-tool').click();assert(app.d.querySelector('[data-named-implementation-method="calculation"]').textContent.includes('Registered test method'),'new registration updates metadata display');for(const p of [[100,100],[170,180],[250,120]])parameterClick(app,...p);constructionEnter(app);await tick();assert(calls>0&&JSON.parse(curveDraftShape(app,'spline').getAttribute('data-vector-implementation')).calculation.id==='later-named','new registration draws');
+  }finally{app.element.remove();}
+});
+
+await check('Malformed named method SVGs reject before replacing geometry, active draft, selections, history or other records',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    app.w.DrawingDocument.open('<svg xmlns="http://www.w3.org/2000/svg"><circle id="method-original" cx="20" cy="20" r="10" data-layer="3"/></svg>');presetAction(app,'record');methodName(app,'A');methodAction(app,'create');await tick();
+    const tool=curveDraftInput(app,'spline');curveDraftRecord(app,'spline');namedName(app,'点列');namedAction(app,'create-draft');await tick();const before=app.w.DrawingDocument.serialize(),input=JSON.stringify(tool.exportInputDraftPreset()),host=JSON.stringify(app.w.toolManager.host.exportPreferences()),history=app.w.undoStack.length,el=app.d.getElementById('method-original'),chosen=methodSelected(app),selected=app.w.selectedObject;
+    const item=methodState(app).entries[0];for(const bad of [null,{version:2,entries:[]},{version:1,entries:[item,item]},{version:1,entries:[{...item,name:' '}]},{version:1,entries:[{...item,preset:{version:1,calculation:{spline:7},rendering:{}}}]},{version:1,entries:[{...item,preset:{version:1,calculation:{},rendering:{circle:{id:'cubic',options:{text:'x'.repeat(256001)}}}}}]}]){
+      let rejected=false;try{app.w.DrawingDocument.open(methodSVG(app,bad));}catch{rejected=true;}
+      assert(rejected&&app.w.DrawingDocument.serialize()===before&&app.d.getElementById('method-original')===el&&JSON.stringify(tool.exportInputDraftPreset())===input,'atomic document and draft refusal');assert(JSON.stringify(app.w.toolManager.host.exportPreferences())===host&&app.w.undoStack.length===history&&methodSelected(app)===chosen&&app.w.selectedObject===selected&&app.w.layers.some(l=>l.id===3),'settings selection history and layers unchanged');
+    }
+  }finally{app.element.remove();}
+});
+
+await check('Legacy method copies, named inputs and named methods stay independent, and old SVGs clear document records without selecting methods',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    const host=app.w.toolManager.host;host.selectImplementation('spline','centripetal');presetAction(app,'record');host.selectImplementation('spline','chordal');methodName(app,'旧方式のコピー');methodAction(app,'copy-legacy');await tick();assert(methodState(app).entries[0].preset.calculation.spline==='centripetal','copy saved legacy not active methods');
+    const tool=curveDraftInput(app,'spline');curveDraftRecord(app,'spline');namedName(app,'入力');namedAction(app,'create-draft');await tick();const input=JSON.stringify(tool.exportInputDraftPreset()),inputs=JSON.stringify(namedState(app)),legacyInput=JSON.stringify(inputPresetState(app));methodAction(app,'apply');assert(JSON.stringify(tool.exportInputDraftPreset())===input&&JSON.stringify(namedState(app))===inputs&&JSON.stringify(inputPresetState(app))===legacyInput,'apply preserves all input records and current points');
+    const saved=JSON.stringify(methodState(app));presetAction(app,'clear');await tick();assert(JSON.stringify(methodState(app))===saved,'legacy deletion independent');app.w.undo();assert(documentSettings(app).calculation.spline==='centripetal','undo legacy');methodAction(app,'remove');await tick();assert(!methodState(app)&&documentSettings(app),'named deletion independent');app.w.undo();assert(JSON.stringify(methodState(app))===saved,'undo named deletion');
+    const xml=app.w.DrawingDocument.serialize();app.w.DrawingDocument.open('<svg xmlns="http://www.w3.org/2000/svg"><rect id="old-method-drawing" width="12" height="8"/></svg>');app.w.saveState();await tick();assert(!methodState(app)&&!documentSettings(app)&&app.d.querySelector('[data-named-implementation-action="apply"]').disabled&&host.describe('spline').id==='centripetal','old drawing clears metadata only');app.w.undo();assert(JSON.stringify(methodState(app))===saved,'undo old document');app.w.redo();assert(!methodState(app),'redo old document');app.w.DrawingDocument.open(xml);assert(JSON.stringify(methodState(app))===saved,'all records round trip');
+  }finally{app.element.remove();}
+});
+
+await check('Invalid named method edits add no history, preserve selection and retain typed names across tool changes',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    methodName(app,'A');methodAction(app,'create');await tick();methodName(app,'B');methodAction(app,'create');await tick();const id=methodSelected(app),before=JSON.stringify(methodState(app)),history=app.w.undoStack.length,methods=JSON.stringify(app.w.toolManager.host.exportPreferences());
+    for(const value of ['A',' ','x'.repeat(101)]){methodName(app,value);methodAction(app,value==='A'?'duplicate':'rename');await tick();assert(JSON.stringify(methodState(app))===before&&methodSelected(app)===id&&app.w.undoStack.length===history&&app.w.toolManager.namedImplementationPresets.state.warning,'invalid edit atomic');}
+    methodName(app,'入力途中');app.d.getElementById('circle-tool').click();assert(app.d.querySelector('[data-named-implementation-name]').value==='入力途中'&&methodSelected(app)===id,'name and selection persist across tool change');
+    const host=app.w.toolManager.host,exporter=host.exportPreferences;host.exportPreferences=()=>{throw Error('failed export');};methodAction(app,'update');await tick();host.exportPreferences=exporter;assert(JSON.stringify(methodState(app))===before&&app.w.undoStack.length===history&&JSON.stringify(host.exportPreferences())===methods,'failed export does not change records or methods');
+    app.w.toolManager.namedImplementationPresets=app.w.VectorUtils.createNamedImplementationPresets({});app.w.toolManager.namedImplementationPresets.open(JSON.parse(before));app.w.toolPropertiesPanel.updatePanel();assert(app.d.querySelector('[data-named-implementation-action="create"]').disabled&&app.d.querySelector('[data-named-implementation-action="apply"]').disabled&&app.d.querySelector('[data-named-implementation-action="update"]').disabled,'unsupported host disables method API actions');methodName(app,'名前だけ');methodAction(app,'rename');assert(methodState(app).entries[0].name==='名前だけ','unsupported host can retain and edit names');
+  }finally{app.element.remove();}
+});
+
+await check('Applying named methods refreshes the current draft and supports recovery from a failing calculation before real commit',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    const host=app.w.toolManager.host;host.selectImplementation('spline','centripetal');methodName(app,'成功');methodAction(app,'create');await tick();const working=methodSelected(app);host.registerImplementation('spline',{id:'named-failure',label:'Failure',algorithm:'Test calculation failure',run:()=>{throw Error('named preview failure');}});host.selectImplementation('spline','named-failure');methodName(app,'失敗');methodAction(app,'create');await tick();const failing=methodSelected(app);host.selectImplementation('spline','uniform');
+    const tool=curveDraftInput(app,'spline'),input=JSON.stringify(tool.exportInputDraftPreset()),history=app.w.undoStack.length;methodChoose(app,failing);methodAction(app,'apply');assert(tool.implementationError.includes('named preview failure')&&JSON.stringify(tool.exportInputDraftPreset())===input&&!curveDraftShape(app,'spline'),'failed preview retains input');assert(app.w.undoStack.length===history,'failure does not commit');
+    methodChoose(app,working);methodAction(app,'apply');assert(!tool.implementationError&&JSON.stringify(tool.exportInputDraftPreset())===input,'working preset refreshes same points');constructionEnter(app);await tick();const shape=curveDraftShape(app,'spline');assert(shape&&JSON.parse(shape.getAttribute('data-vector-implementation')).calculation.id==='centripetal'&&app.w.undoStack.length===history+1,'real drawing and one history step after recovery');
+  }finally{app.element.remove();}
+});
+
+await check('Named methods work with blocked storage and the real SVG download includes multiple records',async()=>{
+  const app=await preferenceEditor('{preferences:{storage:()=>{throw Error("blocked");}}}');
+  try{
+    const host=app.w.toolManager.host;app.d.getElementById('spline-tool').click();preferenceChoose(app,'calculation','uniform');methodName(app,'一様');methodAction(app,'create');await tick();const uniform=methodSelected(app);preferenceChoose(app,'calculation','centripetal');methodName(app,'求心');methodAction(app,'create');await tick();assert(app.d.querySelector('[data-preference-status]').textContent.includes('保存できません'),'browser failure visible');methodChoose(app,uniform);methodAction(app,'apply');assert(host.describe('spline').id==='uniform'&&!app.w.toolManager.namedImplementationPresets.state.warning,'SVG preset works independently');
+    let blob,name;const url=app.w.URL.createObjectURL,revoke=app.w.URL.revokeObjectURL,click=app.w.HTMLAnchorElement.prototype.click;app.w.URL.createObjectURL=b=>{blob=b;return 'blob:named-method-test';};app.w.URL.revokeObjectURL=()=>{};app.w.HTMLAnchorElement.prototype.click=function(){name=this.download;};
+    try{const before=JSON.stringify(methodState(app));app.d.getElementById('save-btn').click();assert(blob?.type==='image/svg+xml'&&name==='drawing.svg','actual download');const xml=await blob.text();methodAction(app,'remove');app.w.DrawingDocument.open(xml);assert(JSON.stringify(methodState(app))===before&&methodState(app).entries.length===2,'download restores both records');methodAction(app,'apply');assert(host.describe('spline').id==='uniform','download usable after reload');}
+    finally{app.w.URL.createObjectURL=url;app.w.URL.revokeObjectURL=revoke;app.w.HTMLAnchorElement.prototype.click=click;}
+  }finally{app.element.remove();}
+});
+
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
 </script>

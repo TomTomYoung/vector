@@ -26,6 +26,7 @@ class DrawingDocument {
       layers: window.layers, currentLayerId: window.currentLayerId,
       vertices: window.verticesTool?.verticesObject,
       implementationPreset: window.toolManager?.documentPreset?.snapshot(),
+      namedImplementationPresets: window.toolManager?.namedImplementationPresets?.snapshot(),
       constructionInputs: window.toolManager?.inputPresets?.snapshot(),
       namedConstructionInputs: window.toolManager?.namedInputPresets?.snapshot()
     });
@@ -68,6 +69,7 @@ class DrawingDocument {
     if (!layers.size) layers.set(1, this.defaultLayer(1));
     if (state.vertices && !VerticesTool.isValidModel(state.vertices)) throw new Error("頂点の編集データが不正です。");
     const preset = window.VectorUtils.parseDocumentImplementationPreset(state.implementationPreset);
+    const namedMethods = window.VectorUtils.parseNamedImplementationPresets(state.namedImplementationPresets);
     const inputs = window.VectorUtils.parseConstructionInputPresets(state.constructionInputs);
     const namedInputs = window.VectorUtils.parseNamedConstructionInputs(state.namedConstructionInputs);
 
@@ -88,6 +90,7 @@ class DrawingDocument {
     window.currentLayerId = layers.has(state.currentLayerId) ? state.currentLayerId : window.layers[0].id;
     window.verticesTool.restoreModel(state.vertices);
     window.toolManager.documentPreset.open(preset);
+    window.toolManager.namedImplementationPresets.open(namedMethods);
     window.toolManager.inputPresets.open(inputs);
     window.toolManager.namedInputPresets.open(namedInputs);
     window.updateLayerList();

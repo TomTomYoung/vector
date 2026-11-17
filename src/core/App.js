@@ -51,6 +51,7 @@ class App {
     this.toolManager = this.createManager(canvas, this.host);
     this.toolManager.preferences = this.preferences;
     this.toolManager.documentPreset = window.VectorUtils.createDocumentImplementationPreset(this.host);
+    this.toolManager.namedImplementationPresets = window.VectorUtils.createNamedImplementationPresets(this.host);
     this.toolManager.inputPresets = window.VectorUtils.createConstructionInputPresets();
     this.toolManager.namedInputPresets = window.VectorUtils.createNamedConstructionInputs();
     window.toolManager = this.toolManager;
