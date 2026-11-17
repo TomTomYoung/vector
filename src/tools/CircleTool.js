@@ -13,7 +13,7 @@ class CircleTool extends BaseTool {
     this.selectedCircleObserverTarget = null;
     this.selectedCircleMutationHandle = null;
     this.inputPresetVersion = 1;
-    this.inputPresetInstructions = 'ドラッグ中にSpaceで一時停止すると、プロパティから入力を記録できます。停止・復元後はEnterで保存した形のまま確定、または円周上の点をクリックして確定します。Spaceでカーソル追従を停止・再開、Escで取消できます。';
+    this.inputPresetInstructions = 'ドラッグ中にPキーで一時停止すると、プロパティから入力を記録できます。停止・復元後はEnterで保存した形のまま確定、または円周上の点をクリックして確定します。Pキーでカーソル追従を停止・再開、Escで取消できます。';
     this.restoredDraft = false;
     this.draftPaused = false;
     this.draftEndPoint = null;
@@ -48,7 +48,7 @@ class CircleTool extends BaseTool {
         "左クリック: 円の中心を指定",
         "そのままドラッグして半径を調整",
         "マウスボタンを離す: 円を確定",
-        "Space: カーソル追従を一時停止して下書きを記録",
+        "Pキー: カーソル追従を一時停止して下書きを記録",
         "Esc: 描画をリセット",
       ];
     }
@@ -56,7 +56,7 @@ class CircleTool extends BaseTool {
     return [
       "マウス移動: 半径を調整",
       "マウスボタンを離す: 円を確定",
-      "Space: カーソル追従を一時停止して下書きを記録",
+      "Pキー: カーソル追従を一時停止して下書きを記録",
         "Esc: 描画中の円をキャンセル",
     ];
   }
@@ -183,7 +183,7 @@ class CircleTool extends BaseTool {
 
   handleKeyDown(event) {
     if(!this.isActive)return;
-    if(event.key===' '&&this.isDrawing&&!event.target?.closest?.('button')){
+    if(event.key.toLowerCase()==='p'&&this.isDrawing&&!event.altKey){
       event.preventDefault();if(event.repeat)return;
       this.restoredDraft=true;this.draftPaused=!this.draftPaused;this.updatePanel();
     }

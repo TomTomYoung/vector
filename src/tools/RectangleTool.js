@@ -12,7 +12,7 @@ class RectangleTool extends BaseTool {
     this.selectedRectangleObserverTarget = null;
     this.selectedRectangleMutationHandle = null;
     this.inputPresetVersion = 1;
-    this.inputPresetInstructions = 'ドラッグ中にSpaceで一時停止すると、プロパティから入力を記録できます。停止・復元後はEnterで保存した形のまま確定、または対角の終点をクリックして確定します。Spaceでカーソル追従を停止・再開、Escで取消できます。';
+    this.inputPresetInstructions = 'ドラッグ中にPキーで一時停止すると、プロパティから入力を記録できます。停止・復元後はEnterで保存した形のまま確定、または対角の終点をクリックして確定します。Pキーでカーソル追従を停止・再開、Escで取消できます。';
     this.restoredDraft = false;
     this.draftPaused = false;
     this.draftEndPoint = null;
@@ -46,7 +46,7 @@ class RectangleTool extends BaseTool {
       items: [
         "左クリック+ドラッグ: 始点から終点までドラッグして長方形を描画",
         "マウスボタンを離す: 長方形を確定",
-        "Space: カーソル追従を一時停止して下書きを記録",
+        "Pキー: カーソル追従を一時停止して下書きを記録",
         "Esc: キャンセル",
       ],
     };
@@ -175,7 +175,7 @@ class RectangleTool extends BaseTool {
 
   handleKeyDown(event) {
     if(!this.isActive)return;
-    if(event.key===' '&&this.isDrawing&&!event.target?.closest?.('button')){
+    if(event.key.toLowerCase()==='p'&&this.isDrawing&&!event.altKey){
       event.preventDefault();if(event.repeat)return;
       this.restoredDraft=true;this.draftPaused=!this.draftPaused;this.updatePanel();
     }

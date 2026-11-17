@@ -2659,7 +2659,7 @@ const shapeDraftPoints=[{x:80,y:100},{x:180,y:180},{x:280,y:100},{x:180,y:260}];
 const shapeDraftOutput=(app,name)=>app.w.DrawingDocument.capture().querySelector(name==='circle'?'[data-vector-circle]':'[data-'+name+'-tool]');
 function shapeDraftInput(app,name){
   app.d.getElementById(name+'-tool').click();const tool=app.w.toolManager.tools[name];
-  if(name==='rectangle'||name==='circle'){parameterMouse(app,'mousedown',80,100);parameterMouse(app,'mousemove',180,180);draftKey(app,' ');parameterMouse(app,'mouseup',180,180);}
+  if(name==='rectangle'||name==='circle'){parameterMouse(app,'mousedown',80,100);parameterMouse(app,'mousemove',180,180);draftKey(app,'p');parameterMouse(app,'mouseup',180,180);}
   else for(const p of shapeDraftPoints.slice(0,name==='arc'?2:3))parameterClick(app,p.x,p.y);
   return tool;
 }
@@ -2703,15 +2703,16 @@ await check('Rectangle and circle pause a real drag to record through the panel 
     const app=await preferenceEditor('{preferences:false}');
     try{
       app.d.getElementById(name+'-tool').click();const tool=app.w.toolManager.tools[name],history=app.w.undoStack.length;
+      app.d.dispatchEvent(new app.w.KeyboardEvent('keydown',{key:' ',code:'Space',bubbles:true,cancelable:true}));assert(app.w.zoomPanManager.spacePressed&&!tool.draftPaused,'Space still pans');app.d.dispatchEvent(new app.w.KeyboardEvent('keyup',{key:' ',code:'Space',bubbles:true}));
       parameterMouse(app,'mousedown',80,100);parameterMouse(app,'mousemove',180,180);const expected=JSON.stringify(tool.exportInputPreset());
-      const key=new app.w.KeyboardEvent('keydown',{key:' ',bubbles:true,cancelable:true});app.d.dispatchEvent(key);assert(key.defaultPrevented&&tool.draftPaused&&tool.restoredDraft,'pause suppresses scrolling');
+      const key=new app.w.KeyboardEvent('keydown',{key:'p',code:'KeyP',bubbles:true,cancelable:true});app.d.dispatchEvent(key);assert(key.defaultPrevented&&tool.draftPaused&&tool.restoredDraft&&!app.w.zoomPanManager.spacePressed,'pause handled without entering pan mode');
       parameterMouse(app,'mouseup',180,180);parameterMouse(app,'mousemove',600,300);parameterMouse(app,'mouseleave',600,300);
       assert(JSON.stringify(tool.exportInputPreset())===expected&&!shapeDraftOutput(app,name)&&app.w.undoStack.length===history,'paused geometry survives trip to panel');
       inputPresetAction(app,'record');await tick();assert(JSON.stringify(inputPresetState(app).entries[name])===expected,'record original endpoint from panel');
-      draftKey(app,' ');assert(!tool.draftPaused&&tool.restoredDraft,'resume manual draft');parameterMouse(app,'mousemove',280,240);assert(JSON.stringify(tool.exportInputPreset())!==expected,'resume follows cursor');
-      draftKey(app,' ');constructionEnter(app);await tick();assert(shapeDraftOutput(app,name)&&!tool.draftPaused,'Enter commits paused draft');
+      draftKey(app,'p');assert(!tool.draftPaused&&tool.restoredDraft,'resume manual draft');parameterMouse(app,'mousemove',280,240);assert(JSON.stringify(tool.exportInputPreset())!==expected,'resume follows cursor');
+      draftKey(app,'p');constructionEnter(app);await tick();assert(shapeDraftOutput(app,name)&&!tool.draftPaused,'Enter commits paused draft');
       app.d.getElementById(name+'-tool').click();inputPresetAction(app,'restore');assert(JSON.stringify(tool.exportInputPreset())===expected,'stored shape stays independent');
-      draftKey(app,' ');draftKey(app,'Escape');assert(!tool.draftPaused&&!tool.restoredDraft&&!tool.isDrawing,'cancel clears pause');
+      draftKey(app,'p');draftKey(app,'Escape');assert(!tool.draftPaused&&!tool.restoredDraft&&!tool.isDrawing,'cancel clears pause');
     }finally{app.element.remove();}
   }
 });
