@@ -1,3 +1,4 @@
+import {reduceSplineDegreeAdaptive} from './adaptiveSplineReduction.js';
 import {reduceSplineDegreeContinuity} from './compactSplineReduction.js';
 import {elevateSplineDegreeContinuity} from './compactSplineElevation.js';
 import {toolMetadata} from './toolMetadata.js';
@@ -8,7 +9,7 @@ import {delaunayTriangles} from './mesh.js';
 
 const alternative = (id, label, algorithm, run, source = 'src/model/alternatives.js') => ({id, label, algorithm, source, run});
 export const builtinImplementations = {
-  reduceSplineDegree: [alternative('continuity', '元の連続性を保つ次数下げ', '元の重複度−1のノット列・単純周期継ぎ目の始端移動・同次Bernstein係数の全体最小二乗・Givens疎QR・全区間偏差検証', reduceSplineDegreeContinuity, 'src/model/compactSplineReduction.js')],
+  reduceSplineDegree: [alternative('adaptive', '許容差に合わせて区間を自動分割', '極形式de Boorの区間再抽出・適応二分割・端点固定の同次Bernstein係数最小二乗・Givens QR・全区間偏差検証', reduceSplineDegreeAdaptive, 'src/model/adaptiveSplineReduction.js'), alternative('continuity', '元の連続性を保つ次数下げ', '元の重複度−1のノット列・単純周期継ぎ目の始端移動・同次Bernstein係数の全体最小二乗・Givens疎QR・全区間偏差検証', reduceSplineDegreeContinuity, 'src/model/compactSplineReduction.js')],
   elevateSplineDegree: [alternative('continuity', '元の連続性を保つ次数上げ', '区間ベジェ次数上げ・元の重複度+1のノット列へGivens回転による疎QR基底変換・全区間偏差検証', elevateSplineDegreeContinuity, 'src/model/compactSplineElevation.js')],
   spline: [
     alternative('uniform', '一様 Catmull–Rom', '標準接線・三次ベジェへの変換（tension=1）', uniformCatmullRom),

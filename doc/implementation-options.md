@@ -239,3 +239,7 @@ Bernstein直接評価、BigIntの2進整数化、登録API、SVGグループ化�
 ## 連続性を保つ次数下げ
 
 `reduceSplineDegree` に `continuity` を追加しました。重複度−1のノット列に対する同次Bernstein係数の全体最小二乗をGivens疎QRで解き、元の全区間の偏差・分母を検証します。通常接続点と周期継ぎ目は許容差内で移動し、非周期の両端・不連続点の片側端点は固定します。単純周期継ぎ目が消える場合も、残る最初のノットへ始端を移し、周期・元区間幅・全周偏差を検証します。[始端移動の契約](periodic-degree-reduction.md)を参照してください。計算122機能・GUI31ツールは変わりません。[式・使用論文・換装契約と制約](spline-continuity-reduction.md)を参照してください。
+
+## 許容差に合わせた適応分割の次数下げ
+
+2026-11-18に `reduceSplineDegree` の `adaptive` を追加しました。元スプラインから極形式de Boorで区間を再抽出し、端点固定の同次係数最小二乗とGivens QRを使い、許容差を満たせない区間だけ二分割します。全区間の偏差・分母を独立検証し、分割の情報をプロパティ・SVGへ記録します。描画は既存のSVG折れ線です。MIT Hyperbook、Eckの論文概要との関係、実装の範囲と換装契約は [adaptive-degree-reduction.md](adaptive-degree-reduction.md) に記載しています。計算122機能・GUI31ツールは不変です。
