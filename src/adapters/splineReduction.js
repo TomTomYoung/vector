@@ -8,6 +8,6 @@ export function reduceEditableSplineDegree(method,input,tolerance=1e-7,reduce=re
   const result=reduce({...request,points:request.points.map(p=>({...p})),...(request.knots?{knots:[...request.knots]}:{}),
     ...(request.periodicKnots?{periodicKnots:[...request.periodicKnots]}:{}),...(request.weights?{weights:[...request.weights]}:{})});
   const checked=validateSplineDegreeReduction(request,result);
-  if(!checked)throw Error('次数を下げられません。偏差・分母・端点固定・有限制御点の検証に失敗したか、実装の出力が不正です。');
+  if(!checked)throw Error('次数を下げられません。指定許容差での偏差・分母・端点固定・有限制御点の検証に失敗したか、実装の出力が不正です。');
   return checked;
 }

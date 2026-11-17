@@ -3709,7 +3709,7 @@ await check('Workbench Worker restores the compact method and handles a thousand
 });
 
 function reductionInput(name='bSplineCurve',periodic=false,weight=2,periodicKnots){
-  return w.toolManager.host.execute('elevateSplineDegree',{degree:2,points:periodic?periodicRemovalPoints:editPoints,periodic,...(periodicKnots?{periodicKnots}:{}),...(name==='nurbsCurve'?{weights:periodic?[1,weight,1,1,1]:[1,2,1,3]}:{})},{implementation:'continuity'});
+  return w.toolManager.host.execute('elevateSplineDegree',{degree:periodic?3:2,points:periodic?periodicRemovalPoints:editPoints,periodic,...(periodicKnots?{periodicKnots}:{}),...(name==='nurbsCurve'?{weights:periodic?[1,weight,1,1,1]:[1,2,1,3]}:{})},{implementation:'continuity'});
 }
 await check('Degree reduction preserves appearance and source identity through apply, Undo/Redo and SVG restoration',async()=>{
   for(const name of ['bSplineCurve','nurbsCurve']){
@@ -3726,7 +3726,7 @@ await check('Approximate reduction uses the requested whole-interval tolerance a
 });
 await check('Periodic reduction preserves repeated seams, signed weights and closed SVG curves',async()=>{
   for(const periodicKnots of [[0,0,1,3,5,7],[0,1,3,5,7,7],[0.1,0.3,1,1.4,1.7,2]])for(const weight of [0,-0.125,2]){
-    fixture();await tick();const curve=addEditableSpline('nurbsCurve',reductionInput('nurbsCurve',true,weight,periodicKnots));activate('select');w.selectTool.selectObject(curve);splineAction('begin');splineAction('reduce-degree');const editor=w.toolPropertiesPanel.splineEditor;assert(editor.input().degree===2&&editor.input().periodicKnots[0]===periodicKnots[0]&&editor.input().periodicKnots.at(-1)===periodicKnots.at(-1)&&editor.draft.refinement.errorBound<=1e-7,'same complete periodic domain');splineAction('apply');assert(curve.getAttribute('d').endsWith('Z')&&JSON.parse(curve.getAttribute('data-vector-implementation')).refinement.verification.source==='src/model/splineDegreeReduction.js','closure and verification source');
+    fixture();await tick();const curve=addEditableSpline('nurbsCurve',reductionInput('nurbsCurve',true,weight,periodicKnots));activate('select');w.selectTool.selectObject(curve);splineAction('begin');splineAction('reduce-degree');const editor=w.toolPropertiesPanel.splineEditor;assert(editor.input().degree===3&&editor.input().periodicKnots[0]===periodicKnots[0]&&editor.input().periodicKnots.at(-1)===periodicKnots.at(-1)&&editor.draft.refinement.errorBound<=1e-7,'same complete periodic domain');splineAction('apply');assert(curve.getAttribute('d').endsWith('Z')&&JSON.parse(curve.getAttribute('data-vector-implementation')).refinement.verification.source==='src/model/splineDegreeReduction.js','closure and verification source');
   }
 });
 await check('Reduction rejects poles and replacement endpoint movement and exceptions atomically, then records a valid scoped implementation',async()=>{
