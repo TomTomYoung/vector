@@ -2,7 +2,7 @@
 // アプリケーションの初期化とコンポーネント間の連携を担当
 
 class App {
-  constructor({host, preferences = {},
+  constructor({host, preferences = {}, selectionPreferences, selectionGeometry,
     createManager = (canvas, host) => new ToolManager(canvas, host), controllers = {}, ...stages} = {}) {
     this.host = host ?? window.VectorUtils.createEditorHost(stages);
     if (preferences !== false && this.host.exportPreferences && this.host.restorePreferences) {
@@ -14,6 +14,9 @@ class App {
       });
       this.preferences.load(true);
     }
+    const selectionPath = new URL(document.baseURI).pathname.replace(/index\.html$/, '');
+    this.selectionPreferenceOptions = {key:'vector:selection:v1:'+selectionPath, enabled:preferences!==false, ...(selectionPreferences===false?{enabled:false}:selectionPreferences)};
+    this.selectionGeometryFactory = selectionGeometry;
     this.createManager = createManager;
     this.controllers = controllers;
     this.globalVariables = {
@@ -50,6 +53,8 @@ class App {
     // ツールマネージャーの初期化
     this.toolManager = this.createManager(canvas, this.host);
     this.toolManager.preferences = this.preferences;
+    this.toolManager.selectionPreferenceOptions = this.selectionPreferenceOptions;
+    this.toolManager.selectionGeometryFactory = this.selectionGeometryFactory;
     this.toolManager.documentPreset = window.VectorUtils.createDocumentImplementationPreset(this.host);
     this.toolManager.namedImplementationPresets = window.VectorUtils.createNamedImplementationPresets(this.host);
     this.toolManager.inputPresets = window.VectorUtils.createConstructionInputPresets();

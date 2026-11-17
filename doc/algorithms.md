@@ -21,7 +21,7 @@
 
 | ツール・登録名 | 計算 | 描画・画面への反映 |
 | --- | --- | --- |
-| 選択 `select` | 単体IDの選択・反転。範囲選択は候補の軸平行境界箱が選択矩形に完全包含されるかを判定 | [SelectTool](../src/tools/SelectTool.js)が既存SVG要素を選択し、枠・ハンドルを補助表示 |
+| 選択 `select` | 単体IDの選択・反転。モデルbounds APIは境界箱の包含を維持。GUIは[線・塗りの被覆判定、半径・4形状の選択](selection.md) | [SelectTool](../src/tools/SelectTool.js)が既存SVG要素を選択し、枠・ハンドルを補助表示 |
 | 線分 `line` | 始終点。直交時は水平・垂直の大きい変位側へ拘束 | SVG `line` |
 | 矩形 `rectangle` | 2点の成分ごとの最小値と差の絶対値 | SVG `rect` |
 | 円 `circle` | 中心から入力点までのユークリッド距離、または明示半径で円を構成。[元モデル編集](circle-editing.md)に対応 | SVG `circle`（代替描画は折れ線・三次ベジェ） |

@@ -17,9 +17,10 @@ class DrawingDocument {
     for (const child of canvas.children) {
       if (!previews.has(child) && !child.matches(this.helpers)) svg.appendChild(child.cloneNode(true));
     }
-    for (const el of svg.querySelectorAll("[data-vector-selected], [data-vector-highlight]")) {
+    for (const el of svg.querySelectorAll("[data-vector-selected], [data-vector-highlight], [data-vector-selection-candidate]")) {
       el.removeAttribute("data-vector-selected");
       el.removeAttribute("data-vector-highlight");
+      el.removeAttribute("data-vector-selection-candidate");
     }
     const metadata = document.createElementNS(canvas.namespaceURI, "metadata");
     metadata.setAttribute("data-vector-document", "1");

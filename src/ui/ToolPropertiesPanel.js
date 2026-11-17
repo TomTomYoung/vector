@@ -747,6 +747,7 @@ class ToolPropertiesPanel {
             }
           });
           select.setAttribute('aria-label', prop.label);
+          select.disabled = !!prop.disabled;
           group.appendChild(select);
           break;
 

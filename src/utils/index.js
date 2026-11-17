@@ -19,6 +19,9 @@
  * - 2025-11-16: 初版作成
  */
 
+import {createSelectionGeometry} from '../adapters/selectionGeometry.js';
+import {createSelectionPreferences} from '../adapters/selectionPreferences.js';
+import {makeSelectionRegion} from '../model/selectionRegion.js';
 import {createEditorHost} from "../adapters/editorHost.js";
 import {readSplineSource} from '../adapters/splineSource.js';
 import {insertEditableSplineKnot} from '../adapters/splineRefinement.js';
@@ -52,6 +55,9 @@ import { TransformLayer, TransformManager } from './transformManager.js';
 
 // グローバルオブジェクトとして公開
 window.VectorUtils = {
+  createSelectionGeometry,
+  createSelectionPreferences,
+  makeSelectionRegion,
   createEditorHost,
   readSplineSource,
   insertEditableSplineKnot,

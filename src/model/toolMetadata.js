@@ -2,7 +2,7 @@
 export const toolMetadata = Object.freeze({
   "select": {
     "label": "標準",
-    "algorithm": "単体IDの選択・反転。範囲選択は候補の軸平行境界箱が選択矩形に完全包含されるかを判定",
+    "algorithm": "単体IDの選択・反転。モデルのbounds入力は境界箱の完全包含。GUIの線・塗りのヒット判定は別の選択アダプターが担当",
     "source": "src/model/drawing.js"
   },
   "line": {
