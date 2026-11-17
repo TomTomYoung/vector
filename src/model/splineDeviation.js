@@ -59,10 +59,10 @@ export function rationalSplineDeviation(original,candidate,degree,knots,{maxDept
     relativeFloor,maxDepth,maxNodes,nodes,minimumOriginal,minimumCandidate,originalFloor:floorA,candidateFloor:floorB}};
 }
 
-export function boundedSplineDeviation(original,candidate,radius,rational,degree,knots) {
+export function boundedSplineDeviation(original,candidate,radius,rational,degree,knots,options) {
   if(!rational||[...original,...candidate].every(h=>h.w>0)) {
     const errorBound=homogeneousSplineDeviation(original,candidate,radius,rational);
     return errorBound===null?null:{errorBound};
   }
-  return rationalSplineDeviation(original,candidate,degree,knots);
+  return rationalSplineDeviation(original,candidate,degree,knots,options);
 }

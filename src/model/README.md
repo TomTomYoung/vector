@@ -67,7 +67,7 @@ window.vectorEditorOptions = {
 
 ## 領域復元・交点・制約を組み合わせる
 
-全120機能に、次の4つを含みます。演算室の「領域復元・交点・拘束」から入力例を実行できます。B-spline・NURBSの作図データを返す追加2機能は上記の方式選択文書を参照してください。
+全121機能に、次の4つを含みます。演算室の「領域復元・交点・拘束」から入力例を実行できます。B-spline・NURBSの作図データを返す追加2機能は上記の方式選択文書を参照してください。
 
 - `regionBoundary.js` の `regionBoundary({cells,tolerance?})` は、内部が重ならない凸セル群から外周・穴・包含関係と面積を復元します。
 - `bezierIntersections.js` の `bezierIntersections({first,second,...})` は、制御点列から交点と重複区間を返します。`complete: false` のときは `unresolved` に未確定のパラメータ区間が残ります。一般の非線形再パラメータ化による重なりは未確定になる場合があります。
@@ -83,3 +83,5 @@ window.vectorEditorOptions = {
 低水準のノット削除は、周期展開した非周期評価用配列に対応するため制御点3012個まで受け付けます。作図・再編集の元制御点は1000個までです。周期曲線への接続、単一削除の2回または3回の呼出しと最終偏差検証は [periodic-knot-removal.md](../../doc/periodic-knot-removal.md) に記載しています。
 
 零・正負混在の重み、分母検証の固定上限、返す検証記録、極を含む場合の制約は [signed-knot-removal.md](../../doc/signed-knot-removal.md) を参照してください。
+
+B-spline・NURBSの形状を保つ `elevateSplineDegree` は非周期・周期に対応します。区間ベジェ化とBernstein次数上げを用い、検証済みの編集入力を返します。[契約・限界・参照資料](../../doc/spline-degree-elevation.md)を参照してください。
