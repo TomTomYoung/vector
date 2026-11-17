@@ -1,4 +1,4 @@
-import {bSplineCurve,nurbsCurve,homogeneousSplineBezierSpans} from './splineCurves.js';
+import {bSplineCurve,nurbsCurve,homogeneousSplineBezierSpans,homogeneousSplineBezierSpan} from './splineCurves.js';
 import {raiseHomogeneousBezier} from './splineDegreeElevation.js';
 import {boundedSplineDeviation} from './splineDeviation.js';
 import {addSparseQrRow,solveSparseQr} from './sparseQr.js';
@@ -11,8 +11,8 @@ function project(c,h){
   return {point,weight};
 }
 
-export function prepareSplineDegreeReduction(input){
-  if(!input)return null;
+export function prepareSplineDegreeReduction(input,{representation='bezier'}={}){
+  if(!input||!['bezier','continuity','either'].includes(representation))return null;
   const rational=input.weights!==undefined,create=rational?nurbsCurve:bSplineCurve,model=create(input),tolerance=input.tolerance??1e-7;
   if(!model||model.degree<2||!Number.isFinite(tolerance)||tolerance<0||tolerance>1e6||
     !Array.from(model.points).every(p=>p&&Number.isFinite(p.x)&&Number.isFinite(p.y))||!Array.from(model.knots).every(Number.isFinite)||
@@ -33,30 +33,50 @@ export function prepareSplineDegreeReduction(input){
       fixed.set(count-1,span.right);}
   }
   knots.push(...Array(model.periodic?1:q+1).fill(spans.at(-1).to));
-  if(count>1000||count<=q)return null;
   const orderedFixed=model.periodic?new Map([...fixed].map(([i,h])=>[(i+q-1)%count,h])):fixed;
-  const c={model,create,rational,tolerance,p,q,origin,scale,sign,toHomogeneous,spans,knots,count,fixed:orderedFixed};
-  if([...orderedFixed.values()].some(h=>!project(c,h)))return null;
+  const layouts={bezier:{knots,count,fixed:orderedFixed}};
+  const start=spans[0].from,end=spans.at(-1).to,multiplicities=new Map();
+  const source=model.periodic?model.knots.slice(p,p+model.controlCount):model.knots;
+  for(const value of source){const t=model.periodic&&value===end?start:value;multiplicities.set(t,(multiplicities.get(t)??0)+1);}
+  // A simple periodic seam would disappear. Keep the active domain unchanged;
+  // moving that seam is a separate operation, not an implicit parameter shift.
+  if(!model.periodic||multiplicities.get(start)>1){
+    const target=model.periodic?spans.flatMap(s=>Array(multiplicities.get(s.from)-1).fill(s.from)):
+      [...Array(q+1).fill(start),...spans.slice(1).flatMap(s=>Array(multiplicities.get(s.from)-1).fill(s.from))];
+    target.push(...Array(model.periodic?1:q+1).fill(end));const size=target.length-(model.periodic?1:q+1),ends=new Map();
+    if(!model.periodic){ends.set(0,spans[0].controls[0]);ends.set(size-1,spans.at(-1).controls.at(-1));
+      for(let i=1;i<spans.length;i++)if(spans[i].breakBefore){const k=target.indexOf(spans[i].from);ends.set(k-1,spans[i-1].controls.at(-1));ends.set(k,spans[i].controls[0]);}}
+    layouts.continuity={knots:target,count:size,fixed:ends};
+  }
+  const c={model,create,rational,tolerance,p,q,origin,scale,sign,toHomogeneous,spans,knots,count,fixed:orderedFixed,layouts};
+  for(const id of Object.keys(layouts)){const l=layouts[id];
+    if(l.count>1000||l.count<=q||[...l.fixed.values()].some(h=>!project(c,h)))delete layouts[id];}
+  if(representation==='either'?!Object.keys(layouts).length:!layouts[representation])return null;
   return c;
 }
 
-function inspect(c,result){
-  const {model,create,rational,p,q,tolerance,count,knots,scale,spans}=c,periodic=!!model.periodic,actual=periodic?result?.periodicKnots:result?.knots;
-  if(!result||result.degree!==q||!!result.periodic!==periodic||!Array.isArray(result.points)||result.points.length!==count||
-    !Array.from(result.points).every(point=>point&&Number.isFinite(point.x)&&Number.isFinite(point.y))||
-    !Array.isArray(actual)||actual.length!==knots.length||knots.some((v,i)=>v!==actual[i])||rational!==(result.weights!==undefined))return null;
-  if(rational&&(!Array.isArray(result.weights)||result.weights.length!==count||!Array.from(result.weights).every(w=>Number.isFinite(w)&&(w===0||w/scale!==0))))return null;
-  // Enforce the canonical endpoint projections, independently of claimed metadata.
-  for(const [i,h] of c.fixed){const expected=project(c,h),point=result.points[i];
-    if(!expected||point.x!==expected.point.x||point.y!==expected.point.y||(rational&&result.weights[i]!==expected.weight))return null;}
+function inspect(c,result,preferred){
+  const {model,create,rational,p,q,tolerance,scale,spans,layouts}=c,periodic=!!model.periodic,actual=periodic?result?.periodicKnots:result?.knots;
+  if(!result||result.degree!==q||!!result.periodic!==periodic||!Array.isArray(result.points)||
+    !Array.from(result.points).every(point=>point&&Number.isFinite(point.x)&&Number.isFinite(point.y))||rational!==(result.weights!==undefined))return null;
+  if(rational&&(!Array.isArray(result.weights)||result.weights.length!==result.points.length||!Array.from(result.weights).every(w=>Number.isFinite(w)&&(w===0||w/scale!==0))))return null;
+  // Infer the representation from the actual knots AND endpoint constraints.
+  // Coincident C0 knot vectors can have different fixed-endpoint policies.
+  const representation=(preferred?[preferred]:['bezier','continuity']).find(id=>{
+    const layout=layouts[id];return layout&&result.points.length===layout.count&&Array.isArray(actual)&&actual.length===layout.knots.length&&layout.knots.every((k,i)=>k===actual[i])&&
+      [...layout.fixed].every(([i,h])=>{const expected=project(c,h),point=result.points[i];return expected&&point.x===expected.point.x&&point.y===expected.point.y&&(!rational||result.weights[i]===expected.weight);});
+  });
+  if(!representation)return null;const {count,knots}=layouts[representation];
   const candidate=create(result);if(!candidate)return null;
   const homogeneous=c.toHomogeneous(candidate);if(!homogeneous.every(finite))return null;
-  const rebuilt=homogeneousSplineBezierSpans({controls:homogeneous,degree:q,knots:candidate.knots});if(rebuilt.length!==spans.length)return null;
+
   let errorBound=0,denominatorSpans=0,denominatorNodes=0;
   const commonKnots=[...Array(p+1).fill(0),...Array(p+1).fill(1)];
+  let index=q;
   for(let i=0;i<spans.length;i++){
-    const a=spans[i],b=rebuilt[i];if(a.from!==b.from||a.to!==b.to||(i>0&&a.breakBefore!==b.breakBefore))return null;
-    const elevated=raiseHomogeneousBezier(b.controls);if(!elevated.every(finite))return null;
+    const a=spans[i];while(candidate.knots[index+1]<=a.from)index++;
+    const b=homogeneousSplineBezierSpan({controls:homogeneous,degree:q,knots:candidate.knots,index,from:a.from,to:a.to});if(!b)return null;
+    const elevated=raiseHomogeneousBezier(b);if(!elevated.every(finite))return null;
     const radius=rational&&elevated.every(h=>h.w>0)?Math.max(...elevated.map(h=>Math.hypot(h.x/h.w,h.y/h.w))):0;
     const checked=boundedSplineDeviation(a.controls,elevated,radius,rational,p,commonKnots,{maxNodes:32768-denominatorNodes});
     if(!checked||checked.errorBound>tolerance)return null;errorBound=Math.max(errorBound,checked.errorBound);
@@ -64,12 +84,12 @@ function inspect(c,result){
   }
   return {points:result.points.map(point=>({x:point.x,y:point.y})),degree:q,periodic,[periodic?'periodicKnots':'knots']:[...knots],
     ...(rational?{weights:[...result.weights]}:{}),reduction:{fromDegree:p,toDegree:q,tolerance,errorBound,spans:spans.length,
-      representation:{id:'bezier',label:'端点固定の区間ベジェ接続',controlCount:count,originalControlCount:model.controlCount??model.points.length},
+      representation:{id:representation,label:representation==='continuity'?'元の連続性を保つノット列':'端点固定の区間ベジェ接続',controlCount:count,originalControlCount:model.controlCount??model.points.length,endpointPolicy:representation==='bezier'?'全区間端点固定':periodic?'周期の閉接続・継ぎ目は許容差内で移動':'両端と不連続点の片側端点を固定'},
       verification:{algorithm:'再次数上げ・共通Bernstein基底の全区間偏差検証'+(denominatorSpans?'・Bernstein分母範囲検査':''),
         source:'src/model/splineDegreeReduction.js',denominatorSpans,denominatorNodes}}};
 }
 
-export function validateSplineDegreeReduction(input,result){const c=prepareSplineDegreeReduction(input);return c?inspect(c,result):null;}
+export function validateSplineDegreeReduction(input,result){const c=prepareSplineDegreeReduction(input,{representation:'either'});return c?inspect(c,result):null;}
 
 export function reduceSplineDegree(input){
   const c=prepareSplineDegreeReduction(input);if(!c)return null;
@@ -87,7 +107,12 @@ export function reduceSplineDegree(input){
     layout.push(...(model.periodic?reduced.slice(0,-1):s&&!span.breakBefore?reduced.slice(1):reduced));
   }
   if(model.periodic&&q>1)layout=[...layout.slice(-(q-1)),...layout.slice(0,-(q-1))];
+  return projectSplineDegreeReduction(c,layout,'bezier');
+}
+
+export function projectSplineDegreeReduction(c,layout,representation){
   const projected=layout.map(h=>project(c,h));if(projected.some(h=>!h))return null;
-  return inspect(c,{points:projected.map(h=>h.point),degree:q,periodic:!!model.periodic,[model.periodic?'periodicKnots':'knots']:c.knots,
-    ...(rational?{weights:projected.map(h=>h.weight)}:{})});
+  return inspect(c,{points:projected.map(h=>h.point),degree:c.q,periodic:!!c.model.periodic,
+    [c.model.periodic?'periodicKnots':'knots']:c.layouts[representation].knots,
+    ...(c.rational?{weights:projected.map(h=>h.weight)}:{})},representation);
 }

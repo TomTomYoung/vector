@@ -235,3 +235,7 @@ Bernstein直接評価、BigIntの2進整数化、登録API、SVGグループ化�
 ## 端点固定・許容差付きの次数下げ
 
 `reduceSplineDegree` を追加しました。端点固定の同次Bernstein係数最小二乗をGivens QRで解き、再次数上げと全区間偏差・分母検証を行います。非周期・周期B-spline/NURBSの再編集と演算室から実装・許容差を選択でき、方式と実際の検証記録を保存します。計算122機能・GUI31ツールです。高次連続性・最少制御点・曲線L2最適化との違い、一次資料の確認範囲と未導入方式は [spline-degree-reduction.md](spline-degree-reduction.md) に記録しています。
+
+## 連続性を保つ次数下げ
+
+`reduceSplineDegree` に `continuity` を追加しました。重複度−1のノット列に対する同次Bernstein係数の全体最小二乗をGivens疎QRで解き、元の全区間の偏差・分母を検証します。通常接続点と周期継ぎ目は許容差内で移動し、非周期の両端・不連続点の片側端点は固定します。単純周期継ぎ目が消える場合は未対応です。計算122機能・GUI31ツールは変わりません。[式・使用論文・換装契約と制約](spline-continuity-reduction.md)を参照してください。

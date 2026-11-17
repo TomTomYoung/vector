@@ -73,10 +73,11 @@ test('zero tolerance accepts exact constant and straight curves including zero h
   const constant={degree:2,points:Array.from({length:3},()=>({x:2,y:3})),weights:[1,0,1],tolerance:0},out=reduce(constant);assert.equal(out.reduction.errorBound,0);compare(constant,out);
   const line={degree:2,points:[{x:0,y:0},{x:1,y:1},{x:2,y:2}],tolerance:0};assert.equal(reduce(line).reduction.errorBound,0);
 });
-test('periodic and nonperiodic output capacity is enforced before replacement calls',()=>{
+test('output capacity distinguishes default and alternative layouts before replacement calls',()=>{
   for(const periodic of [false,true]){
     const input={degree:3,periodic,points:Array.from({length:periodic?500:502},()=>({x:2,y:3}))},out=reduce(input);assert.equal(out.points.length,periodic?1000:999);compare(input,out);
-    let calls=0;assert.throws(()=>edit('bSplineCurve',{...input,points:[...input.points,{x:2,y:3}]},1e-7,v=>{calls++;return reduce(v);}));assert.equal(calls,0);
+    let calls=0;assert.throws(()=>edit('bSplineCurve',{...input,points:[...input.points,{x:2,y:3}]},1e-7,v=>{calls++;return reduce(v);}));assert.equal(calls,periodic?0:1);assert.throws(()=>edit('bSplineCurve',{...input,points:[...input.points,{x:2,y:3}]}));
+    calls=0;assert.throws(()=>edit('bSplineCurve',{...input,points:Array.from({length:1001},()=>({x:2,y:3}))},1e-7,v=>{calls++;return reduce(v);}));assert.equal(calls,0);
   }
 });
 test('catalog operation and saved SVG provenance support multiple successive reductions',()=>{

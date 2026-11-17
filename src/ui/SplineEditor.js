@@ -125,7 +125,7 @@ class SplineEditor {
       if(next.periodic)d.periodicKnotsText=next.periodicKnots.join(', ');else d.knotsText=next.knots.join(', ');
       if(next.weights)d.weightsText=next.weights.join(', ');
       this.changed();this.showPreview(false);
-      this.message=`次数 ${next.reduction.fromDegree} → ${next.degree}、制御点 ${next.points.length}個。推定偏差上限 ${next.reduction.errorBound}、許容差 ${next.reduction.tolerance}。「適用」で図形へ反映します。 `+this.message;
+      this.message=`次数 ${next.reduction.fromDegree} → ${next.degree}、${next.reduction.representation.label}、制御点 ${next.points.length}個。推定偏差上限 ${next.reduction.errorBound}、許容差 ${next.reduction.tolerance}。「適用」で図形へ反映します。 `+this.message;
     }catch(error){this.message=error.message;}
     this.refresh();
   }
@@ -270,7 +270,7 @@ class SplineEditor {
     }
 
     const reductionInfo=document.createElement('p');reductionInfo.dataset.splineReductionInfo='';reductionInfo.style.fontSize='12px';
-    reductionInfo.textContent='区間端点と周期の継ぎ目を固定し、許容差内で次数を1つ下げます。次数2〜12、結果1000制御点まで。区間を分けて保持するため制御点が増える場合があり、接続部の接線や高次の滑らかさは保証しません。許容差はローカル座標で各操作直前の曲線と比較します。';container.append(reductionInfo);
+    reductionInfo.textContent='標準方式は全区間の端点を固定し、接線以上の連続性は保証しません。連続性保持方式はノットを減らして元のノット列が定める滑らかさを保ち、通常の接続点と周期の継ぎ目は許容差内で移動します。非周期の両端と不連続点の片側端点は固定します。単純な周期継ぎ目には未対応です。次数2〜12、結果1000制御点まで。許容差はローカル座標で各操作直前の曲線と比較します。';container.append(reductionInfo);
     {
       const label=document.createElement('label');label.textContent='次数下げの許容差';label.style.cssText='display:block;font-size:12px;margin:10px 0';
       const value=document.createElement('input');value.type='text';value.value=d.reductionToleranceText;value.setAttribute('aria-label','次数下げの許容差');value.style.width='100%';

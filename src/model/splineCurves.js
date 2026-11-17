@@ -86,21 +86,28 @@ export function homogeneousSplineBezierSpans({controls,knots,degree}) {
   for (let k = degree; k < controls.length; k++) {
     const from = knots[k], to = knots[k+1];
     if (!(to > from)) continue;
-    const bezier = [];
-    for (let j = 0; j <= degree; j++) {
-      const row = controls.slice(k-degree, k+1);
-      for (let level = 1; level <= degree; level++) {
-        const t = level <= degree-j ? from : to;
-        for (let n = degree; n >= level; n--) {
-          const i = k-degree+n, width = knots[i+degree-level+1]-knots[i];
-          row[n] = mix(row[n-1], row[n], width ? (t-knots[i])/width : 0);
-        }
-      }
-      bezier.push(row[degree]);
-    }
+    const bezier = homogeneousSplineBezierSpan({controls,knots,degree,index:k,from,to});
     spans.push({from, to, controls: bezier, breakBefore: knots.filter(t => t === from).length > degree});
   }
   return spans;
+}
+// Restrict one polynomial span to any contained nonempty interval. The caller
+// supplies its support index, so removed knots can remain verification cuts.
+export function homogeneousSplineBezierSpan({controls,knots,degree,index:k,from=knots[k],to=knots[k+1]}) {
+  if(!(from>=knots[k]&&to<=knots[k+1]&&to>from))return null;
+  const bezier = [];
+  for (let j = 0; j <= degree; j++) {
+    const row = controls.slice(k-degree, k+1);
+    for (let level = 1; level <= degree; level++) {
+      const t = level <= degree-j ? from : to;
+      for (let n = degree; n >= level; n--) {
+        const i = k-degree+n, width = knots[i+degree-level+1]-knots[i];
+        row[n] = mix(row[n-1], row[n], width ? (t-knots[i])/width : 0);
+      }
+    }
+    bezier.push(row[degree]);
+  }
+  return bezier;
 }
 export function splitHomogeneousBezier(controls) {
   let row = controls; const left = [], right = [];
