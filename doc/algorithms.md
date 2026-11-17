@@ -325,3 +325,7 @@ $$
 ## B-spline・NURBSの次数上げ
 
 2026-11-17に `elevateSplineDegree` を追加し、計算121機能としました。極形式de Boorの区間ベジェ抽出、同次Bernstein次数上げ、再接続と偏差検証を組み合わせます。描画は既存のSVG折れ線です。MIT Hyperbookの次数上げ式を実装時に照合し、OCCTのAPI仕様も比較しました。参照履歴、最小ノット方式との違い、周期・有理曲線の扱い、換装と残る方式は [spline-degree-elevation.md](spline-degree-elevation.md) に記録しています。
+
+## 連続性を保つ次数上げの代替方式
+
+`elevateSplineDegree/continuity` は、元の内部・周期ノットの重複度を1つ増やす基底へ、同次ベジェ係数をGivens回転の疎QR解法で変換します。標準の区間ベジェ接続より制御点・ノットを抑え、全区間の偏差を独立検証します。描画は既存のSVG折れ線です。Piegl・Tillerの関連原論文の確認範囲、LAPACKの回転式、未導入の導関数方式との区別は [spline-continuity-elevation.md](spline-continuity-elevation.md) に記録しています。

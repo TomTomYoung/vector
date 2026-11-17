@@ -104,7 +104,7 @@ class SplineEditor {
       if(next.periodic)d.periodicKnotsText=next.periodicKnots.join(', ');else d.knotsText=next.knots.join(', ');
       if(next.weights)d.weightsText=next.weights.join(', ');
       this.changed();this.showPreview(false);
-      this.message=`次数 ${next.elevation.fromDegree} → ${next.degree}。推定偏差上限 ${next.elevation.errorBound}、許容差 ${next.elevation.tolerance}。「適用」で図形へ反映します。 `+this.message;
+      this.message=`次数 ${next.elevation.fromDegree} → ${next.degree}。${next.elevation.representation.label}、制御点 ${next.points.length}個。推定偏差上限 ${next.elevation.errorBound}、許容差 ${next.elevation.tolerance}。「適用」で図形へ反映します。 `+this.message;
     }catch(error){this.message=error.message;}
     this.refresh();
   }
@@ -239,7 +239,7 @@ class SplineEditor {
     }
 
     const elevationInfo=document.createElement('p');elevationInfo.dataset.splineElevationInfo='';elevationInfo.style.fontSize='12px';
-    elevationInfo.textContent='区間ごとのベジェ次数上げで形状を保ちます。次数は11まで、結果は1000制御点までです。再接続によって制御点とノットが増えます。検証許容差はローカル座標の各操作直前との偏差に用います。上の次数欄の直接変更は形状を保持しません。';container.append(elevationInfo);
+    elevationInfo.textContent='標準は区間ベジェ接続、連続性を保つ方式は元の内部ノットの重複度を1つ増やします。次数は11まで、結果は1000制御点までです。方式によって制御点とノットの数が変わります。検証許容差はローカル座標の各操作直前との偏差に用います。上の次数欄の直接変更は形状を保持しません。';container.append(elevationInfo);
     {
       const label=document.createElement('label');label.textContent='次数上げの検証許容差';label.style.cssText='display:block;font-size:12px;margin:10px 0';
       const value=document.createElement('input');value.type='text';value.value=d.elevationToleranceText;value.setAttribute('aria-label','次数上げの検証許容差');value.style.width='100%';

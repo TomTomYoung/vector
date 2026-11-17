@@ -4,7 +4,7 @@ export function elevateEditableSplineDegree(method,input,tolerance=1e-7,elevate=
   if(!['bSplineCurve','nurbsCurve'].includes(method)||!input)throw Error('次数上げは標準B-spline・NURBSに対応しています。');
   const request={...input,tolerance,...(method==='nurbsCurve'?{weights:input.weights??input.points?.map(()=>1)}:{})};
   if(method==='bSplineCurve')delete request.weights;
-  if(!prepareSplineDegreeElevation(request))throw Error('次数1〜11、変換後1000制御点以下、ノット・重みと0〜1000000の検証許容差を確認してください。');
+  if(!prepareSplineDegreeElevation(request,{representation:'either'}))throw Error('次数1〜11、変換後1000制御点以下、ノット・重みと0〜1000000の検証許容差を確認してください。');
   const result=elevate({...request,points:request.points.map(p=>({...p})),...(request.knots?{knots:[...request.knots]}:{}),
     ...(request.periodicKnots?{periodicKnots:[...request.periodicKnots]}:{}),...(request.weights?{weights:[...request.weights]}:{})});
   const checked=validateSplineDegreeElevation(request,result);
