@@ -43,5 +43,5 @@ export function readSplineSource(sourceText, implementationText, currentPath) {
   const automatic = create({...input,knots:undefined,periodicKnots:undefined});
   if (!m.periodic && automatic && same(automatic.knots,input.knots)) delete input.knots;
   if (m.periodic && automatic && same(automatic.knots,m.knots)) delete input.periodicKnots;
-  return {method,input,options,implementation:record.calculation?.id ?? 'default',renderer:record.rendering?.id ?? 'default'};
+  return {method,input,options,...(record.refinement?{refinement:record.refinement}:{}),implementation:record.calculation?.id ?? 'default',renderer:record.rendering?.id ?? 'default'};
 }

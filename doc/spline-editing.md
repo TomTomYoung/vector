@@ -75,3 +75,7 @@ UIと適用処理は [SplineEditor.js](../src/ui/SplineEditor.js)、保存モデ
 制御点ドラッグの実装コミット `084d3bc` の[CI](https://github.com/TomTomYoung/vector/actions/runs/43771807235)で、数値・モデル・編集85件とブラウザー操作35件が全て成功しました。
 
 [重複する周期ノット](repeated-periodic-knots.md)も次数以下で再編集できます。継ぎ目の重複は両端を合算します。次数を下げて上限を超えた場合は元図形を変更しません。
+
+## 形状を保つノット挿入
+
+非周期の標準B-spline・NURBSで、再編集欄から内部ノットを1個ずつ挿入できます。制御点・重みも同時に更新し、複数回の挿入を最後の適用で1回のUndoへまとめます。実装選択、最後の挿入方式の保存、失敗時の保持と残る制約は [spline-knot-insertion.md](spline-knot-insertion.md) を参照してください。

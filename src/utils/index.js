@@ -21,6 +21,7 @@
 
 import {createEditorHost} from "../adapters/editorHost.js";
 import {readSplineSource} from '../adapters/splineSource.js';
+import {insertEditableSplineKnot} from '../adapters/splineRefinement.js';
 import * as circleSource from '../adapters/circleSource.js';
 import * as arcSource from '../adapters/arcSource.js';
 import * as pointSetSource from '../adapters/pointSetSource.js';
@@ -50,6 +51,7 @@ import { TransformLayer, TransformManager } from './transformManager.js';
 window.VectorUtils = {
   createEditorHost,
   readSplineSource,
+  insertEditableSplineKnot,
   circleSource,
   arcSource,
   pointSetSource,

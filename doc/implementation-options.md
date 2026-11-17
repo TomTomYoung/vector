@@ -213,3 +213,7 @@ Bernstein直接評価、BigIntの2進整数化、登録API、SVGグループ化�
 [名前付き作図入力の複数保存](named-construction-inputs.md)は25ツールで実装済みです。計算・描画の選択方式は入力記録と別に維持します。[名前付きの複数方式プリセット](named-implementation-presets.md)も実装済みで、全119演算の計算・描画選択を複数保存し、明示的に適用できます。
 
 [作図セット](construction-sets.md)では、25ツールの入力と全ツールの計算・描画方式を組にして保存・復元できます。利用できない方式がある場合はセット全体の復元を止めます。入力・方式を単独で保存する従来機能も使用できます。
+
+## 保存曲線へのノット挿入
+
+非周期のB-spline・NURBSの再編集で、既存のBoehm系 `insertSplineKnot` を利用できます。ノット挿入の実装を曲線計算とは別に選択し、下書きへ反映して最後に適用します。入出力検証と方式記録、換装契約は [spline-knot-insertion.md](spline-knot-insertion.md) に記録しています。

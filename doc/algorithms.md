@@ -307,3 +307,5 @@ $$
 2026-11-17にB-spline・NURBSの単純ノットを周期延長する実装を追加し、Open CASCADEの公式資料でノットと制御点の周期関係を照合しました。計算・描画の手順、参照元との関係、コード転用の有無と残る制約は [nonuniform-periodic-knots.md](nonuniform-periodic-knots.md) に記録しています。ツールプロパティの標準実装の説明も更新しています。
 
 周期ノットの重複度を次数以下まで拡張し、両端をまたぐ重複度と延長時の区間幅を検証します。2026-11-17の参照資料・数値上の処理・検証は [repeated-periodic-knots.md](repeated-periodic-knots.md) にあります。
+
+既存の `insertSplineKnot` を非周期B-spline・NURBSの[再編集画面](spline-knot-insertion.md)へ接続しました。2026-11-17にSheneの単一ノット挿入・NURBSへの拡張の資料を照合し、使用実装・最後の挿入方式・形状保持と描画近似の違いを記録しています。

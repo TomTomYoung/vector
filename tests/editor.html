@@ -3409,6 +3409,45 @@ await check('Repeated periodic draft records and imported construction sets rest
   }finally{source.element.remove();target?.element.remove();}
 });
 
+await check('Spline knot insertion refines drafts repeatedly and applies in place as one Undo/Redo without changing geometry',async()=>{
+  for(const name of ['bSplineCurve','nurbsCurve']){
+    fixture();await tick();let curve=addEditableSpline(name,{points:editPoints,degree:3,...(name==='nurbsCurve'?{weights:[1,2,1,3]}:{})});curve.setAttribute('transform','translate(20 30) scale(0.8)');w.saveState();await tick();w.undoStack.length=0;
+    const original=curve.getAttribute('data-vector-spline'),length=curve.getTotalLength(),path=curve.getAttribute('d');activate('select');w.selectTool.selectObject(curve);splineAction('begin');
+    assert(doc.querySelector('[aria-label="ノット挿入の実装"]').parentElement.textContent.includes('Boehm'),'insertion algorithm visible');
+    for(const t of ['0.3','0.6']){splineField('挿入するノット値',t);splineAction('insert-knot');}
+    assert(draftPoints().length===6&&canvas.querySelectorAll('[data-spline-control-index]').length===6&&curve.getAttribute('data-vector-spline')===original&&curve.getAttribute('d')===path&&w.undoStack.length===0,'refined draft only');
+    assert(canvas.querySelector('[data-vector-preview="spline-edit"]'),'refined preview');splineAction('apply');await tick();const changed=curve.getAttribute('data-vector-spline');
+    assert(changed!==original&&JSON.parse(changed).model.points.length===6&&curve===doc.getElementById('editable-spline')&&curve.getAttribute('transform')==='translate(20 30) scale(0.8)'&&curve.getAttribute('stroke')==='#624382'&&w.undoStack.length===1,'apply preserves identity and appearance with one history entry');
+    assert(JSON.parse(curve.getAttribute('data-vector-implementation')).refinement.t===0.6&&doc.querySelector('[data-recorded-implementation]').textContent.includes('最後のノット挿入'),'last insertion algorithm saved and displayed');
+    assert(Math.abs(curve.getTotalLength()-length)<0.2,'same curve within polyline sampling tolerance');w.undo();assert(doc.getElementById('editable-spline').getAttribute('data-vector-spline')===original,'undo insertion');w.redo();curve=doc.getElementById('editable-spline');assert(curve.getAttribute('data-vector-spline')===changed,'redo insertion');
+    w.DrawingDocument.open(w.DrawingDocument.serialize());curve=doc.getElementById('editable-spline');activate('select');w.selectTool.selectObject(curve);splineAction('begin');assert(draftPoints().length===6&&w.toolPropertiesPanel.splineEditor.input().knots.includes(0.3)&&w.toolPropertiesPanel.splineEditor.draft.refinement.t===0.6,'refined model and insertion record reopen');splineAction('apply');assert(JSON.parse(curve.getAttribute('data-vector-implementation')).refinement.t===0.6,'insertion record survives later reediting');
+  }
+});
+await check('Invalid or cancelled spline refinements preserve input preview original shape and history',async()=>{
+  fixture();await tick();const curve=addEditableSpline('bSplineCurve',{points:editPoints,degree:3});w.saveState();await tick();w.undoStack.length=0;activate('select');w.selectTool.selectObject(curve);splineAction('begin');
+  const original=curve.getAttribute('data-vector-spline');splineField('挿入するノット値','0.5');splineAction('insert-knot');const draft=JSON.stringify(w.toolPropertiesPanel.splineEditor.input()),preview=canvas.querySelector('[data-vector-preview="spline-edit"]');
+  for(const value of ['', 'abc','0','1','Infinity']){splineField('挿入するノット値',value);splineAction('insert-knot');assert(JSON.stringify(w.toolPropertiesPanel.splineEditor.input())===draft&&canvas.querySelector('[data-vector-preview="spline-edit"]')===preview&&curve.getAttribute('data-vector-spline')===original&&w.undoStack.length===0,'invalid insertion leaves draft intact');}
+  splineField('挿入するノット値','0.5');splineAction('insert-knot');splineAction('insert-knot');const full=JSON.stringify(w.toolPropertiesPanel.splineEditor.input());splineAction('insert-knot');assert(JSON.stringify(w.toolPropertiesPanel.splineEditor.input())===full&&doc.querySelector('[data-spline-edit-status]').textContent.includes('重複度'),'multiplicity limit');
+  const xml=w.DrawingDocument.serialize();assert(!xml.includes('spline-edit')&&JSON.parse(new w.DOMParser().parseFromString(xml,'image/svg+xml').querySelector('[data-vector-spline]').getAttribute('data-vector-spline')).model.points.length===4,'unapplied refinement excluded from SVG');
+  splineAction('cancel');assert(curve.getAttribute('data-vector-spline')===original&&w.undoStack.length===0,'cancel original');
+  fixture();await tick();const periodic=addEditableSpline('bSplineCurve',{points:editPoints,degree:3,periodic:true});activate('select');w.selectTool.selectObject(periodic);splineAction('begin');assert(!doc.querySelector('[data-spline-action="insert-knot"]')&&doc.querySelector('[data-spline-knot-info]').textContent.includes('未対応'),'periodic refinement explicitly unavailable');splineAction('cancel');
+});
+await check('Per-edit insertion implementations receive isolated inputs and cannot change global settings or commit malformed outputs',async()=>{
+  fixture();await tick();const curve=addEditableSpline('bSplineCurve',{points:editPoints,degree:3}),host=w.toolManager.host;let calls=0;
+  host.registerImplementation('insertSplineKnot',{id:'refine-test',label:'Refine test',algorithm:'Delegated Boehm test',run:(input,ops,execute)=>{calls++;return execute('insertSplineKnot',input,{implementation:'default'});}});
+  host.registerImplementation('insertSplineKnot',{id:'refine-bad',label:'Invalid',algorithm:'Malformed test output',run:input=>{input.points[0].x=999;return {...input,degree:2};}});
+  host.registerImplementation('bSplineCurve',{id:'refine-other-curve',label:'Other',algorithm:'Alternate curve test',run:(input,ops,execute)=>execute('bSplineCurve',input,{implementation:'default'})});
+  activate('select');w.selectTool.selectObject(curve);splineAction('begin');const initial=JSON.stringify(w.toolPropertiesPanel.splineEditor.input());splineField('ノット挿入の実装','refine-bad','change');splineField('挿入するノット値','0.4');splineAction('insert-knot');assert(JSON.stringify(w.toolPropertiesPanel.splineEditor.input())===initial&&host.describe('insertSplineKnot').id==='default','bad replacement does not mutate draft or selection');
+  splineField('ノット挿入の実装','refine-test','change');splineField('再計算の実装','refine-other-curve','change');splineAction('insert-knot');assert(calls===0&&doc.querySelector('[data-spline-edit-status]').textContent.includes('標準'),'alternate curve computation rejected');
+  splineField('再計算の実装','default','change');splineAction('insert-knot');assert(calls===1&&draftPoints().length===5&&host.describe('insertSplineKnot').id==='default','selected insertion called once without changing global choice');splineAction('apply');assert(JSON.parse(curve.getAttribute('data-vector-spline')).model.points.length===5&&JSON.parse(curve.getAttribute('data-vector-implementation')).refinement.id==='refine-test','valid replacement and its implementation recorded');
+});
+await check('Inserted controls remain draggable and unrepresentable signed-weight refinements refuse partial mutation',async()=>{
+  frame.scrollIntoView();fixture();await tick();let curve=addEditableSpline('nurbsCurve',{points:editPoints,degree:3,weights:[1,2,1,3]});activate('select');w.selectTool.selectObject(curve);splineAction('begin');splineField('挿入するノット値','0.4');splineAction('insert-knot');
+  const snap=w.snapToGrid,ortho=w.orthoMode;w.snapToGrid=false;w.orthoMode=false;
+  try{const from=draftPoints()[2],to={x:from.x+18,y:from.y+8};pointer('pointerdown',splineHandle(2),localScreen(curve,from));pointer('pointerup',doc,localScreen(curve,to));assert(closePoint(draftPoints()[2],to),'new control draggable');splineAction('apply');assert(JSON.parse(curve.getAttribute('data-vector-spline')).model.points.length===5,'dragged refinement applied');}finally{w.snapToGrid=snap;w.orthoMode=ortho;}
+  fixture();await tick();curve=addEditableSpline('nurbsCurve',{points:editPoints.slice(0,2),degree:1,weights:[1,-1]});activate('select');w.selectTool.selectObject(curve);splineAction('begin');const before=JSON.stringify(w.toolPropertiesPanel.splineEditor.input()),original=curve.getAttribute('data-vector-spline');splineField('挿入するノット値','0.5');splineAction('insert-knot');assert(JSON.stringify(w.toolPropertiesPanel.splineEditor.input())===before&&curve.getAttribute('data-vector-spline')===original&&doc.querySelector('[data-spline-edit-status]').textContent.includes('失敗'),'zero homogeneous weight refused atomically');splineAction('cancel');
+});
+
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
 </script>
