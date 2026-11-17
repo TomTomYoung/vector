@@ -49,3 +49,5 @@ Matthias Eck、Least squares degree reduction of Bézier curves、Computer-Aided
 連続性保持基底へ適応的にノットを挿入する方式、端点導関数を指定するL2近似、任意位置の最適分割、複数操作の累積誤差予算、不要ノットの一括除去、極を含む枝単位の操作、無限遠を保持するモデル、曲面・区間別次数、厳密偏差証明は未導入です。
 
 検証は [数値・換装・保存テスト](../tests/adaptiveSplineReduction.test.mjs)と[実Chromeの編集・Workerテスト](../tests/editor.html)です。検証結果は [HANDOFF](HANDOFF.md)へ記録します。
+
+[PR #96](https://github.com/TomTomYoung/vector/pull/96) の `194f44e` を [CI 44134424972](https://github.com/TomTomYoung/vector/actions/runs/44134424972) で検証し、Node 373件・実Chrome 280件が成功しました。
