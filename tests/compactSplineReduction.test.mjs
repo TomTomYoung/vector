@@ -63,7 +63,7 @@ test('periodic repeated seams retain the original interval and cyclic continuity
     const spans=splineBezierSpans(nurbsCurve(out));for(let order=0;order<=Math.max(0,3-(periodicKnots.filter(t=>t===periodicKnots[0]||t===periodicKnots.at(-1)).length-1));order++){
       const a=jet(spans[0],false,order),b=jet(spans.at(-1),true,order);assert.ok(Math.hypot(a.x-b.x,a.y-b.y)<1e-8,'cyclic derivative');}
   }
-  assert.equal(reduce({degree:3,points:points(6),periodic:true,tolerance:1e6}),null,'simple seam does not silently move');
+  assert.equal(reduce({degree:3,points:points(6),periodic:true,tolerance:1e6}),null,'no surviving periodic knots cannot define a lower-degree basis');
   assert.equal(reduce({degree:3,points:points(4),periodic:true,periodicKnots:[0,0,1,2,3],tolerance:1e6}),null,'insufficient remaining periodic basis');
 });
 test('zero and mixed rational weights, common extreme scales and translated coordinates survive the global fit',()=>{

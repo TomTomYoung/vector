@@ -60,8 +60,10 @@ Matthias Eck、Least squares degree reduction of Bézier curves、Computer-Aided
 
 Jianmin Zheng・Guozhao Wang、Perturbing Bézier coefficients for best constrained degree reduction in the L2-norm、Graphical Models 65(6), 351–368, 2003、[DOI:10.1016/j.gmod.2003.07.001](https://doi.org/10.1016/j.gmod.2003.07.001)。出版社の公開概要・プレビューを確認しました。係数を使う近似と曲線の $L_2$ 近似の関係を扱う関連論文です。今回の無重み係数最小二乗へ、その最適性保証を流用しません。
 
-単純周期継ぎ目の移動を伴う次数下げ、曲線 $L_2$ 最適化、許容差に応じた自動区間分割、複数段階の全体誤差予算、不要ノットの一括除去、極を含む枝単位の簡約、射影無限遠を保持するモデル、曲面・区間別次数は未導入です。自動分割や曲面・混合次数方式では、既存の単一次数・有限2D制御点・固定ノット検証契約を拡張する必要があります。
+曲線 $L_2$ 最適化、許容差に応じた自動区間分割、複数段階の全体誤差予算、不要ノットの一括除去、極を含む枝単位の簡約、射影無限遠を保持するモデル、曲面・区間別次数は未導入です。自動分割や曲面・混合次数方式では、既存の単一次数・有限2D制御点・固定ノット検証契約を拡張する必要があります。
 
 [splineDegreeReduction.test.mjs](../tests/splineDegreeReduction.test.mjs)は次数2〜12、非周期・周期、非一様・重複・不連続・非クランプ、零負重み・極端な共通倍率、独立点評価、近似許容差、固定端点、不正換装、入力破壊、1000制御点境界、連続した次数下げと保存記録を検証します。[editor.html](../tests/editor.html)はプレビュー・適用・取消、方式表示、Undo/Redo・SVG往復、周期の閉曲線、許容差と次数下限、外部実装の再検証、制御点ドラッグ、演算室Workerと旧121演算セッションの取り込みを扱います。
 
 連続性保持方式の計算・端点条件・換装判定・使用論文は [spline-continuity-reduction.md](spline-continuity-reduction.md) を参照してください。
+
+単純な継ぎ目を移す[周期曲線の次数下げ](periodic-degree-reduction.md)は、連続性保持方式へ接続済みです。

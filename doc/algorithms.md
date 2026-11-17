@@ -336,4 +336,6 @@ $$
 
 ## 連続性保持の次数下げ
 
-`reduceSplineDegree` の `continuity` は、ノット重複度と連続性の関係をSheneの教材で照合し、重複度−1の基底に対して同次Bernstein係数の全体最小二乗をGivens疎QRで解きます。描画は既存のSVG折れ線です。Yong・Hu・Sun・Tanの一般化B差商による関連論文の確認範囲と相違、単純周期継ぎ目などの未導入範囲は [spline-continuity-reduction.md](spline-continuity-reduction.md) に記録しています。
+`reduceSplineDegree` の `continuity` は、ノット重複度と連続性の関係をSheneの教材で照合し、重複度−1の基底に対して同次Bernstein係数の全体最小二乗をGivens疎QRで解きます。描画は既存のSVG折れ線です。Yong・Hu・Sun・Tanの一般化B差商による関連論文の確認範囲と相違、未導入範囲は [spline-continuity-reduction.md](spline-continuity-reduction.md) に記録しています。
+
+2026-11-18に、単純周期継ぎ目が消える次数下げへ、残存ノットへの始端移動と元の全区間係数の再配置を追加しました。Open CASCADEの周期基底・SetOrigin仕様とSheneの連続性の資料を確認し、Givens疎QRと全区間検証へ接続しています。[計算・描画・参照範囲](periodic-degree-reduction.md)。
