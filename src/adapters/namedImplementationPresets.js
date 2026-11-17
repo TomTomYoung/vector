@@ -1,3 +1,4 @@
+import {movePreset,sortPresets} from './presetOrder.js';
 import {parseImplementationPreferences} from './implementationPreferences.js';
 
 const object=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
@@ -44,6 +45,8 @@ export function createNamedImplementationPresets(host,{createId=()=> 'methods-'+
     get canRecord(){return typeof host.exportPreferences==='function';},
     get canApply(){return typeof host.restorePreferences==='function';},
     replaceRecords(value){const next=parseNamedImplementationPresets(value);data=next?.entries.length?next:undefined;},
+    move(id,direction){const selected=this.selectedId(),ok=mutate(next=>{movePreset(next.entries,id,direction);},'記録の順序を変更しました。');if(ok){chosen=selected;}return ok;},
+    sort(){const selected=this.selectedId(),ok=mutate(next=>{sortPresets(next.entries);},'記録を名前順に並べ替えました。');if(ok){chosen=selected;}return ok;},
     snapshot:()=>parseNamedImplementationPresets(data),
     list(){return this.snapshot()?.entries??[];},
     selectedId(){return data?.entries.some(e=>e.id===chosen)?chosen:data?.entries[0]?.id;},

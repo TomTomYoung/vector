@@ -1,3 +1,4 @@
+import {movePreset,sortPresets} from './presetOrder.js';
 import {parseConstructionInputPresets,validateConstructionInputData,supportsConstructionInput,constructionInputMode} from './constructionInputPresets.js';
 
 const object = v => v!==null && typeof v==='object' && !Array.isArray(v);
@@ -45,6 +46,8 @@ export function createNamedConstructionInputs({createId=()=> 'preset-'+crypto.ra
   };
   return {state,
     replaceRecords(value){const next=parseNamedConstructionInputs(value);data=next?.entries.length?next:undefined;},
+    move(tool,id,direction){const selected=this.selectedId(tool),ok=mutate(next=>{movePreset(next.entries,id,direction,tool);},'記録の順序を変更しました。');if(ok){chosen.set(tool,selected);}return ok;},
+    sort(tool){const selected=this.selectedId(tool),ok=mutate(next=>{sortPresets(next.entries,tool);},'記録を名前順に並べ替えました。');if(ok){chosen.set(tool,selected);}return ok;},
     snapshot:()=>parseNamedConstructionInputs(data),
     list(tool){return this.snapshot()?.entries.filter(e=>e.tool===tool)??[];},
     selectedId(tool){const items=data?.entries.filter(e=>e.tool===tool)??[];return items.some(e=>e.id===chosen.get(tool))?chosen.get(tool):items[0]?.id;},

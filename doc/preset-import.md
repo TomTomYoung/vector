@@ -32,4 +32,6 @@
 
 [presetImport.test.mjs](../tests/presetImport.test.mjs) は5形式、選択追加、独立コピー、新ID・重複名、既存選択の維持、保存失敗時の巻戻し、不正選択・上限超過、未知版・未登録方式、長い名前の番号付けを検証します。[editor.html](../tests/editor.html) は実際の取込画面、現在の下書きと図形の維持、全種類の1段階Undo/Redo、選択したセットによる実作図、SVGノードの非挿入、不正XML・メタデータ・名前、古い読込の破棄、図面切替、未知版・名前の文字列表示、上限超過時の非追加を検証します。
 
-幾何計算・描画アルゴリズムは追加していません。各方式の文献と実装元は [algorithms.md](algorithms.md)、換装条件は [implementation-options.md](implementation-options.md) を参照してください。記録の検索・並べ替え、既存記録への上書き、図形そのものの部分取り込み、外部実装コードの読込、クラウド同期は未導入です。
+幾何計算・描画アルゴリズムは追加していません。各方式の文献と実装元は [algorithms.md](algorithms.md)、換装条件は [implementation-options.md](implementation-options.md) を参照してください。既存記録への上書き、図形そのものの部分取り込み、外部実装コードの読込、クラウド同期は未導入です。
+
+[名前付き記録の検索・並べ替え](preset-search-order.md)は実装済みです。記録名とIDで検索し、上下移動や名前順の並びをSVGへ保存できます。
