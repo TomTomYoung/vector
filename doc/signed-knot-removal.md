@@ -48,10 +48,12 @@ Bernstein検証を使った成功結果には `removal.denominator` を追加し
 
 2026-11-17に、MITのPatrikalakis・Maekawa・Choによる [Bézier曲線の定義と性質](https://web.mit.edu/hyperbook/Patrikalakis-Maekawa-Cho/node12.html)、[de Casteljau分割](https://web.mit.edu/hyperbook/Patrikalakis-Maekawa-Cho/node13.html)、[Boehm挿入・Tillerのノット削除](https://web.mit.edu/hyperbook/Patrikalakis-Maekawa-Cho/node18.html)、Sheneの [同次座標でのde Boor評価](https://pages.mtu.edu/~shene/COURSES/cs3621/NOTES/spline/de-Boor.html) を照合しました。係数範囲による分母検査と上記の偏差式を本リポジトリの検証として組み合わせたもので、新しい名前付き論文の実装を移植したものではありません。既存の極形式実装の参照資料は [spline-branches.md](spline-branches.md#実装時に参照した一次資料)、Tiller原論文の確認範囲は [spline-knot-removal.md](spline-knot-removal.md#参照した資料と未導入部分)です。
 
-全計算はbinary64による推定であり、外向き丸めによる厳密な区間保証ではありません。分母が実際には零でなくても、係数範囲・除外幅・処理上限で確認できない入力は拒否する場合があります。極を含む曲線の枝ごとの削除、可除特異点の相殺、厳密な根分離、無限遠の同次制御点の編集、全ノット一括簡約、許容差付き次数下げ、曲面は未導入です。
+全計算はbinary64による推定であり、外向き丸めによる厳密な区間保証ではありません。分母が実際には零でなくても、係数範囲・除外幅・処理上限で確認できない入力は拒否する場合があります。極を含む曲線の枝ごとの削除、可除特異点の相殺、厳密な根分離、無限遠の同次制御点の編集、全ノット一括簡約、高次連続性を保つ次数下げ、曲面は未導入です。
 
 [signedSplineRemoval.test.mjs](../tests/signedSplineRemoval.test.mjs) は次数1〜12、零・混在重み、正負の共通スケール、独立したde Boor評価、近似の偏差、分母の零・重根・近接根・未検証区間、分割上限、符号の異なる不連続区間、周期の内部・継ぎ目・区間移動、1000制御点、換装の途中失敗・偽装、保存往復を検証します。[editor.html](../tests/editor.html) は方式表示・保存・Undo/Redo、周期の閉じ方、零重み制御点、ドラッグ、極・不正結果の拒否、取消、演算室Workerを確認します。
 
 区間ベジェ化・同次Bernstein式・再接続による[形状を保つ次数上げ](spline-degree-elevation.md)は実装済みです。制御点とノットが増える表現を返します。
 
 元の内部・周期ノットの重複度を1つ増やす[連続性保持の次数上げ](spline-continuity-elevation.md)も選択できます。
+
+端点を固定した同次係数最小二乗による[許容差付き次数下げ](spline-degree-reduction.md)は実装済みです。区間ベジェ接続を返し、高次連続性や最少制御点は保証しません。

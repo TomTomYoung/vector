@@ -67,7 +67,7 @@ window.vectorEditorOptions = {
 
 ## 領域復元・交点・制約を組み合わせる
 
-全121機能に、次の4つを含みます。演算室の「領域復元・交点・拘束」から入力例を実行できます。B-spline・NURBSの作図データを返す追加2機能は上記の方式選択文書を参照してください。
+全122機能に、次の4つを含みます。演算室の「領域復元・交点・拘束」から入力例を実行できます。B-spline・NURBSの作図データを返す追加2機能は上記の方式選択文書を参照してください。
 
 - `regionBoundary.js` の `regionBoundary({cells,tolerance?})` は、内部が重ならない凸セル群から外周・穴・包含関係と面積を復元します。
 - `bezierIntersections.js` の `bezierIntersections({first,second,...})` は、制御点列から交点と重複区間を返します。`complete: false` のときは `unresolved` に未確定のパラメータ区間が残ります。一般の非線形再パラメータ化による重なりは未確定になる場合があります。
@@ -85,3 +85,5 @@ window.vectorEditorOptions = {
 零・正負混在の重み、分母検証の固定上限、返す検証記録、極を含む場合の制約は [signed-knot-removal.md](../../doc/signed-knot-removal.md) を参照してください。
 
 B-spline・NURBSの形状を保つ `elevateSplineDegree` は非周期・周期に対応します。区間ベジェ化とBernstein次数上げを用い、検証済みの編集入力を返します。[契約・限界・参照資料](../../doc/spline-degree-elevation.md)を参照してください。
+
+`reduceSplineDegree` は非周期・周期B-spline/NURBSの次数を許容差内で1つ下げ、端点固定の区間ベジェ接続表現を返します。入力次数2〜12、出力1000制御点までです。[最小二乗・独立検証・換装契約と限界](../../doc/spline-degree-reduction.md)を参照してください。
