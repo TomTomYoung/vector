@@ -3959,8 +3959,8 @@ function adaptiveReductionInput(name='bSplineCurve',periodic=false){return {degr
 await check('Adaptive degree reduction displays subdivision and retains identity, Undo/Redo and SVG provenance',async()=>{
   for(const name of ['bSplineCurve','nurbsCurve']){
     fixture();await tick();let curve=addEditableSpline(name,adaptiveReductionInput(name));curve.setAttribute('transform','translate(20 30) scale(0.8)');w.saveState();await tick();w.undoStack.length=0;const original=curve.getAttribute('data-vector-spline'),preferences=JSON.stringify(w.toolManager.host.exportPreferences());
-    activate('select');w.selectTool.selectObject(curve);splineAction('begin');splineField('次数下げの許容差','.02');splineAction('preview');const editor=w.toolPropertiesPanel.splineEditor,before=JSON.stringify(editor.input()),preview=editor.preview;
-    splineField('次数下げの実装','default','change');splineAction('reduce-degree');assert(JSON.stringify(editor.input())===before&&editor.preview===preview,'fixed intervals fail atomically');
+    activate('select');w.selectTool.selectObject(curve);splineAction('begin');splineField('次数下げの許容差','.02');splineField('次数下げの実装','default','change');splineAction('preview');const editor=w.toolPropertiesPanel.splineEditor,before=JSON.stringify(editor.input()),preview=editor.preview;
+    splineAction('reduce-degree');assert(JSON.stringify(editor.input())===before&&editor.preview===preview,'fixed intervals fail atomically');
     splineField('次数下げの実装','adaptive','change');assert(doc.querySelector('[aria-label="次数下げの実装"]').parentElement.textContent.includes('適応二分割'),'algorithm selectable');splineAction('reduce-degree');
     const subdivision=editor.draft.refinement.subdivision;assert(editor.input().degree===2&&subdivision.splits>0&&subdivision.resultSpans>subdivision.originalSpans&&editor.message.includes('自動分割')&&editor.preview,'subdivided preview');assert(curve.getAttribute('data-vector-spline')===original&&w.undoStack.length===0,'source and history unchanged before apply');
     splineAction('apply');await tick();const changed=curve.getAttribute('data-vector-spline'),record=JSON.parse(curve.getAttribute('data-vector-implementation'));
