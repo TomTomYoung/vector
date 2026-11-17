@@ -1,5 +1,5 @@
 import {nonperiodicSplineEvaluation} from './splineCurves.js';
-import {homogeneousSplineDeviation} from './splineDeviation.js';
+import {boundedSplineDeviation} from './splineDeviation.js';
 
 // Reverse the local Boehm equations from both sides, then reinsert on the
 // original basis to estimate a deviation bound. See doc/spline-knot-removal.md.
@@ -15,12 +15,13 @@ export function prepareSplineKnotRemoval(input) {
   const index=knots.lastIndexOf(t);if(index<0)return null;
   const reduced=[...knots];reduced.splice(index,1);
   const k=reduced.findLastIndex(u=>u<=t),s=reduced.filter(u=>u===t).length;
-  const origin=points[0],sign=rational?Math.sign(model.weights[0]):1;
+  const origin=points[0],sign=rational?Math.sign(model.weights.find(w=>w!==0)):1;
   const scale=rational?Math.max(...model.weights.map(Math.abs)):1;
   const weights=rational?model.weights.map(w=>sign*(w/scale)):points.map(()=>1);
-  if(!weights.every(w=>Number.isFinite(w)&&w>0))return null;
+  if(!weights.every((w,i)=>Number.isFinite(w)&&(!rational||model.weights[i]===0||w!==0)))return null;
   const homogeneous=points.map((point,i)=>({x:(point.x-origin.x)*weights[i],y:(point.y-origin.y)*weights[i],w:weights[i]}));
   if(!homogeneous.every(finite))return null;
+  if(rational&&!weights.every(w=>w>0)&&!boundedSplineDeviation(homogeneous,homogeneous,0,true,p,knots))return null;
   return {model,create,rational,t,tolerance,reduced,k,left:k-p,right:k-s,origin,sign,scale,homogeneous};
 }
 const finite=h=>h&&Number.isFinite(h.x)&&Number.isFinite(h.y)&&Number.isFinite(h.w);
@@ -34,7 +35,7 @@ function inspect(c,result) {
     !Array.isArray(result.knots)||result.knots.length!==reduced.length||reduced.some((u,i)=>u!==result.knots[i])||
     rational!==(result.weights!==undefined))return null;
   if(rational&&(!Array.isArray(result.weights)||result.weights.length!==result.points.length||
-    !Array.from(result.weights).every(w=>Number.isFinite(w)&&sign*(w/scale)>0)))return null;
+    !Array.from(result.weights).every(w=>Number.isFinite(w)&&(w===0||w/scale!==0))))return null;
   const candidate=create(result);if(!candidate)return null;
   const controls=candidate.points.map((p,i)=>{
     const w=rational?sign*(candidate.weights[i]/scale):1;
@@ -54,13 +55,13 @@ function inspect(c,result) {
     if(!finite(rebuilt))return null;
     reconstructed.push(rebuilt);
   }
-  // With positive normalized weights, the candidate lies in its control hull.
-  // |C-D| <= (max |H-H'| + R max |w-w'|) / min w on the common basis.
-  const radius=rational?Math.max(...candidate.points.map(p=>Math.hypot(p.x-origin.x,p.y-origin.y))):0;
-  const errorBound=homogeneousSplineDeviation(c.homogeneous,reconstructed,radius,rational);
-  if(errorBound===null||errorBound>tolerance)return null;
+  // Positive reinserted weights admit a control-hull bound. Otherwise bound
+  // both denominator functions over every Bernstein subinterval.
+  const radius=rational&&reconstructed.every(h=>h.w>0)?Math.max(...reconstructed.map(h=>Math.hypot(h.x/h.w,h.y/h.w))):0;
+  const deviation=boundedSplineDeviation(c.homogeneous,reconstructed,radius,rational,model.degree,model.knots);
+  if(!deviation||deviation.errorBound>tolerance)return null;
   return {points:candidate.points.map(p=>({x:p.x,y:p.y})),degree:model.degree,knots:[...reduced],
-    ...(rational?{weights:[...candidate.weights]}:{}),removal:{t,tolerance,errorBound}};
+    ...(rational?{weights:[...candidate.weights]}:{}),removal:{t,tolerance,...deviation}};
 }
 
 // Also checks replacement implementations; never trust their reported deviation.
@@ -73,8 +74,8 @@ export function removeSplineKnot(input) {
   const c=prepareSplineKnotRemoval(input);if(!c)return null;
   const {model,left,right,homogeneous:h,rational,origin,sign,scale}=c,n=model.points.length-1;
   const controls=Array(n);
-  for(let i=0;i<=left;i++)controls[i]={...h[i]};
-  for(let i=Math.max(left+1,right);i<n;i++)controls[i]={...h[i+1]};
+  for(let i=0;i<=left;i++)controls[i]={...h[i],point:model.points[i]};
+  for(let i=Math.max(left+1,right);i<n;i++)controls[i]={...h[i+1],point:model.points[i+1]};
   let l=left,r=right;
   while(r-l>1){
     const a=alpha(c,l+1),b=alpha(c,r);
@@ -90,9 +91,11 @@ export function removeSplineKnot(input) {
       controls[--r]=value;
     }
     if(!rational)value.w=1;
-    if(!finite(value)||value.w<=0)return null;
+    if(!finite(value))return null;
   }
-  const points=controls.map(h=>({x:origin.x+h.x/h.w,y:origin.y+h.y/h.w}));
+  if(!controls.every(h=>finite(h)&&(h.w!==0||(h.x===0&&h.y===0))))return null;
+  const points=controls.map(h=>h.w===0?{...(h.point??origin)}:{x:origin.x+h.x/h.w,y:origin.y+h.y/h.w});
   const weights=rational?controls.map(h=>sign*h.w*scale):undefined;
+  if(weights?.some((w,i)=>controls[i].w!==0&&w===0))return null;
   return inspect(c,{degree:model.degree,knots:c.reduced,points,...(rational?{weights}:{})});
 }

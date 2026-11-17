@@ -223,6 +223,7 @@ class ToolPropertiesPanel {
             (record.refinement?.tool==='insertSplineKnot' ? ` / 最後のノット挿入 ${record.refinement.algorithm} (${record.refinement.id})、値 ${record.refinement.t}` +
               (record.refinement.periodic ? `、周期処理 ${record.refinement.periodic.algorithm}、周期値 ${record.refinement.periodic.t}` : '') : '') +
             (record.refinement?.tool==='removeSplineKnot' ? ` / 最後のノット削除 ${record.refinement.algorithm} (${record.refinement.id})、値 ${record.refinement.t}、許容差 ${record.refinement.tolerance}、推定偏差上限 ${record.refinement.errorBound}、検証 ${record.refinement.verification?.algorithm??'不明'}` +
+              (record.refinement.denominator?`、分母検証 ${record.refinement.denominator.algorithm}、正規化分母の絶対値下限（元／候補） ${record.refinement.denominator.minimumOriginal}／${record.refinement.denominator.minimumCandidate}、検査ノード ${record.refinement.denominator.nodes}`:'') +
               (record.refinement.periodic?`、周期処理 ${record.refinement.periodic.algorithm}、周期値 ${record.refinement.periodic.t}`:'') +
               (Array.isArray(record.refinement.periodic?.domainShift?.from)&&Array.isArray(record.refinement.periodic?.domainShift?.to)?`、パラメータ区間 ${record.refinement.periodic.domainShift.from.join('〜')} → ${record.refinement.periodic.domainShift.to.join('〜')}、周期 ${record.refinement.periodic.domainShift.period}`:'') : '') +
             (record.parameters ? ' / 図形設定 ' + JSON.stringify(record.parameters) : '') +

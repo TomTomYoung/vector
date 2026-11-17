@@ -77,8 +77,13 @@ export function splineBezierSpans(shape) {
     const w = shape.weights ? shape.weights[i] / scale : 1;
     return {x: p.x * w, y: p.y * w, w};
   });
+  return homogeneousSplineBezierSpans({controls,knots,degree});
+}
+
+// Already normalized homogeneous data, shared by rendering and error validation.
+export function homogeneousSplineBezierSpans({controls,knots,degree}) {
   const spans = [];
-  for (let k = degree; k < points.length; k++) {
+  for (let k = degree; k < controls.length; k++) {
     const from = knots[k], to = knots[k+1];
     if (!(to > from)) continue;
     const bezier = [];
@@ -97,7 +102,7 @@ export function splineBezierSpans(shape) {
   }
   return spans;
 }
-function split(controls) {
+export function splitHomogeneousBezier(controls) {
   let row = controls; const left = [], right = [];
   while (row.length) {
     left.push(row[0]); right.push(row.at(-1));
@@ -147,7 +152,7 @@ export function sampleSplineBranches(shape, {sampleCount = 80, poleTolerance = 1
       } else {
         const mid = from/2+to/2;
         if (depth >= maxDepth || mid <= from || mid >= to) {omit(from, to, 'unresolved'); continue;}
-        const [left, right] = split(controls);
+        const [left, right] = splitHomogeneousBezier(controls);
         pending.push({controls: right, from: mid, to, depth: depth+1}, {controls: left, from, to: mid, depth: depth+1});
       }
     }

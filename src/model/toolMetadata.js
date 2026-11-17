@@ -547,7 +547,7 @@ export const toolMetadata = Object.freeze({
   },
   "removeSplineKnot": {
     "label": "標準",
-    "algorithm": "Boehm挿入の両側逆算と再挿入による偏差上限の推定（非周期・同符号重み）",
+    "algorithm": "Boehm挿入の両側逆算と再挿入偏差検証。有理曲線は共通基底またはBernstein分母範囲で検証",
     "source": "src/model/splineKnotRemoval.js"
   },
   "bSplineDerivative": {
