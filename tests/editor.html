@@ -3311,7 +3311,7 @@ await check('Periodic knot reediting previews and commits in place with one Undo
   fixture();await tick();let curve=addEditableSpline('nurbsCurve',{points:editPoints,degree:3,periodic:true,periodicKnots:[2,3,5,8,12],weights:[1,2,1,3]});
   curve.setAttribute('transform','translate(12 17) scale(0.8)');w.saveState();await tick();w.undoStack.length=0;
   activate('select');w.selectTool.selectObject(curve);splineAction('begin');const original=curve.getAttribute('data-vector-spline'),path=curve.getAttribute('d');
-  splineField(periodicEditField,'0,1,1,3,4');splineAction('apply');assert(curve.getAttribute('data-vector-spline')===original&&doc.querySelector('[data-spline-action="apply"]'),'repeated knots do not overwrite');
+  splineField(periodicEditField,'0,0,0,0,4');splineAction('apply');assert(curve.getAttribute('data-vector-spline')===original&&doc.querySelector('[data-spline-action="apply"]'),'excess seam multiplicity does not overwrite');
   splineField(periodicEditField,'0, 1, 4, 5, 8');splineAction('preview');assert(curve.getAttribute('d')===path&&canvas.querySelector('[data-vector-preview="spline-edit"]'),'preview only');
   splineAction('apply');await tick();const applied=curve.getAttribute('data-vector-spline');assert(applied!==original&&curve===doc.getElementById('editable-spline')&&curve.getAttribute('transform')==='translate(12 17) scale(0.8)'&&curve.getAttribute('stroke')==='#624382','geometry changes in place with style');
   assert(w.undoStack.length===1,'single history entry');w.undo();assert(doc.getElementById('editable-spline').getAttribute('data-vector-spline')===original,'undo');w.redo();curve=doc.getElementById('editable-spline');assert(curve.getAttribute('data-vector-spline')===applied,'redo');
@@ -3352,10 +3352,61 @@ await check('Periodic draft imports retain v2 and invalid edits remain recoverab
     const tool=inputDraft(app,'bSplineCurve');tool.periodic=true;tool.periodicKnotsText=periodicText;tool.degree=3;tool.redraw();app.w.toolPropertiesPanel.updatePanel();namedName(app,'周期');namedAction(app,'create');await tick();const xml=app.w.DrawingDocument.serialize();
     draftKey(app,'Escape');app.d.getElementById('import-presets-btn').click();await importFile(app,xml);importAction(app,'all');importAction(app,'apply');await tick();importAction(app,'close');
     const imported=namedState(app).entries.at(-1);assert(imported.entry.version===2&&imported.entry.input.periodicKnotsText===periodicText,'v2 imported');namedChoose(app,imported.id);namedAction(app,'restore');
-    const field=()=>app.d.querySelector('[aria-label="'+periodicField+'"]');field().value='0,1,1,2,3';field().dispatchEvent(new app.w.Event('change'));const history=app.w.undoStack.length;constructionEnter(app);await tick();
+    const field=()=>app.d.querySelector('[aria-label="'+periodicField+'"]');field().value='0,0,0,0,3';field().dispatchEvent(new app.w.Event('change'));const history=app.w.undoStack.length;constructionEnter(app);await tick();
     assert(!app.d.querySelector('[data-construction-tool="bSplineCurve"]')&&tool.points.length===4&&app.w.undoStack.length===history,'invalid draft preserves inputs without commit');
     field().value=periodicText;field().dispatchEvent(new app.w.Event('change'));constructionEnter(app);await tick();assert(app.d.querySelector('[data-construction-tool="bSplineCurve"]')&&app.w.undoStack.length===history+1,'repaired draft commits once');
   }finally{app.element.remove();}
+});
+
+const repeatedText='0.1, 0.1, 1, 2, 2';
+await check('Repeated periodic knot fields draw closed B-splines and NURBS with combined seam multiplicity',async()=>{
+  for(const name of ['bSplineCurve','nurbsCurve']){
+    fixture();await tick();activate(name);const tool=w.toolManager.activeTool;tool.degree=3;tool.periodic=true;tool.periodicKnotsText='';tool.knotsText='';tool.weightsText='1,2,1,3';w.toolPropertiesPanel.updatePanel();
+    splineField(periodicField,repeatedText,'change');for(const p of editPoints)click(p.x,p.y);key('Enter');await tick();
+    const curve=canvas.querySelector('[data-construction-tool="'+name+'"]'),model=JSON.parse(curve.getAttribute('data-vector-spline')).model;
+    assert(curve.getAttribute('d').endsWith('Z')&&curve.getAttribute('d').match(/M/g).length===1,'closed continuous path');
+    assert(model.knots.filter(k=>k===0.1).length===3&&model.knots.filter(k=>k===2).length===3,'leading and trailing seam knots combined exactly');
+    const record=JSON.parse(curve.getAttribute('data-vector-implementation'));assert(record.calculation.algorithm.includes('重複度')&&record.sampling.complete,'algorithm and completion recorded');
+    w.DrawingDocument.open(w.DrawingDocument.serialize());activate('select');w.selectTool.selectObject(canvas.querySelector('[data-construction-tool="'+name+'"]'));splineAction('begin');
+    assert(doc.querySelector('[aria-label="'+periodicEditField+'"]').value==='0.1, 0.1, 1, 2, 2'&&doc.querySelector('[data-periodic-knot-hint]').textContent.includes('末尾'),'period recovered and seam rule explained');splineAction('cancel');
+    tool.periodic=false;tool.periodicKnotsText='';tool.weightsText='';
+  }
+});
+await check('Repeated periodic reediting rejects overfull seams and degree changes then preserves corners through drag Undo and Redo',async()=>{
+  frame.scrollIntoView();fixture();await tick();let curve=addEditableSpline('bSplineCurve',{points:editPoints,degree:3,periodic:true,periodicKnots:[0.1,0.1,1,2,2]});
+  const snap=w.snapToGrid,ortho=w.orthoMode;w.snapToGrid=false;w.orthoMode=false;
+  try{
+    w.saveState();await tick();w.undoStack.length=0;activate('select');w.selectTool.selectObject(curve);splineAction('begin');const original=curve.getAttribute('data-vector-spline');
+    splineField(periodicEditField,'0,0,0,2,2');splineAction('apply');assert(curve.getAttribute('data-vector-spline')===original&&w.undoStack.length===0,'combined multiplicity four rejected');
+    splineField(periodicEditField,repeatedText);splineField('編集する次数',2);splineAction('apply');assert(curve.getAttribute('data-vector-spline')===original,'degree reduction respects seam limit');
+    splineField('編集する次数',3);const from=draftPoints()[1],to={x:from.x+17,y:from.y-11};pointer('pointerdown',splineHandle(1),localScreen(curve,from));pointer('pointerup',doc,localScreen(curve,to));assert(closePoint(draftPoints()[1],to),'drag after invalid edits remains available');splineAction('apply');await tick();
+    const changed=curve.getAttribute('data-vector-spline'),model=JSON.parse(changed).model;assert(model.points.length===7&&model.knots.filter(k=>k===0.1).length===3&&curve.getAttribute('d').endsWith('Z')&&w.undoStack.length===1,'one applied closed corner model');
+    w.undo();assert(doc.getElementById('editable-spline').getAttribute('data-vector-spline')===original,'undo repeated model');w.redo();assert(doc.getElementById('editable-spline').getAttribute('data-vector-spline')===changed,'redo repeated model');
+  }finally{w.snapToGrid=snap;w.orthoMode=ortho;}
+});
+await check('Repeated-knot periodic NURBS with signed weights persist finite pole branches and explicit omissions',async()=>{
+  fixture();await tick();activate('nurbsCurve');const tool=w.toolManager.activeTool;tool.degree=2;tool.periodic=true;tool.periodicKnotsText='0,0,1,1,2,2,3,3,4';tool.weightsText='1,-1,1,-1,1,-1,1,-1';tool.knotsText='';
+  tool.points=Array.from({length:8},(_,i)=>({x:220+100*Math.cos(i*Math.PI/4),y:220+100*Math.sin(i*Math.PI/4)}));tool.redraw();w.toolPropertiesPanel.updatePanel();key('Enter');await tick();
+  let curve=canvas.querySelector('[data-construction-tool="nurbsCurve"]'),record=JSON.parse(curve.getAttribute('data-vector-implementation'));
+  assert(curve.hasAttribute('data-vector-partial')&&curve.getAttribute('fill')==='none'&&!curve.getAttribute('d').endsWith('Z')&&!/NaN|Infinity/.test(curve.getAttribute('d')),'finite open branches without implicit fill');
+  assert(!record.sampling.complete&&record.sampling.omitted.length>=4&&curve.getAttribute('d').match(/M/g).length===record.sampling.branches,'omissions and subpaths agree');
+  w.DrawingDocument.open(w.DrawingDocument.serialize());curve=canvas.querySelector('[data-construction-tool="nurbsCurve"]');activate('select');w.selectTool.selectObject(curve);splineAction('begin');splineAction('preview');assert(canvas.querySelector('[data-vector-preview="spline-edit"]')&&doc.querySelector('[data-spline-edit-status]').textContent.includes('省略'),'partial model reopens with warning');splineAction('cancel');
+  tool.degree=3;tool.periodic=false;tool.periodicKnotsText='';tool.weightsText='';
+});
+await check('Repeated periodic draft records and imported construction sets restore the same closed model without schema changes',async()=>{
+  const source=await preferenceEditor('{preferences:false}');let target;
+  try{
+    for(const name of ['bSplineCurve','nurbsCurve']){
+      const tool=inputDraft(source,name);tool.degree=3;tool.periodic=true;tool.periodicKnotsText=repeatedText;tool.redraw();source.w.toolPropertiesPanel.updatePanel();
+      inputPresetAction(source,'record');namedName(source,'重複 '+name);namedAction(source,'create');setName(source,'重複 '+name);setAction(source,'create');await tick();
+    }
+    const xml=source.w.DrawingDocument.serialize();target=await preferenceEditor('{preferences:false}');target.w.DrawingDocument.open(xml);
+    for(const name of ['bSplineCurve','nurbsCurve'])for(const kind of ['legacy','named']){
+      target.d.getElementById(name+'-tool').click();if(kind==='legacy')inputPresetAction(target,'restore');else namedAction(target,'restore');const tool=target.w.toolManager.tools[name];assert(tool.periodicKnotsText===repeatedText&&tool.exportInputPreset().version===2,'raw v2 draft preserved');constructionEnter(target);await tick();assert(target.d.querySelector('[data-construction-tool="'+name+'"]').getAttribute('d').endsWith('Z'),'restored repeated curve');
+    }
+    target.d.getElementById('import-presets-btn').click();await importFile(target,xml);for(const name of ['bSplineCurve','nurbsCurve'])importSelected(target,'sets','重複 '+name);importAction(target,'apply');await tick();importAction(target,'close');
+    for(const name of ['bSplineCurve','nurbsCurve']){target.d.getElementById(name+'-tool').click();const item=setState(target).entries.filter(e=>e.tool===name).at(-1);setChoose(target,item.id);setAction(target,'restore');assert(target.w.toolManager.tools[name].periodicKnotsText===repeatedText,'imported set restores repeated knots');constructionEnter(target);}
+  }finally{source.element.remove();target?.element.remove();}
 });
 
 result.textContent = reports.join("\n");

@@ -12,7 +12,8 @@ class PointConstructionTool extends BaseTool {
   getInstructions() {
     return ['クリックで点を追加', 'Enterで確定、Backspaceで最後の点を削除、Escで取り消し',
       this.isSpline() ? `次数${this.degree}には制御点${this.degree + 1}個以上が必要です（現在${this.points.length}個）` : `入力順の点列を使用します（現在${this.points.length}個）`,
-      ...(this.isSpline() ? [this.periodic ? '周期曲線：制御点数+1個の増加する周期ノットを指定できます。空欄は一様です' : '内部ノットを次数+1回重ねると、そこで別の枝に分かれます'] : []),
+      ...(this.isSpline() ? [this.periodic ? '周期曲線：制御点数+1個の減少しない周期ノットを指定できます。同じ値は次数回まで、空欄は一様です' : '内部ノットを次数+1回重ねると、そこで別の枝に分かれます'] : []),
+      ...(this.isSpline() && this.periodic ? ['継ぎ目の重複度は、先頭の同値数＋末尾の同値数−1です。次数を超える重複は使えません'] : []),
       ...(this.method === 'nurbsCurve' ? ['零・負の重みも使用できます。分母零付近と検査未完了の区間は省略します'] : []),
       ...(this.method === 'triangulatePolygon' ? ['境界順に頂点を指定します。末尾から先頭へ閉じ、自己交差や辺の重なりは扱いません'] : []),
       ...(this.method === 'voronoiCells' ? [this.voronoiBox?'Voronoiは復元した切り取り範囲を使用します':'Voronoiの切り取り範囲は図面全体です'] : [])];

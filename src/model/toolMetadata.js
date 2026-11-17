@@ -587,12 +587,12 @@ export const toolMetadata = Object.freeze({
   },
   "bSplineCurve": {
     "label": "de Boor / B-spline",
-    "algorithm": "制御点・次数・ノットを検証。不連続ノットに対応し、周期指定時は先頭制御点と一様／非一様の単純ノットを周期延長",
+    "algorithm": "制御点・次数・ノットを検証。不連続ノットに対応し、周期指定時は先頭制御点と一様／非一様ノットを周期延長（継ぎ目を含む重複度は次数まで）",
     "source": "src/model/splineCurves.js"
   },
   "nurbsCurve": {
     "label": "de Boor / NURBS",
-    "algorithm": "零・負を含む有限な重みとノットを検証。周期指定時は制御点・重みと一様／非一様の単純ノットを循環。描画時に同次座標の分母を検査",
+    "algorithm": "零・負を含む有限な重みとノットを検証。周期指定時は制御点・重みと一様／非一様ノットを循環（継ぎ目を含む重複度は次数まで）。描画時に同次座標の分母を検査",
     "source": "src/model/splineCurves.js"
   }
 });

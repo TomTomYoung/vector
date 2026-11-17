@@ -73,7 +73,7 @@ Voronoi図も[母点・矩形・空セルの保存と再編集](voronoi-editing.
 
 | ツール・登録名 | 計算 | 描画 |
 | --- | --- | --- |
-| B-spline `bSplineCurve` | 不連続ノット・一様／非一様の単純な周期ノットに対応。極形式de Boorで区間ベジェ化 | 不連続点でサブパスを分離したSVG折れ線 |
+| B-spline `bSplineCurve` | 不連続ノット・一様／非一様の周期ノット（重複度は次数まで）に対応。極形式de Boorで区間ベジェ化 | 不連続点でサブパスを分離したSVG折れ線 |
 | NURBS `nurbsCurve` | 零・負を含む重みの同次座標処理。分母のBernstein係数範囲で再分割 | 分母零付近と検査未完了区間を省略し、枝を分離 |
 | 凸包 `convexHull` | Andrew / Jarvis / 厳密符号版から選択 | 凸包のSVG多角形 |
 | 多角形三角分割 `triangulatePolygon` | Ear clipping。入力順が多角形の辺順 | 三角形のSVGグループ |
@@ -87,7 +87,7 @@ Voronoi図も[母点・矩形・空セルの保存と再編集](voronoi-editing.
 
 新しい2機能は [splineCurves.js](../src/model/splineCurves.js)にあります。入力は `{points, degree, knots?, periodic?, periodicKnots?}`、NURBSはさらに `weights?` です。次数は1〜12、制御点は次数より多く最大1000点、座標は有限数です。ノットを省略すると端を固定した一様ノット列、重みを省略すると全て1にします。GUIではカンマ区切りで指定できます。
 
-戻り値は `{kind: 'splineCurve', points, degree, knots, weights?, periodic?, controlCount?}`、無効入力は `null` です。描画範囲は `knots[degree]` から `knots[points.length]`。2026-11-16に内部ノットの重複度を次数+1まで、NURBS重みを零・負を含む有限数へ拡張しました。全重み零は拒否します。`periodic:true` では先頭の次数個の制御点・重みを末尾へ循環し、一様ノットを自動生成します。`periodicKnots` で1周期分の非一様な単純ノットも指定できます。入力・保存・再編集は[非一様周期ノット](nonuniform-periodic-knots.md)を参照してください。分割数はGUIで指定でき、既定80です。分母零付近の分離、処理上限、保存形式と例は[不連続・周期・有理スプライン](spline-branches.md)に記載しています。既存の低水準 `bSplinePoint` / `nurbsPoint` の契約は変更していません。[de Boorの解説](https://pages.mtu.edu/~shene/COURSES/cs3621/NOTES/spline/de-Boor.html)を実装時に照合し、既存評価関数を再利用しています。
+戻り値は `{kind: 'splineCurve', points, degree, knots, weights?, periodic?, controlCount?}`、無効入力は `null` です。描画範囲は `knots[degree]` から `knots[points.length]`。2026-11-16に内部ノットの重複度を次数+1まで、NURBS重みを零・負を含む有限数へ拡張しました。全重み零は拒否します。`periodic:true` では先頭の次数個の制御点・重みを末尾へ循環し、一様ノットを自動生成します。`periodicKnots` で1周期分の非一様ノット（重複度は次数まで）も指定できます。入力・保存・再編集は[非一様周期ノット](nonuniform-periodic-knots.md)を参照してください。分割数はGUIで指定でき、既定80です。分母零付近の分離、処理上限、保存形式と例は[不連続・周期・有理スプライン](spline-branches.md)に記載しています。既存の低水準 `bSplinePoint` / `nurbsPoint` の契約は変更していません。[de Boorの解説](https://pages.mtu.edu/~shene/COURSES/cs3621/NOTES/spline/de-Boor.html)を実装時に照合し、既存評価関数を再利用しています。
 
 ## 計算実装を登録・換装する
 
@@ -165,7 +165,7 @@ host.selectRenderer('fitCircle', 'circle-diameter');
 | [Triangleの品質メッシュ・Ruppert / Chew系の細分化](https://www.cs.cmu.edu/~quake/triangle.q.html) | 最小角度等のためSteiner点を追加。現状のDelaunayが元の入力点番号を返す契約では、新頂点を表せない。生成点、境界分割、属性、停止条件を含むメッシュデータとUIが必要 |
 | [Loop–BlinnのGPU曲線描画](https://www.microsoft.com/en-us/research/publication/resolution-independent-curve-rendering-using-programmable-graphics-hardware/) | 三角形・シェーダーで曲線を描く方式。SVG文字列生成の差し替えだけで完結せず、WebGL/WebGPU描画面、ヒット判定、座標変換、選択ハンドル、SVG書き出しの別経路が必要 |
 | [SolveSpaceの拘束系](https://solvespace.com/tech.pl)・[ライブラリAPI](https://solvespace.com/library.pl) | 現在の `solveConstraints` は渡された問題を解く単発関数。継続的な寸法・幾何拘束には、エンティティとパラメーターの安定ID、拘束グラフ、操作時の再計算、履歴、矛盾説明のUI、保存形式を連携させる必要がある |
-| 有理スプラインの残る拡張 | 不連続ノット・零／負の重み・一様周期曲線は[2026-11-16に実装](spline-branches.md)。重複する周期ノット（非一様な単純ノットは[実装済み](nonuniform-periodic-knots.md)）、無限遠を含む射影図形としての編集、可除特異点の相殺、厳密な根の分離は未実装。今回の有限座標の枝分離と省略記録とは別の処理が必要 |
+| 有理スプラインの残る拡張 | 不連続ノット・零／負の重み・一様周期曲線は[2026-11-16に実装](spline-branches.md)。次数を超える重複周期ノット（次数以下の重複は[実装済み](repeated-periodic-knots.md)）、無限遠を含む射影図形としての編集、可除特異点の相殺、厳密な根の分離は未実装。今回の有限座標の枝分離と省略記録とは別の処理が必要 |
 
 具体例として、[constrainedMesh.js](../src/model/constrainedMesh.js)や半平面切取は `f/(f-g)` のような比を使います。ここへ -1/0/1 だけを返す厳密符号関数を一律に渡すと交点が変わります。今回のBigInt方式は、符号だけを必要とする凸包と非拘束Delaunayに限定して組み込んでいます。
 

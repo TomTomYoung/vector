@@ -40,9 +40,9 @@ test('explicit uniform periods preserve old models and affine knot changes prese
     assert.equal(a.length,b.length);a.forEach((p,i)=>pointNear(p,b[i]));
   }
 });
-test('periodic knot validation rejects ambiguous, repeated and numerically unrepresentable periods without mutation',()=>{
+test('periodic knot validation rejects ambiguous, over-multiple and numerically unrepresentable periods without mutation',()=>{
   const before=structuredClone(input);const m=bSplineCurve(input);m.knots[0]=999;m.points[0].x=999;assert.deepEqual(input,before);
-  for(const periodicKnots of [null,{},[],[0,1,2,3],[0,1,2,3,4,5],[0,1,1,2,3],[0,2,1,3,4],[0,1,NaN,3,4],[-1e308,0,1,2,1e308],[-1e308,-5e307,0,5e307,1e308],[0,Number.MIN_VALUE,1,2,3]])
+  for(const periodicKnots of [null,{},[],[0,1,2,3],[0,1,2,3,4,5],[0,0,0,0,3],[0,2,1,3,4],[0,1,NaN,3,4],[-1e308,0,1,2,1e308],[-1e308,-5e307,0,5e307,1e308],[0,Number.MIN_VALUE,1,2,3]])
     assert.equal(bSplineCurve({...input,periodicKnots}),null,JSON.stringify(periodicKnots));
   assert.equal(bSplineCurve({...input,periodic:false}),null);assert.equal(bSplineCurve({...input,knots:[0,1]}),null);
 });
