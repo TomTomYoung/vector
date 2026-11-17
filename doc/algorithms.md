@@ -301,3 +301,7 @@ $$
 
 <a id="r14"></a>
 **R14 — Ceres Solver, Solving Non-linear Least Squares.** [公式ドキュメント](https://ceres-solver.readthedocs.io/latest/nnls_solving.html)、特にLevenberg–Marquardtの節。寸法拘束の実装時参照資料。
+
+## 非一様周期スプラインの追加参照
+
+2026-11-17にB-spline・NURBSの単純ノットを周期延長する実装を追加し、Open CASCADEの公式資料でノットと制御点の周期関係を照合しました。計算・描画の手順、参照元との関係、コード転用の有無と残る制約は [nonuniform-periodic-knots.md](nonuniform-periodic-knots.md) に記録しています。ツールプロパティの標準実装の説明も更新しています。

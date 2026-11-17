@@ -1,7 +1,7 @@
 import {clampedKnots} from './splines.js';
 
-// Closed periodic curves wrap the first p control points and use uniform knots.
-// General nonuniform periodic knots need a separate seam contract; never ignore supplied knots.
+// One period contains N simple intervals for N original controls. Extend U[i+N]
+// = U[i]+T and wrap the first p controls; see doc/nonuniform-periodic-knots.md.
 function curve(input, rational) {
   if (!input || typeof input !== 'object') return null;
   const {points, degree = 3, weights, periodic = false} = input;
@@ -15,11 +15,21 @@ function curve(input, rational) {
   }
   if (periodic) {
     if (input.knots !== undefined) return null;
+    const count = points.length;
+    const periodKnots = input.periodicKnots === undefined ? Array.from({length:count+1}, (_,i) => i) : input.periodicKnots;
+    if (!Array.isArray(periodKnots) || periodKnots.length !== count+1 ||
+      !periodKnots.every((k,i) => Number.isFinite(k) && (!i || k > periodKnots[i-1]))) return null;
+    const period = periodKnots[count]-periodKnots[0];
+    if (!Number.isFinite(period) || period <= 0) return null;
+    data.knots = [...periodKnots.slice(count-degree,count).map(k=>k-period), ...periodKnots,
+      ...periodKnots.slice(1,degree+1).map(k=>k+period)];
+    if (!data.knots.every((k,i) => Number.isFinite(k) && (!i || k > data.knots[i-1])) ||
+      !Number.isFinite(data.knots.at(-1)-data.knots[0])) return null;
     data.points.push(...data.points.slice(0, degree).map(p => ({...p})));
     if (rational) data.weights.push(...data.weights.slice(0, degree));
-    data.knots = Array.from({length: data.points.length + degree + 1}, (_, i) => i - degree);
     data.periodic = true; data.controlCount = points.length;
   } else {
+    if (input.periodicKnots !== undefined) return null;
     const knots = input.knots ?? clampedKnots({count: points.length, degree});
     if (!Array.isArray(knots) || knots.length !== points.length + degree + 1 ||
       !knots.every((k, i) => Number.isFinite(k) && (!i || k >= knots[i - 1])) || knots[degree] >= knots[points.length] || !Number.isFinite(knots.at(-1)-knots[0])) return null;

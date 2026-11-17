@@ -3288,6 +3288,76 @@ await check('Ordering preserves other tools and future input data, disables boun
  }finally{app.element.remove();}
 });
 
+const periodicText=' 2, 3, 5, 8, 12 ';
+const periodicField='周期ノット（制御点数+1個、空欄で一様）';
+const periodicEditField='編集する周期ノット（制御点数+1個、空欄で一様）';
+await check('Nonuniform periodic spline properties draw both models and isolate inactive open knot text',async()=>{
+  for(const name of ['bSplineCurve','nurbsCurve']){
+    fixture();await tick();activate(name);const tool=w.toolManager.activeTool;
+    tool.degree=3;tool.periodic=false;tool.knotsText='unfinished open knots';tool.periodicKnotsText='';tool.weightsText='1,2,1,3';w.toolPropertiesPanel.updatePanel();
+    splineField('周期曲線',true,'change');splineField(periodicField,periodicText,'change');
+    assert(tool.knotsText==='unfinished open knots'&&!doc.querySelector('[aria-label^="ノット列"]'),'open knot draft isolated');
+    for(const p of editPoints)click(p.x,p.y);key('Enter');await tick();
+    const curve=canvas.querySelector('[data-construction-tool="'+name+'"]'),model=JSON.parse(curve.getAttribute('data-vector-spline')).model;
+    assert(curve.getAttribute('d').endsWith('Z')&&JSON.stringify(model.knots)==='[-7,-5,-2,2,3,5,8,12,13,15,18]','closed nonuniform model');
+    assert(model.points.length===7&&model.controlCount===4,'controls wrap only once');
+    w.DrawingDocument.open(w.DrawingDocument.serialize());const saved=canvas.querySelector('[data-construction-tool="'+name+'"]');
+    activate('select');w.selectTool.selectObject(saved);splineAction('begin');assert(doc.querySelector('[aria-label="'+periodicEditField+'"]').value==='2, 3, 5, 8, 12','period extracted after SVG load');splineAction('cancel');
+    activate(name);splineField('周期曲線',false,'change');assert(doc.querySelector('[aria-label^="ノット列"]').value==='unfinished open knots','original open text restored');
+    tool.periodicKnotsText='';tool.knotsText='';tool.weightsText='';
+  }
+});
+await check('Periodic knot reediting previews and commits in place with one Undo/Redo and automatic uniform reset',async()=>{
+  fixture();await tick();let curve=addEditableSpline('nurbsCurve',{points:editPoints,degree:3,periodic:true,periodicKnots:[2,3,5,8,12],weights:[1,2,1,3]});
+  curve.setAttribute('transform','translate(12 17) scale(0.8)');w.saveState();await tick();w.undoStack.length=0;
+  activate('select');w.selectTool.selectObject(curve);splineAction('begin');const original=curve.getAttribute('data-vector-spline'),path=curve.getAttribute('d');
+  splineField(periodicEditField,'0,1,1,3,4');splineAction('apply');assert(curve.getAttribute('data-vector-spline')===original&&doc.querySelector('[data-spline-action="apply"]'),'repeated knots do not overwrite');
+  splineField(periodicEditField,'0, 1, 4, 5, 8');splineAction('preview');assert(curve.getAttribute('d')===path&&canvas.querySelector('[data-vector-preview="spline-edit"]'),'preview only');
+  splineAction('apply');await tick();const applied=curve.getAttribute('data-vector-spline');assert(applied!==original&&curve===doc.getElementById('editable-spline')&&curve.getAttribute('transform')==='translate(12 17) scale(0.8)'&&curve.getAttribute('stroke')==='#624382','geometry changes in place with style');
+  assert(w.undoStack.length===1,'single history entry');w.undo();assert(doc.getElementById('editable-spline').getAttribute('data-vector-spline')===original,'undo');w.redo();curve=doc.getElementById('editable-spline');assert(curve.getAttribute('data-vector-spline')===applied,'redo');
+  activate('select');w.selectTool.selectObject(curve);splineAction('begin');splineAction('auto-knots');splineAction('apply');
+  assert(JSON.stringify(JSON.parse(curve.getAttribute('data-vector-spline')).model.knots)==='[-3,-2,-1,0,1,2,3,4,5,6,7]','uniform reset');
+});
+await check('Nonuniform periodic control dragging preserves knots and does not accumulate wrapped controls',async()=>{
+  frame.scrollIntoView();fixture();await tick();const snap=w.snapToGrid,ortho=w.orthoMode;w.snapToGrid=false;w.orthoMode=false;
+  try{
+    const curve=addEditableSpline('bSplineCurve',{points:editPoints,degree:3,periodic:true,periodicKnots:[2,3,5,8,12]});const knots=JSON.stringify(JSON.parse(curve.getAttribute('data-vector-spline')).model.knots);
+    for(let i=0;i<2;i++){
+      activate('select');w.selectTool.selectObject(curve);splineAction('begin');assert(canvas.querySelectorAll('[data-spline-control-index]').length===4,'only original controls');
+      const from=draftPoints()[0],to={x:from.x+12,y:from.y+8};pointer('pointerdown',splineHandle(0),localScreen(curve,from));pointer('pointerup',doc,localScreen(curve,to));
+      assert(closePoint(draftPoints()[0],to),'dragged point');splineAction('apply');
+      const model=JSON.parse(curve.getAttribute('data-vector-spline')).model;assert(JSON.stringify(model.knots)===knots&&model.points.length===7&&JSON.stringify(model.points[0])===JSON.stringify(model.points[4]),'period and wrap preserved');
+    }
+  }finally{w.snapToGrid=snap;w.orthoMode=ortho;}
+});
+await check('Version two periodic drafts survive legacy named and paired records and restore real drawings in a fresh editor',async()=>{
+  const source=await preferenceEditor('{preferences:false}');let target;
+  try{
+    for(const name of ['bSplineCurve','nurbsCurve']){
+      const tool=inputDraft(source,name);tool.degree=3;tool.periodic=true;tool.periodicKnotsText=periodicText;tool.knotsText='inactive text';tool.redraw();source.w.toolPropertiesPanel.updatePanel();
+      inputPresetAction(source,'record');namedName(source,name);namedAction(source,'create');setName(source,name);setAction(source,'create');await tick();
+    }
+    target=await preferenceEditor('{preferences:false}');target.w.DrawingDocument.open(source.w.DrawingDocument.serialize());
+    for(const name of ['bSplineCurve','nurbsCurve'])for(const kind of ['legacy','named','set']){
+      target.d.getElementById(name+'-tool').click();if(kind==='legacy')inputPresetAction(target,'restore');else if(kind==='named')namedAction(target,'restore');else setAction(target,'restore');
+      const tool=target.w.toolManager.tools[name];assert(tool.periodicKnotsText===periodicText&&tool.knotsText==='inactive text'&&tool.exportInputPreset().version===2,'raw texts and v2 restored '+name+kind);
+      constructionEnter(target);await tick();const curves=target.d.querySelectorAll('[data-construction-tool="'+name+'"]'),model=JSON.parse(curves[curves.length-1].getAttribute('data-vector-spline')).model;
+      assert(model.periodic&&model.knots[3]===2&&model.knots[7]===12,'restored drawing uses period');
+    }
+  }finally{source.element.remove();target?.element.remove();}
+});
+await check('Periodic draft imports retain v2 and invalid edits remain recoverable without committing stale previews',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    const tool=inputDraft(app,'bSplineCurve');tool.periodic=true;tool.periodicKnotsText=periodicText;tool.degree=3;tool.redraw();app.w.toolPropertiesPanel.updatePanel();namedName(app,'周期');namedAction(app,'create');await tick();const xml=app.w.DrawingDocument.serialize();
+    draftKey(app,'Escape');app.d.getElementById('import-presets-btn').click();await importFile(app,xml);importAction(app,'all');importAction(app,'apply');await tick();importAction(app,'close');
+    const imported=namedState(app).entries.at(-1);assert(imported.entry.version===2&&imported.entry.input.periodicKnotsText===periodicText,'v2 imported');namedChoose(app,imported.id);namedAction(app,'restore');
+    const field=()=>app.d.querySelector('[aria-label="'+periodicField+'"]');field().value='0,1,1,2,3';field().dispatchEvent(new app.w.Event('change'));const history=app.w.undoStack.length;constructionEnter(app);await tick();
+    assert(!app.d.querySelector('[data-construction-tool="bSplineCurve"]')&&tool.points.length===4&&app.w.undoStack.length===history,'invalid draft preserves inputs without commit');
+    field().value=periodicText;field().dispatchEvent(new app.w.Event('change'));constructionEnter(app);await tick();assert(app.d.querySelector('[data-construction-tool="bSplineCurve"]')&&app.w.undoStack.length===history+1,'repaired draft commits once');
+  }finally{app.element.remove();}
+});
+
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
 </script>

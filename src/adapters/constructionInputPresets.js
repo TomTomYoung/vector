@@ -64,7 +64,8 @@ export function parseConstructionInputPresets(value) {
       continue;
     }
     // Unknown tools/entry versions are retained, never interpreted by the built-in controllers.
-    if(entry.version!==1)continue;
+    const periodicVersion = ['bSplineCurve','nurbsCurve'].includes(name) && entry.version===2;
+    if(entry.version!==1 && !periodicVersion)continue;
     if(constructionDraftTools.includes(name)){
       const input=entry.input;keys(input,['points',...(name==='nthBezier'?['degree']:[])]);
       if(name==='nthBezier'&&(!Number.isInteger(input.degree)||input.degree<2||input.degree>12))fail();
@@ -80,11 +81,11 @@ export function parseConstructionInputPresets(value) {
     }
     if(!constructionInputTools.includes(name))continue;
     const spline=['bSplineCurve','nurbsCurve'].includes(name),input=entry.input;
-    keys(input,['points',...(spline?['degree','periodic','knotsText']:[]),...(name==='nurbsCurve'?['weightsText']:[]),...(name==='voronoiCells'?['box']:[])]);
+    keys(input,['points',...(spline?['degree','periodic','knotsText']:[]),...(periodicVersion?['periodicKnotsText']:[]),...(name==='nurbsCurve'?['weightsText']:[]),...(name==='voronoiCells'?['box']:[])]);
     if(!Array.isArray(input.points)||input.points.length>1000)fail();
     for(const p of input.points){keys(p,['x','y']);if(!Number.isFinite(p.x)||!Number.isFinite(p.y))fail();}
     if(spline&&(!Number.isInteger(input.degree)||input.degree<1||input.degree>12||typeof input.periodic!=='boolean'))fail();
-    for(const key of spline?['knotsText',...(name==='nurbsCurve'?['weightsText']:[])]:[])
+    for(const key of spline?['knotsText',...(periodicVersion?['periodicKnotsText']:[]),...(name==='nurbsCurve'?['weightsText']:[])]:[])
       if(typeof input[key]!=='string'||input[key].length>20000)fail();
     if(name==='voronoiCells'){
       const b=input.box;keys(b,['x','y','width','height']);
@@ -96,7 +97,7 @@ export function parseConstructionInputPresets(value) {
 }
 
 export function parseConstructionInput(name, entry) {
-  if(!constructionInputTools.includes(name)||entry?.version!==1)throw Error('この作図入力のツール・版には対応していません。');
+  if(!constructionInputTools.includes(name)||!(entry?.version===1 || (['bSplineCurve','nurbsCurve'].includes(name)&&entry?.version===2)))throw Error('この作図入力のツール・版には対応していません。');
   return parseConstructionInputPresets({version:1,entries:{[name]:entry}}).entries[name];
 }
 

@@ -14,7 +14,7 @@ export function readSplineSource(sourceText, implementationText, currentPath) {
   const count = m.periodic ? m.controlCount : m.points.length;
   if (!Number.isInteger(count) || count < 2 || count > 1000 || (m.periodic && m.points.length !== count + m.degree)) throw Error('周期曲線の制御点数が不正です。');
   const input = {points:m.points.slice(0,count).map(p=>p && point(p)),degree:m.degree,
-    ...(m.periodic ? {periodic:true} : {knots:m.knots}),
+    ...(m.periodic ? {periodic:true,periodicKnots:Array.isArray(m.knots) ? m.knots.slice(m.degree,m.degree+count+1) : null} : {knots:m.knots}),
     ...(m.weights !== undefined ? {weights:Array.isArray(m.weights) ? m.weights.slice(0,count) : null} : {})};
   const validated = create(input);
   if (!validated || !same(validated.points,m.points.map(p=>p && point(p))) || !same(validated.knots,m.knots) || !same(validated.weights,m.weights)) throw Error('曲線の制御点・次数・ノット・重みが不正です。');
@@ -40,7 +40,8 @@ export function readSplineSource(sourceText, implementationText, currentPath) {
     const geometry = prepareGeometry(validated,'default',options);
     if (!geometry || pathData(geometry) !== currentPath) throw Error('現在の形状と生成元データが一致しません。元データからの編集はできません。');
   }
-  const automatic = create({...input,knots:undefined});
+  const automatic = create({...input,knots:undefined,periodicKnots:undefined});
   if (!m.periodic && automatic && same(automatic.knots,input.knots)) delete input.knots;
+  if (m.periodic && automatic && same(automatic.knots,m.knots)) delete input.periodicKnots;
   return {method,input,options,implementation:record.calculation?.id ?? 'default',renderer:record.rendering?.id ?? 'default'};
 }

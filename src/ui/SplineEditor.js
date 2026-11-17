@@ -17,7 +17,7 @@ class SplineEditor {
       this.originalPath=this.element.getAttribute('d');this.originalSource=this.element.getAttribute('data-vector-spline');
       const {input,options}=source;
       this.draft={...source,pointsText:input.points.map(p=>p.x+', '+p.y).join('\n'),degree:input.degree,periodic:!!input.periodic,
-        knotsText:input.knots?.join(', ') ?? '',weightsText:input.weights?.join(', ') ?? '',options:{...options}};
+        knotsText:input.knots?.join(', ') ?? '',periodicKnotsText:input.periodicKnots?.join(', ') ?? '',weightsText:input.weights?.join(', ') ?? '',options:{...options}};
       this.message='座標は図形のローカル座標です。移動・回転・色・線幅・レイヤーは保持します。';
     } catch(error){this.message=error.message;}
     this.refresh();
@@ -36,6 +36,7 @@ class SplineEditor {
     });
     return {points,degree:Number(d.degree),periodic:d.periodic,
       ...(!d.periodic && d.knotsText.trim() ? {knots:numbers(d.knotsText)} : {}),
+      ...(d.periodic && d.periodicKnotsText.trim() ? {periodicKnots:numbers(d.periodicKnotsText)} : {}),
       ...(d.method==='nurbsCurve' && d.weightsText.trim() ? {weights:numbers(d.weightsText)} : {})};
   }
   build() {
@@ -116,13 +117,12 @@ class SplineEditor {
     };
     field('編集する制御点（1行に x, y）',d.pointsText,v=>d.pointsText=v,{multiline:true});
     field('編集する次数',d.degree,v=>d.degree=v,{type:'number',min:1,max:12,step:1});
-    const periodic=document.createElement('label');periodic.textContent='周期曲線（一様ノット）';
+    const periodic=document.createElement('label');periodic.textContent='周期曲線';
     const checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.checked=d.periodic;checkbox.setAttribute('aria-label','編集する周期指定');
     checkbox.addEventListener('change',()=>{d.periodic=checkbox.checked;this.changed();this.refresh();});periodic.prepend(checkbox);container.append(periodic);
-    if(!d.periodic){
-      field('編集するノット列（空欄で自動）',d.knotsText,v=>d.knotsText=v);
-      button('ノットを自動生成',()=>{d.knotsText='';this.changed();this.refresh();},'auto-knots');
-    }
+    if(d.periodic)field('編集する周期ノット（制御点数+1個、空欄で一様）',d.periodicKnotsText,v=>d.periodicKnotsText=v);
+    else field('編集するノット列（空欄で自動）',d.knotsText,v=>d.knotsText=v);
+    button('ノットを自動生成',()=>{d[d.periodic?'periodicKnotsText':'knotsText']='';this.changed();this.refresh();},'auto-knots');
     if(d.method==='nurbsCurve')field('編集する重み（空欄で全て1）',d.weightsText,v=>d.weightsText=v);
     field('再描画の分割数',d.options.sampleCount,v=>d.options.sampleCount=v,{type:'number',min:2,max:10000,step:1});
     if(d.method==='nurbsCurve'){
