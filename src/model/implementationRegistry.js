@@ -1,3 +1,4 @@
+import {elevateSplineDegreeContinuity} from './compactSplineElevation.js';
 import {toolMetadata} from './toolMetadata.js';
 import {uniformCatmullRom, parameterizedCatmullRom, miterOffset, jarvisHull, cohenSutherland} from './alternatives.js';
 import {orientationSign, exactInsideCircle} from './exactPredicates.js';
@@ -6,6 +7,7 @@ import {delaunayTriangles} from './mesh.js';
 
 const alternative = (id, label, algorithm, run, source = 'src/model/alternatives.js') => ({id, label, algorithm, source, run});
 export const builtinImplementations = {
+  elevateSplineDegree: [alternative('continuity', '元の連続性を保つ次数上げ', '区間ベジェ次数上げ・元の重複度+1のノット列へGivens回転による疎QR基底変換・全区間偏差検証', elevateSplineDegreeContinuity, 'src/model/compactSplineElevation.js')],
   spline: [
     alternative('uniform', '一様 Catmull–Rom', '標準接線・三次ベジェへの変換（tension=1）', uniformCatmullRom),
     alternative('centripetal', '求心 Catmull–Rom', '距離の平方根によるノット間隔（α=0.5）・三次ベジェへの変換', input => parameterizedCatmullRom(input, 0.5)),

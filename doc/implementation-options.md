@@ -227,3 +227,7 @@ Bernstein直接評価、BigIntの2進整数化、登録API、SVGグループ化�
 ## 形状を保つ次数上げ
 
 `elevateSplineDegree` を追加しました。極形式de Boorで区間ベジェ化し、同次Bernstein次数上げと再接続後の偏差検証を行います。非周期・周期B-spline・NURBSの再編集で、実装と検証許容差を選択できます。計算121機能・GUI31ツールです。最小ノット表現との違い、換装契約、描画、一次資料と未導入部分は [spline-degree-elevation.md](spline-degree-elevation.md) を参照してください。
+
+## 連続性保持の次数上げ方式
+
+`elevateSplineDegree` の `continuity` は、区間ベジェ次数上げ後にGivens回転による疎QR基底変換を行い、元の内部・周期ノットの重複度を1つ増やした表現を返します。全区間偏差を独立に検証し、再編集と演算室で選択できます。方式・制御点数・標準接続からの削減数を記録します。計算121機能・GUI31ツールは変わりません。[実装・式・換装・参照履歴](spline-continuity-elevation.md)を参照してください。
