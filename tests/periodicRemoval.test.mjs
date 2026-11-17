@@ -40,7 +40,7 @@ test('either endpoint removes one seam copy across leading trailing and split re
       assert.deepEqual(left.points,right.points);assert.deepEqual(left.periodicKnots,right.periodicKnots);assert.equal(right.removal.t,2);assert.equal(right.removal.periodic.t,0.1);assert.equal(right.removal.periodic.copies,2);
       assert.ok(deviation(original,create(right),name==='nurbsCurve')<1e-7);current=right;
     }
-    assert.deepEqual(current.periodicKnots,base.periodicKnots);assert.throws(()=>remove(name,current,2),/最後のノット/);
+    assert.deepEqual(current.periodicKnots,base.periodicKnots);assert.throws(()=>remove(name,current,2),/継ぎ目の移動後/);
   }
 });
 test('repeated interior removal and rational circles retain their original curve and closed rendering',()=>{
@@ -85,7 +85,7 @@ test('late failures malformed replacement results and caller mutations never lea
   assert.throws(()=>remove('nurbsCurve',added,0.7,1e-7,value=>{const result=removeSplineKnot(value);result.points[0].x+=100;result.removal.errorBound=0;return result;}),/出力が不正/);
   assert.deepEqual(added,before);const result=remove('nurbsCurve',added,0.7);result.points[0].x=999;result.weights[0]=999;assert.deepEqual(added,before);
 });
-test('invalid periodic removals reject endpoints with no duplicates missing knots unsupported weights and unrepresentable expansion before callbacks',()=>{
+test('invalid periodic removals reject unrepresentable seam shifts missing knots unsupported weights and unrepresentable expansion before callbacks',()=>{
   let calls=0;const callback=v=>{calls++;return removeSplineKnot(v);};
   for(const t of [NaN,Infinity,0,0.7,2.1,0.1,2])assert.throws(()=>remove('bSplineCurve',base,t,1e-7,callback));
   for(const tolerance of [NaN,Infinity,-1,1e6+1])assert.throws(()=>remove('bSplineCurve',base,1,tolerance,callback));
