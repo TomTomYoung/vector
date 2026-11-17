@@ -772,13 +772,18 @@ class SelectTool extends BaseTool {
     if(!this.isMarqueeSelecting)super.handleMouseLeave(event);
   }
 
+  selectionViewportMatrix() {
+    const m=this.canvas.getScreenCTM();
+    return new DOMMatrix([m.a,m.b,m.c,m.d,m.e,m.f]);
+  }
+
   startMarqueeSelection(point,additive=false) {
     this.cancelMarqueeSelection();this.selectionMessage='';
     try {this.marqueeItems=this.selectionGeometry.snapshot(this.getSelectionCandidates());}
     catch(error){this.reportSelection(error.message);return;}
     this.isMarqueeSelecting=true;this.marqueeStart={...point};this.marqueeEnd={...point};
     this.marqueePoints=[{...point}];this.marqueeAdditive=additive;
-    this.marqueeViewport=this.canvas.getScreenCTM().toString();
+    this.marqueeViewport=this.selectionViewportMatrix().toString();
     this.marqueeRect=document.createElementNS(this.svgNS,'path');this.marqueeRect.classList.add('marquee-selection');
     this.marqueeRect.setAttribute('fill-rule','evenodd');this.marqueeRect.setAttribute('vector-effect','non-scaling-stroke');
     this.canvas.append(this.marqueeRect);
@@ -793,7 +798,7 @@ class SelectTool extends BaseTool {
 
   updateMarqueeSelection(point) {
     if(!this.isMarqueeSelecting)return;
-    if(this.canvas.getScreenCTM().toString()!==this.marqueeViewport){this.cancelMarqueeSelection();this.reportSelection('表示位置・倍率が変わったため範囲選択を取り消しました。');return;}
+    if(this.selectionViewportMatrix().toString()!==this.marqueeViewport){this.cancelMarqueeSelection();this.reportSelection('表示位置・倍率が変わったため範囲選択を取り消しました。');return;}
     this.marqueeEnd={...point};
     const last=this.marqueePoints.at(-1);
     if(Math.hypot(point.x-last.x,point.y-last.y)>=1)this.marqueePoints.push({...point});
@@ -809,7 +814,7 @@ class SelectTool extends BaseTool {
     } else path=region.points.map((p,i)=>`${i?'L':'M'} ${p.x} ${p.y}`).join(' ')+(shape==='line'?'':' Z');
     this.marqueeRect.setAttribute('d',path);
     this.marqueeRect.style.fill=shape==='line'?'none':'';
-    this.marqueeRect.setAttribute('transform',this.canvas.getScreenCTM().inverse().toString());
+    this.marqueeRect.setAttribute('transform',this.selectionViewportMatrix().inverse().toString());
     try {
       const candidates=this.selectionGeometry.query(this.marqueeItems.filter(item=>item.element.isConnected&&this.canSelect(item.element)),region,this.selectionOptions.match);
       this.clearSelectionPreview();this.selectionCandidatesPreview=candidates;
@@ -823,7 +828,7 @@ class SelectTool extends BaseTool {
     const start=this.marqueeStart,end=this.marqueeEnd,region=this.marqueeRegion;
     const additive=this.marqueeAdditive,objects=[...this.selectionCandidatesPreview];
     const traveled=this.marqueePoints.some(p=>Math.hypot(p.x-start.x,p.y-start.y)>=2)||Math.hypot(end.x-start.x,end.y-start.y)>=2;
-    const valid=traveled&&region&&(region.shape==='line'||region.shape==='circle'||(region.bounds.width>=2&&region.bounds.height>=2));
+    const valid=traveled&&region&&(region.shape==='line'||region.shape==='circle'||(region.bounds.width>0&&region.bounds.height>0));
     this.cancelMarqueeSelection();
     if(!valid){if(!additive&&!traveled)this.deselectObject();return;}
     const previous=window.selectedObjects;

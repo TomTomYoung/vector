@@ -3850,6 +3850,7 @@ await check('Selection candidates preview live and are removed on release, Escap
   fixture('<rect id="a" x="100" y="100" width="20" height="20" fill="red"/>');await tick();selectionSetup();const a=doc.getElementById('a');
   selectionMouse('mousedown',80,80);selectionMouse('mousemove',140,140);
   assert(a.hasAttribute('data-vector-selection-candidate')&&w.selectedObjects.length===0,'live candidate not committed');
+  const overlay=canvas.querySelector('.marquee-selection'),identity=overlay.getScreenCTM();assert(Math.abs(identity.a-1)<1e-6&&Math.abs(identity.d-1)<1e-6&&Math.abs(identity.e)<1e-5&&Math.abs(identity.f)<1e-5,'screen-space overlay matrix is serialized as a valid SVG transform');
   const xml=w.DrawingDocument.serialize();assert(!xml.includes('selection-candidate')&&!xml.includes('marquee-selection')&&!xml.includes('selectionOptions'),'helper-free SVG');
   key('Escape');assert(!w.selectTool.isMarqueeSelecting&&!canvas.querySelector('[data-vector-selection-candidate],.marquee-selection'),'empty Escape cancels');
   selectionDrag([80,80],[140,140]);assert(selectionIDs()==='a'&&!a.hasAttribute('data-vector-selection-candidate'),'release commits');
