@@ -44,6 +44,7 @@ export function createNamedConstructionInputs({createId=()=> 'preset-'+crypto.ra
     }catch(error){status('記録を変更できません。'+error.message,true);return false;}
   };
   return {state,
+    replaceRecords(value){const next=parseNamedConstructionInputs(value);data=next?.entries.length?next:undefined;},
     snapshot:()=>parseNamedConstructionInputs(data),
     list(tool){return this.snapshot()?.entries.filter(e=>e.tool===tool)??[];},
     selectedId(tool){const items=data?.entries.filter(e=>e.tool===tool)??[];return items.some(e=>e.id===chosen.get(tool))?chosen.get(tool):items[0]?.id;},

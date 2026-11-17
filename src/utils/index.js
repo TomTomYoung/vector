@@ -31,6 +31,7 @@ import * as filletControlGeometry from '../adapters/filletControlGeometry.js';
 import {createImplementationPreferences} from '../adapters/implementationPreferences.js';
 import {createDocumentImplementationPreset,parseDocumentImplementationPreset} from '../adapters/documentImplementationPreset.js';
 import {createNamedImplementationPresets,parseNamedImplementationPresets} from '../adapters/namedImplementationPresets.js';
+import {readPresetSVG,presetImportRecords,planPresetImport,commitPresetImport} from '../adapters/presetImport.js';
 import {createConstructionSets,parseConstructionSets} from '../adapters/constructionSets.js';
 import {createNamedConstructionInputs,parseNamedConstructionInputs} from '../adapters/namedConstructionInputs.js';
 import {createConstructionInputPresets,parseConstructionInputPresets,parseConstructionInput,parseConstructionDraft,parseCurveDraft,parseShapeDraft,parseAnnotationDraft,supportsConstructionInput,constructionInputMode,constructionParameterFields,exportConstructionParameters,restoreConstructionParameters} from '../adapters/constructionInputPresets.js';
@@ -62,6 +63,10 @@ window.VectorUtils = {
   parseNamedImplementationPresets,
   createConstructionInputPresets,
   createNamedConstructionInputs,
+  readPresetSVG,
+  presetImportRecords,
+  planPresetImport,
+  commitPresetImport,
   createConstructionSets,
   parseConstructionSets,
   parseNamedConstructionInputs,

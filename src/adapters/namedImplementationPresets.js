@@ -43,6 +43,7 @@ export function createNamedImplementationPresets(host,{createId=()=> 'methods-'+
   return {state,
     get canRecord(){return typeof host.exportPreferences==='function';},
     get canApply(){return typeof host.restorePreferences==='function';},
+    replaceRecords(value){const next=parseNamedImplementationPresets(value);data=next?.entries.length?next:undefined;},
     snapshot:()=>parseNamedImplementationPresets(data),
     list(){return this.snapshot()?.entries??[];},
     selectedId(){return data?.entries.some(e=>e.id===chosen)?chosen:data?.entries[0]?.id;},
