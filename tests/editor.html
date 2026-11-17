@@ -3262,7 +3262,7 @@ await check('Import collection limits reject all selected groups, and oversized 
 });
 
 function recordSection(app,kind){return app.d.querySelector(kind==='methods'?'[data-named-implementation-presets]':kind==='inputs'?'[data-named-construction-inputs]':'[data-construction-sets]');}
-function recordQuery(app,kind,value){const search=recordSection(app,kind).querySelector('[data-preset-search]');search.focus();search.value=value;search.dispatchEvent(new app.w.Event('input',{bubbles:true}));return search;}
+function recordQuery(app,kind,value){const section=recordSection(app,kind);section.open=true;const search=section.querySelector('[data-preset-search]');search.focus();search.value=value;search.dispatchEvent(new app.w.Event('input',{bubbles:true}));return search;}
 function recordOrder(app,kind,action){const button=recordSection(app,kind).querySelector(`[data-preset-order="${action}"]`);assert(button&&!button.disabled,'enabled order '+kind+'/'+action);button.click();}
 function recordSeed(app,kind){const manager=app.w.toolManager,store=kind==='methods'?manager.namedImplementationPresets:kind==='inputs'?manager.namedInputPresets:manager.constructionSets;const input={version:1,input:{points:[]}},methods={version:1,calculation:{circle:'default'},rendering:{circle:{id:'cubic',options:{}}}};for(const name of ['円10','円2','円1']){if(kind==='methods')store.add(name,methods);else if(kind==='inputs')store.add('circle',name,input);else store.add('circle',name,input,methods);}manager.host.save();app.w.toolPropertiesPanel.updatePanel();return store;}
 
