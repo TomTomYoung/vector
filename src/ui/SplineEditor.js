@@ -51,8 +51,11 @@ class SplineEditor {
       const refinement={tool:'insertSplineKnot',id:info.id,label:info.label,algorithm:info.algorithm,source:info.source ?? null,t:Number(d.insertKnotText)};
       const next=window.VectorUtils.insertEditableSplineKnot(d.method,this.input(),Number(d.insertKnotText),
         input=>host.execute('insertSplineKnot',input,{implementation:d.knotImplementation}));
+      if(next.periodic){const start=next.periodicKnots[0],t=refinement.t===next.periodicKnots.at(-1)?start:refinement.t;
+        refinement.periodic={algorithm:'3周期展開・同値ノット挿入・中央周期抽出',source:'src/adapters/periodicSplineRefinement.js',t,copies:t===start?2:3};}
       d.refinement=refinement;
-      d.pointsText=next.points.map(p=>p.x+', '+p.y).join('\n');d.knotsText=next.knots.join(', ');
+      d.pointsText=next.points.map(p=>p.x+', '+p.y).join('\n');
+      if(next.periodic)d.periodicKnotsText=next.periodicKnots.join(', ');else d.knotsText=next.knots.join(', ');
       if(next.weights)d.weightsText=next.weights.join(', ');
       this.changed();this.showPreview(false);
       this.message='ノットを下書きへ1個挿入しました。「適用」で図形へ反映します。 '+this.message;
@@ -168,8 +171,8 @@ class SplineEditor {
     choice('再計算の実装','implementation',this.manager.host.implementations(d.method));
     choice('再描画の実装','renderer',this.manager.host.renderers(d.method));
     const knotInfo=document.createElement('p');knotInfo.dataset.splineKnotInfo='';knotInfo.style.fontSize='12px';
-    knotInfo.textContent=d.periodic?'周期曲線の形状保持ノット挿入は未対応です。':'標準B-spline・NURBSの形状を保ちながら、内部ノットと制御点を1個増やします。複数回挿入も「適用」までは下書きです。';container.append(knotInfo);
-    if(!d.periodic){
+    knotInfo.textContent=(d.periodic?'周期展開と中央周期の抽出で形状を保ち、周期ノットと制御点を1個増やします。両端の値は同じ継ぎ目として扱い、循環重複度は次数までです。':'標準B-spline・NURBSの形状を保ちながら、内部ノットと制御点を1個増やします。')+'複数回挿入も「適用」までは下書きです。';container.append(knotInfo);
+    {
       const label=document.createElement('label');label.textContent='挿入するノット値';label.style.cssText='display:block;font-size:12px;margin:10px 0';
       const knot=document.createElement('input');knot.type='text';knot.value=d.insertKnotText;knot.setAttribute('aria-label','挿入するノット値');knot.style.width='100%';
       knot.addEventListener('input',()=>{d.insertKnotText=knot.value;});label.append(knot);container.append(label);
