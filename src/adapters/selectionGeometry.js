@@ -35,6 +35,7 @@ export function createSelectionGeometry({canvas,canSelect}) {
   const surface=canvas.ownerDocument.createElement('canvas');surface.width=surface.height=tileSize;
   const ctx=surface.getContext('2d',{willReadFrequently:true});
   const pixel=selectionPixelSize;
+  const cachedTiles=[];
   function describe(el) {
     if(!canSelect(el))return null;
     for(let n=el;n&&n!==canvas;n=n.parentElement) {
@@ -87,7 +88,7 @@ export function createSelectionGeometry({canvas,canSelect}) {
       budget.count+=(right-left)*(bottom-top);
       if(budget.count>maxPixels)throw Error('選択判定の処理量上限です。表示を縮小するか、選択範囲を狭めてください。');
       const key=tx+','+ty;let alpha=d.tiles.get(key);
-      if(!alpha){draw(d,tx,ty);const rgba=ctx.getImageData(0,0,tileSize,tileSize).data;alpha=new Uint8Array(tileSize*tileSize);for(let i=0;i<alpha.length;i++)alpha[i]=rgba[4*i+3];if(d.tiles.size>=128)d.tiles.clear();d.tiles.set(key,alpha);}
+      if(!alpha){draw(d,tx,ty);const rgba=ctx.getImageData(0,0,tileSize,tileSize).data;alpha=new Uint8Array(tileSize*tileSize);for(let i=0;i<alpha.length;i++)alpha[i]=rgba[4*i+3];if(cachedTiles.length>=128){const [old,oldKey]=cachedTiles.shift();old.tiles.delete(oldKey);}d.tiles.set(key,alpha);cachedTiles.push([d,key]);}
       for(let y=top;y<bottom;y++)for(let x=left;x<right;x++)if(alpha[(y-ty)*tileSize+x-tx]&&test({x:(x+0.5)*pixel,y:(y+0.5)*pixel}))return true;
     }
     return false;
@@ -102,6 +103,7 @@ export function createSelectionGeometry({canvas,canSelect}) {
     id:'canvas-coverage',algorithm:'Canvas Path2Dの塗り・線の被覆判定（0.25 CSS px）。なげなわは偶奇規則。',
     snapshot(elements) {
       // Selection dashes are decoration; restore original paint while reading computed styles.
+      for(const [d,key] of cachedTiles)d.tiles.delete(key);cachedTiles.length=0;
       const selected=[...canvas.querySelectorAll('[data-vector-selected]')];selected.forEach(e=>e.removeAttribute('data-vector-selected'));
       try{return elements.map(element=>({element,parts:[element,...element.querySelectorAll('path,line,rect,circle,ellipse,polygon,polyline,text')].filter((e,i,a)=>a.indexOf(e)===i).map(describe).filter(Boolean)}));}
       finally{selected.forEach(e=>e.setAttribute('data-vector-selected',''));}
@@ -112,9 +114,14 @@ export function createSelectionGeometry({canvas,canSelect}) {
       if(radius===0)return null;
       const box={x:p.x-radius,y:p.y-radius,width:2*radius,height:2*radius},budget={count:0};
       let best=null,distance=Infinity;
-      for(const item of [...items].reverse())for(const d of item.parts) {
-        if(pointBoxDistance(p,d.bounds)>radius)continue;
-        scan(d,box,q=>{const dist=pointBoxDistance(p,{x:q.x-pixel/2,y:q.y-pixel/2,width:pixel,height:pixel});if(dist<=radius&&dist<distance-1e-9){distance=dist;best=item.element;}return false;},budget);
+      for(const item of [...items].reverse()) {
+        let nearest=Infinity;
+        for(const d of item.parts) {
+          if(pointBoxDistance(p,d.bounds)>radius)continue;
+          scan(d,box,q=>{nearest=Math.min(nearest,pointBoxDistance(p,{x:q.x-pixel/2,y:q.y-pixel/2,width:pixel,height:pixel}));return false;},budget);
+        }
+        // Distances within the coverage pixel's diagonal are indistinguishable at this precision.
+        if(nearest<=radius&&nearest<distance-pixel*Math.SQRT2){distance=nearest;best=item.element;}
       }
       return best;
     },

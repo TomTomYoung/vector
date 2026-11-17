@@ -500,6 +500,7 @@ class SelectTool extends BaseTool {
       const layer = window.layers.find((item) => item.id === id);
       if (layer && (layer.locked || !layer.visible)) return false;
     }
+    if(el.localName==='g' && [...el.querySelectorAll('[data-layer]')].some(node=>window.layers.find(layer=>layer.id===Number(node.getAttribute('data-layer')))?.locked))return false;
     const style=getComputedStyle(el);
     if(style.visibility!=='visible')return false;
     for(let node=el;node&&node!==this.canvas;node=node.parentElement) {
@@ -749,7 +750,7 @@ class SelectTool extends BaseTool {
 
   getSelectionCandidates(area=true) {
     const elements=area?[...this.canvas.children]:[...this.canvas.querySelectorAll('path,line,rect,circle,ellipse,polygon,polyline,text,image,use')];
-    return [...new Set(elements.filter(el=>this.canSelect(el)).map(el=>this.selectionTarget(el)))];
+    return [...new Set(elements.filter(el=>this.canSelect(el)).map(el=>this.selectionTarget(el)))].filter(el=>this.canSelect(el));
   }
 
   clearSelectionPreview() {
@@ -777,6 +778,7 @@ class SelectTool extends BaseTool {
     catch(error){this.reportSelection(error.message);return;}
     this.isMarqueeSelecting=true;this.marqueeStart={...point};this.marqueeEnd={...point};
     this.marqueePoints=[{...point}];this.marqueeAdditive=additive;
+    this.marqueeViewport=this.canvas.getScreenCTM().toString();
     this.marqueeRect=document.createElementNS(this.svgNS,'path');this.marqueeRect.classList.add('marquee-selection');
     this.marqueeRect.setAttribute('fill-rule','evenodd');this.marqueeRect.setAttribute('vector-effect','non-scaling-stroke');
     this.canvas.append(this.marqueeRect);
@@ -791,6 +793,7 @@ class SelectTool extends BaseTool {
 
   updateMarqueeSelection(point) {
     if(!this.isMarqueeSelecting)return;
+    if(this.canvas.getScreenCTM().toString()!==this.marqueeViewport){this.cancelMarqueeSelection();this.reportSelection('表示位置・倍率が変わったため範囲選択を取り消しました。');return;}
     this.marqueeEnd={...point};
     const last=this.marqueePoints.at(-1);
     if(Math.hypot(point.x-last.x,point.y-last.y)>=1)this.marqueePoints.push({...point});

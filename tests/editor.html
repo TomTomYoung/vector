@@ -3791,7 +3791,7 @@ function selectionIDs(){return w.selectedObjects.map(el=>el.id).sort().join(',')
 await check('Selection properties expose radius, four shapes, containment/contact and the real hit algorithm',async()=>{
   fixture();await tick();activate('select');w.selectTool.setSelectionOptions({radius:6,shape:'rectangle',match:'contain'});
   const shape=doc.querySelector('[aria-label="ドラッグ選択の形状"]');assert(shape.options.length===4,'four shapes');
-  selectionField('クリック選択半径（画面px）','9','input');assert(w.selectTool.selectionOptions.radius===9,'radius input');
+  selectionField('クリック選択半径（画面px）','9');assert(w.selectTool.selectionOptions.radius===9,'radius input');
   selectionField('ドラッグ選択の形状','line');assert(doc.querySelector('[aria-label="ドラッグ選択の判定"]').disabled,'line disables containment');
   assert(doc.querySelector('[aria-label="ドラッグ選択の判定"]').value==='touch','line intersection');
   selectionField('ドラッグ選択の形状','circle');assert(!doc.querySelector('[aria-label="ドラッグ選択の判定"]').disabled&&w.selectTool.selectionOptions.match==='contain','restore area condition');
@@ -3812,7 +3812,8 @@ await check('Click radius uses CSS pixels under zoom and zero requires a direct 
 await check('Picking prefers direct hits then nearest paint, ties frontmost, excluding hidden and locked layers',async()=>{
   fixture('<rect id="direct" x="80" y="80" width="40" height="40" fill="red"/><line id="near" x1="80" y1="125" x2="120" y2="125" stroke="black"/><line id="back" x1="200" y1="100" x2="260" y2="100" stroke="black"/><line id="front" x1="200" y1="108" x2="260" y2="108" stroke="black"/><line id="locked" data-layer="2" x1="300" y1="100" x2="350" y2="100" stroke="black"/><line id="hidden" x1="400" y1="100" x2="450" y2="100" stroke="black" style="display:none"/>');await tick();selectionSetup({radius:6});w.layers.find(l=>l.id===2).locked=true;
   click(100,119);assert(selectionIDs()==='direct','direct first');w.selectTool.deselectObject();
-  click(230,104);assert(selectionIDs()==='front','equal distance frontmost');w.selectTool.deselectObject();
+  const picker=w.selectTool.selectionGeometry,pickPoint=new w.DOMPoint(230,104).matrixTransform(canvas.getScreenCTM());
+  assert(picker.pick(picker.snapshot(w.selectTool.getSelectionCandidates(false)),pickPoint,6)?.id==='front','equal distance frontmost without MouseEvent integer rounding');
   click(230,102);assert(selectionIDs()==='back','nearest before stacking');w.selectTool.deselectObject();
   click(325,102);assert(!selectionIDs(),'locked excluded');click(425,102);assert(!selectionIDs(),'hidden excluded');
 });
@@ -3887,6 +3888,15 @@ await check('Selection preferences survive a new editor and remain independent o
   } finally {w.localStorage.removeItem(prefKey);other.remove();}
 });
 
+await check('Selection respects locked descendants, cancels on viewport changes and moves in a transformed parent frame',async()=>{
+  fixture('<g id="locked-group"><rect x="100" y="100" width="20" height="20" data-layer="2"/></g><g transform="translate(100 50) rotate(30) scale(2 0.75)"><rect id="child" x="100" y="100" width="20" height="20"/></g>');await tick();selectionSetup();w.layers.find(l=>l.id===2).locked=true;
+  selectionDrag([80,80],[140,140]);assert(!selectionIDs(),'locked descendants block group selection');
+  const child=doc.getElementById('child');w.selectTool.selectObject(child);const before=new w.DOMPoint(110,110).matrixTransform(child.getScreenCTM()),inv=canvas.getScreenCTM().inverse(),start=before.matrixTransform(inv),end=new w.DOMPoint(before.x+10,before.y+15).matrixTransform(inv);
+  selectionMouse('mousedown',start.x,start.y,{},child);selectionMouse('mousemove',end.x,end.y);selectionMouse('mouseup',end.x,end.y);
+  const after=new w.DOMPoint(110,110).matrixTransform(child.getScreenCTM());assert(Math.abs(after.x-before.x-10)<1.1&&Math.abs(after.y-before.y-15)<1.1,'move delta stays in screen axes across parent transform');
+  w.selectTool.deselectObject();selectionMouse('mousedown',20,20);const original=canvas.style.transform;canvas.style.transform='scale(1.2)';
+  try {selectionMouse('mousemove',50,50);assert(!w.selectTool.isMarqueeSelecting&&!canvas.querySelector('.marquee-selection'),'zoom cancels stale coverage');}finally{canvas.style.transform=original;}
+});
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
 </script>
