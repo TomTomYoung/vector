@@ -120,7 +120,10 @@ class SplineEditor {
     const periodic=document.createElement('label');periodic.textContent='周期曲線';
     const checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.checked=d.periodic;checkbox.setAttribute('aria-label','編集する周期指定');
     checkbox.addEventListener('change',()=>{d.periodic=checkbox.checked;this.changed();this.refresh();});periodic.prepend(checkbox);container.append(periodic);
-    if(d.periodic)field('編集する周期ノット（制御点数+1個、空欄で一様）',d.periodicKnotsText,v=>d.periodicKnotsText=v);
+    if(d.periodic){
+      field('編集する周期ノット（制御点数+1個、空欄で一様）',d.periodicKnotsText,v=>d.periodicKnotsText=v);
+      const note=document.createElement('p');note.textContent='減少しない値を指定します。同じ値は次数回まで。継ぎ目は先頭の同値数＋末尾の同値数−1で数えます。';note.dataset.periodicKnotHint='';note.style.fontSize='12px';container.append(note);
+    }
     else field('編集するノット列（空欄で自動）',d.knotsText,v=>d.knotsText=v);
     button('ノットを自動生成',()=>{d[d.periodic?'periodicKnotsText':'knotsText']='';this.changed();this.refresh();},'auto-knots');
     if(d.method==='nurbsCurve')field('編集する重み（空欄で全て1）',d.weightsText,v=>d.weightsText=v);

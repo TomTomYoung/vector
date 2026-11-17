@@ -1,6 +1,6 @@
 import {clampedKnots} from './splines.js';
 
-// One period contains N simple intervals for N original controls. Extend U[i+N]
+// One period contains N intervals (including zero widths) for N original controls. Extend U[i+N]
 // = U[i]+T and wrap the first p controls; see doc/nonuniform-periodic-knots.md.
 function curve(input, rational) {
   if (!input || typeof input !== 'object') return null;
@@ -18,12 +18,28 @@ function curve(input, rational) {
     const count = points.length;
     const periodKnots = input.periodicKnots === undefined ? Array.from({length:count+1}, (_,i) => i) : input.periodicKnots;
     if (!Array.isArray(periodKnots) || periodKnots.length !== count+1 ||
-      !periodKnots.every((k,i) => Number.isFinite(k) && (!i || k > periodKnots[i-1]))) return null;
+      !periodKnots.every((k,i) => Number.isFinite(k) && (!i || k >= periodKnots[i-1]))) return null;
     const period = periodKnots[count]-periodKnots[0];
     if (!Number.isFinite(period) || period <= 0) return null;
-    data.knots = [...periodKnots.slice(count-degree,count).map(k=>k-period), ...periodKnots,
-      ...periodKnots.slice(1,degree+1).map(k=>k+period)];
-    if (!data.knots.every((k,i) => Number.isFinite(k) && (!i || k > data.knots[i-1])) ||
+    // Count one cyclic period: the final endpoint is a copy of the first.
+    // Leading and trailing repetitions belong to the same seam knot.
+    const multiplicities = new Map();
+    for (const knot of periodKnots.slice(0,-1)) {
+      const key = knot === periodKnots[count] ? periodKnots[0] : knot;
+      const multiplicity = (multiplicities.get(key) ?? 0)+1;
+      if (multiplicity > degree) return null;
+      multiplicities.set(key,multiplicity);
+    }
+    // Anchor repeated seam values exactly; subtracting T may not recover U[0]
+    // bit for bit. Every distinct source interval must remain distinct after shifting.
+    data.knots = [...periodKnots.slice(count-degree,count).map(k=>k === periodKnots[count] ? periodKnots[0] : k-period), ...periodKnots,
+      ...periodKnots.slice(1,degree+1).map(k=>k === periodKnots[0] ? periodKnots[count] : k+period)];
+    if (!data.knots.every((k,i) => {
+      if (!Number.isFinite(k)) return false;
+      if (!i) return true;
+      const interval = ((i-degree-1)%count+count)%count;
+      return periodKnots[interval] === periodKnots[interval+1] ? k === data.knots[i-1] : k > data.knots[i-1];
+    }) ||
       !Number.isFinite(data.knots.at(-1)-data.knots[0])) return null;
     data.points.push(...data.points.slice(0, degree).map(p => ({...p})));
     if (rational) data.weights.push(...data.weights.slice(0, degree));
