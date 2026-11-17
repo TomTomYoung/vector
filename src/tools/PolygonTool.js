@@ -20,7 +20,19 @@ class PolygonTool extends BaseTool {
     this.selectedPolygonObserver = null;
     this.selectedPolygonObserverTarget = null;
     this.selectedPolygonMutationHandle = null;
+    this.inputPresetVersion = 1;
+    this.implementationError = '';
+    this.draftHandles = null;
   }
+
+  exportInputPreset() {return window.VectorUtils.parseShapeDraft('polygon',{version:1,input:{points:this.polygonPoints}});}
+  restoreInputPreset(entry) {
+    const {input}=window.VectorUtils.parseShapeDraft('polygon',entry);
+    if(!this.isActive)throw Error('復元する作図ツールを先に選択してください。');
+    this.cancelPolygon();this.polygonPoints=input.points;
+    if(this.polygonPoints.length){this.createPolygon();this.updatePolygonPath();}
+  }
+  onImplementationChanged() {this.updatePolygonPath();}
 
   getTitle() {
     return "多角形";
@@ -35,6 +47,7 @@ class PolygonTool extends BaseTool {
 
     instructions.push("ダブルクリックまたはEnter: 多角形を確定");
     instructions.push("Esc: 描画中の多角形をキャンセル");
+    instructions.push('Backspace: 最後の頂点を削除');
 
     return instructions;
   }
@@ -83,6 +96,7 @@ class PolygonTool extends BaseTool {
   }
 
   handleMouseDown(event) {
+    if(!this.isActive||event.button!==0)return;
     this.selectionInteractionInProgress = false;
     if (this.tryBeginSelectionDelegation(event)) {
       return;
@@ -137,11 +151,7 @@ class PolygonTool extends BaseTool {
   handleDblClick(event) {
     if (!this.isActive) return;
 
-    if (this.polygonPoints.length >= 3) {
-      this.finishPolygon();
-    } else {
-      this.cancelPolygon();
-    }
+    event.preventDefault();this.finishPolygon();
 
     this.updatePanel();
   }
@@ -150,22 +160,31 @@ class PolygonTool extends BaseTool {
     if (!this.isActive) return;
 
     if (event.key === "Escape") {
+      event.preventDefault();
       this.cancelPolygon();
       this.updatePanel();
     }
 
-    if (event.key === "Enter" && this.polygonPoints.length >= 3) {
+    if (event.key === "Enter") {
+      event.preventDefault();
       this.finishPolygon();
+      this.updatePanel();
+    }
+    if(event.key==='Backspace'){
+      event.preventDefault();this.polygonPoints.pop();
+      if(this.polygonPoints.length)this.updatePolygonPath();else this.cancelPolygon();
       this.updatePanel();
     }
   }
 
   handlePolygonClick(point) {
-    if (!this.drawingObject) {
-      this.saveState();
-    }
+    if(this.polygonPoints.length>=1000){this.implementationError='一度に入力できる点は1000個までです。';this.updatePanel();return;}
+    if (!this.drawingObject)this.createPolygon();
+    this.polygonPoints.push({ ...point });
+    this.updatePolygonPath();this.updatePanel();
+  }
 
-    if (!this.drawingObject) {
+  createPolygon() {
       this.drawingObject = window.SvgUtils.createElement("polygon");
       this.drawingObject.setAttribute("data-polygon-tool", "true");
       this.applyDefaultAttributes(this.drawingObject);
@@ -179,19 +198,21 @@ class PolygonTool extends BaseTool {
       });
       this.canvas.appendChild(this.tempLine);
 
-      this.polygonPoints = [];
-    }
-
-    this.polygonPoints.push({ ...point });
-
-    this.updatePolygonPath();
-    this.updatePanel();
   }
 
   updatePolygonPath() {
     if (!this.drawingObject || this.polygonPoints.length === 0) return;
 
-    this.draw("polygon", {points: this.polygonPoints}, this.drawingObject);
+    this.draftHandles?.remove();
+    this.draftHandles=window.SvgUtils.createElement('g',{'data-tool-layer':'construction-handles','pointer-events':'none'});
+    this.polygonPoints.forEach(p=>this.draftHandles.appendChild(window.SvgUtils.createCircle(p.x,p.y,3,{fill:'#fff',stroke:'#2673c7'})));
+    this.canvas.appendChild(this.draftHandles);
+    const last=this.polygonPoints.at(-1);this.updateTemporaryLine(last,last);this.implementationError='';
+    try {
+      const drawn=this.draw('polygon',{points:this.polygonPoints},this.drawingObject);
+      if(!drawn)throw Error('選択した実装では多角形を作図できません。');
+      this.drawingObject=drawn;drawn.removeAttribute('visibility');
+    } catch(error){this.implementationError=error.message;this.drawingObject.setAttribute('visibility','hidden');}
   }
 
   updateTemporaryLine(start, end) {
@@ -205,9 +226,10 @@ class PolygonTool extends BaseTool {
 
   finishPolygon() {
     if (!this.drawingObject || this.polygonPoints.length < 3) {
-      this.cancelPolygon();
+      this.implementationError='確定には頂点が3点以上必要です。';this.updatePanel();
       return null;
     }
+    this.updatePolygonPath();if(this.implementationError){this.updatePanel();return null;}
 
     if (this.tempLine) {
       this.canvas.removeChild(this.tempLine);
@@ -222,6 +244,7 @@ class PolygonTool extends BaseTool {
     const createdObject = this.drawingObject;
     this.drawingObject = null;
     this.polygonPoints = [];
+    this.draftHandles?.remove();this.draftHandles=null;
 
     if (createdObject) {
       if (window.currentLayerId) {
@@ -263,6 +286,7 @@ class PolygonTool extends BaseTool {
     this.drawingObject = null;
     this.polygonPoints = [];
     this.isDrawing = false;
+    this.draftHandles?.remove();this.draftHandles=null;this.implementationError='';
   }
 
   requestToolPanelRefresh() {

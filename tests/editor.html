@@ -2653,6 +2653,131 @@ await check('Curve draft SVG download and reopening work without browser storage
   }finally{app.element.remove();}
 });
 
+
+const shapeDraftNames=['rectangle','circle','arc','polygon'];
+const shapeDraftPoints=[{x:80,y:100},{x:180,y:180},{x:280,y:100},{x:180,y:260}];
+const shapeDraftOutput=(app,name)=>app.w.DrawingDocument.capture().querySelector(name==='circle'?'[data-vector-circle]':'[data-'+name+'-tool]');
+function shapeDraftInput(app,name){
+  app.d.getElementById(name+'-tool').click();const tool=app.w.toolManager.tools[name];
+  if(name==='rectangle'||name==='circle'){parameterMouse(app,'mousedown',80,100);parameterMouse(app,'mousemove',180,180);draftKey(app,' ');parameterMouse(app,'mouseup',180,180);}
+  else for(const p of shapeDraftPoints.slice(0,name==='arc'?2:3))parameterClick(app,p.x,p.y);
+  return tool;
+}
+function shapeDraftRestore(app,name){app.d.getElementById(name+'-tool').click();inputPresetAction(app,'restore');return app.w.toolManager.tools[name];}
+
+await check('Four primitive drafts transfer through SVG without artwork previews and resume actual shapes under selected renderers with atomic undo',async()=>{
+  const source=await preferenceEditor('{preferences:false}');let target;
+  try{
+    for(const name of shapeDraftNames){shapeDraftInput(source,name);inputPresetAction(source,'record');await tick();assert(!shapeDraftOutput(source,name),'uncommitted shape excluded '+name);draftKey(source,'Escape');}
+    const saved=inputPresetState(source),xml=source.w.DrawingDocument.serialize();target=await preferenceEditor('{preferences:false}');const host=target.w.toolManager.host,execute=host.execute;let calls=0;host.execute=(...args)=>{calls++;return execute(...args);};
+    target.w.DrawingDocument.open(xml);target.w.saveState();await tick();assert(calls===0&&target.w.toolManager.activeToolName==='select','opening metadata is inert');
+    for(const name of shapeDraftNames){
+      target.d.getElementById(name+'-tool').click();if(name==='circle'||name==='arc')host.selectRenderer(name,'cubic');const methods=JSON.stringify(host.exportPreferences()),history=target.w.undoStack.length;
+      inputPresetAction(target,'restore');const tool=target.w.toolManager.tools[name];assert(JSON.stringify(tool.exportInputPreset())===JSON.stringify(saved.entries[name]),'restored inputs '+name);assert(!shapeDraftOutput(target,name)&&target.w.undoStack.length===history,'restore creates draft only');
+      if(name==='arc')parameterClick(target,280,100);else constructionEnter(target);await tick();const el=shapeDraftOutput(target,name);assert(el,'shape committed '+name);
+      if(name==='rectangle'){const [a,b]=saved.entries[name].input.points;assert(Math.abs(Number(el.getAttribute('width'))-Math.abs(b.x-a.x))<1e-5&&Math.abs(Number(el.getAttribute('height'))-Math.abs(b.y-a.y))<1e-5,'restored dimensions');}
+      if(name==='circle'){const model=JSON.parse(el.getAttribute('data-vector-circle')).model,[a,b]=saved.entries[name].input.points;assert(Math.abs(model.radius-Math.hypot(b.x-a.x,b.y-a.y))<1e-5,'restored circle radius');}
+      if(name==='circle'||name==='arc')assert(JSON.parse(el.getAttribute('data-vector-implementation')).rendering.id==='cubic','selected curve renderer '+name);
+      assert(target.w.undoStack.length===history+1&&JSON.stringify(host.exportPreferences())===methods,'single commit and unchanged settings '+name);target.w.undo();assert(!shapeDraftOutput(target,name),'undo shape');target.w.redo();assert(shapeDraftOutput(target,name),'redo shape');
+    }
+    assert(JSON.stringify(inputPresetState(target))===JSON.stringify(saved),'all records remain independent');
+  }finally{source.element.remove();target?.element.remove();}
+});
+
+await check('Restored rectangle and circle ignore mouse release and leave until explicit confirmation and retain normal drag drawing afterwards',async()=>{
+  for(const name of ['rectangle','circle']){
+    const app=await preferenceEditor('{preferences:false}');
+    try{
+      const tool=shapeDraftInput(app,name);inputPresetAction(app,'record');await tick();draftKey(app,'Escape');inputPresetAction(app,'restore');const history=app.w.undoStack.length,preview=tool.drawingObject;
+      parameterMouse(app,'mouseup',400,300);parameterMouse(app,'mouseleave',400,300);assert(tool.drawingObject===preview&&tool.restoredDraft&&!shapeDraftOutput(app,name)&&app.w.undoStack.length===history,'release does not commit '+name);
+      const end=draftClickPoint(app,300,240);await tick();const el=shapeDraftOutput(app,name),a=inputPresetState(app).entries[name].input.points[0];assert(el&&!tool.restoredDraft,'explicit endpoint click');
+      if(name==='rectangle')assert(Math.abs(Number(el.getAttribute('width'))-Math.abs(end.x-a.x))<1e-5,'rectangle click endpoint');else assert(Math.abs(JSON.parse(el.getAttribute('data-vector-circle')).model.radius-Math.hypot(end.x-a.x,end.y-a.y))<1e-5,'circle click endpoint');
+      shapeDraftRestore(app,name);draftKey(app,'Escape');assert(!tool.isDrawing&&!tool.drawingObject,'cancel resets restored mode');
+      parameterMouse(app,'mousedown',400,300);parameterMouse(app,'mousemove',500,400);parameterMouse(app,'mouseup',500,400);await tick();assert(app.w.DrawingDocument.capture().querySelectorAll(name==='circle'?'[data-vector-circle]':'[data-rectangle-tool]').length===2,'ordinary drag still commits '+name);
+    }finally{app.element.remove();}
+  }
+});
+
+await check('Rectangle and circle pause a real drag to record through the panel and support resume, Enter, and cancellation',async()=>{
+  for(const name of ['rectangle','circle']){
+    const app=await preferenceEditor('{preferences:false}');
+    try{
+      app.d.getElementById(name+'-tool').click();const tool=app.w.toolManager.tools[name],history=app.w.undoStack.length;
+      parameterMouse(app,'mousedown',80,100);parameterMouse(app,'mousemove',180,180);const expected=JSON.stringify(tool.exportInputPreset());
+      const key=new app.w.KeyboardEvent('keydown',{key:' ',bubbles:true,cancelable:true});app.d.dispatchEvent(key);assert(key.defaultPrevented&&tool.draftPaused&&tool.restoredDraft,'pause suppresses scrolling');
+      parameterMouse(app,'mouseup',180,180);parameterMouse(app,'mousemove',600,300);parameterMouse(app,'mouseleave',600,300);
+      assert(JSON.stringify(tool.exportInputPreset())===expected&&!shapeDraftOutput(app,name)&&app.w.undoStack.length===history,'paused geometry survives trip to panel');
+      inputPresetAction(app,'record');await tick();assert(JSON.stringify(inputPresetState(app).entries[name])===expected,'record original endpoint from panel');
+      draftKey(app,' ');assert(!tool.draftPaused&&tool.restoredDraft,'resume manual draft');parameterMouse(app,'mousemove',280,240);assert(JSON.stringify(tool.exportInputPreset())!==expected,'resume follows cursor');
+      draftKey(app,' ');constructionEnter(app);await tick();assert(shapeDraftOutput(app,name)&&!tool.draftPaused,'Enter commits paused draft');
+      app.d.getElementById(name+'-tool').click();inputPresetAction(app,'restore');assert(JSON.stringify(tool.exportInputPreset())===expected,'stored shape stays independent');
+      draftKey(app,' ');draftKey(app,'Escape');assert(!tool.draftPaused&&!tool.restoredDraft&&!tool.isDrawing,'cancel clears pause');
+    }finally{app.element.remove();}
+  }
+});
+
+await check('Arc partial and complete drafts preserve through points, retain degenerate triples and recover by Backspace and a new endpoint',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    const tool=shapeDraftInput(app,'arc');inputPresetAction(app,'record');await tick();draftKey(app,'Escape');inputPresetAction(app,'restore');constructionEnter(app);assert(tool.points.length===2&&tool.implementationError&&!shapeDraftOutput(app,'arc'),'incomplete input retained');
+    draftKey(app,'Backspace');assert(tool.points.length===1&&tool.previewCircle&&tool.draftHandles,'first-stage preview restored');parameterClick(app,180,180);parameterClick(app,280,100);await tick();assert(shapeDraftOutput(app,'arc'),'continued arc created');
+    app.d.getElementById('arc-tool').click();const bad={version:1,input:{points:[{x:100,y:100},{x:200,y:100},{x:300,y:100}]}};app.w.toolManager.inputPresets.open({version:1,entries:{arc:bad}});app.w.toolPropertiesPanel.updatePanel();inputPresetAction(app,'restore');const history=app.w.undoStack.length;
+    constructionEnter(app);assert(tool.points.length===3&&tool.implementationError&&!tool.currentArc&&app.w.undoStack.length===history,'collinear triple kept without stale preview');draftKey(app,'Backspace');parameterClick(app,300,200);await tick();assert(app.w.DrawingDocument.capture().querySelectorAll('[data-arc-tool]').length===2,'new endpoint corrects degeneracy');
+    app.d.getElementById('arc-tool').click();const full={version:1,input:{points:shapeDraftPoints.slice(0,3)}};app.w.toolManager.inputPresets.open({version:1,entries:{arc:full}});app.w.toolPropertiesPanel.updatePanel();inputPresetAction(app,'restore');assert(tool.points.length===3&&tool.currentArc,'complete restore remains preview');constructionEnter(app);await tick();assert(app.w.DrawingDocument.capture().querySelectorAll('[data-arc-tool]').length===3,'Enter confirms full triple');
+  }finally{app.element.remove();}
+});
+
+await check('Small restored shapes and incomplete polygons stay editable, while empty input and switching tools clean up every helper',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    for(const name of shapeDraftNames){
+      app.d.getElementById(name+'-tool').click();const count=name==='arc'?1:2,points=Array.from({length:count},()=>({x:80,y:100}));app.w.toolManager.inputPresets.open({version:1,entries:{[name]:{version:1,input:{points}}}});app.w.toolPropertiesPanel.updatePanel();inputPresetAction(app,'restore');const tool=app.w.toolManager.tools[name];
+      constructionEnter(app);assert(tool.implementationError&&!shapeDraftOutput(app,name),'incomplete geometry retained '+name);
+      if(name==='polygon'){draftKey(app,'Backspace');parameterClick(app,180,180);parameterClick(app,280,100);app.d.getElementById('canvas').dispatchEvent(new app.w.MouseEvent('dblclick',{bubbles:true,cancelable:true}));await tick();assert(shapeDraftOutput(app,name),'polygon corrected and double-clicked');shapeDraftRestore(app,name);}
+      app.d.getElementById('select-tool').click();assert(!tool.drawingObject&&!tool.currentArc&&!tool.previewCircle&&!tool.draftHandles,'switch clears draft helpers '+name);
+      app.d.getElementById(name+'-tool').click();inputPresetAction(app,'record');await tick();assert(inputPresetState(app).entries[name].input.points.length===0,'empty state recorded');inputPresetAction(app,'restore');assert(!tool.drawingObject&&!tool.currentArc&&!tool.draftHandles,'empty restore remains empty');
+    }
+  }finally{app.element.remove();}
+});
+
+await check('Primitive draft records update and delete with undo and malformed SVG preserves the complete current input and history',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    const tool=shapeDraftInput(app,'polygon');inputPresetAction(app,'record');await tick();const points=tool.polygonPoints,preview=tool.drawingObject,before=app.w.DrawingDocument.serialize(),history=app.w.undoStack.length;
+    const bad={rectangle:{points:[{x:1,y:2}]},circle:{points:[{x:1,y:2},{x:3,y:'4'}]},arc:{points:shapeDraftPoints},polygon:{points:[],extra:true}};
+    for(const [name,input] of Object.entries(bad)){let failed=false;try{app.w.DrawingDocument.open(inputPresetSVG(app,{version:1,entries:{[name]:{version:1,input}}}));}catch{failed=true;}assert(failed&&tool.polygonPoints===points&&tool.drawingObject===preview&&app.w.DrawingDocument.serialize()===before&&app.w.undoStack.length===history,'atomic invalid input '+name);}
+    draftKey(app,'Backspace');inputPresetAction(app,'record');await tick();assert(inputPresetState(app).entries.polygon.input.points.length===2,'update draft');app.w.undo();assert(inputPresetState(app).entries.polygon.input.points.length===3&&tool.polygonPoints.length===0,'undo changes metadata only');app.w.redo();assert(inputPresetState(app).entries.polygon.input.points.length===2,'redo update');
+    app.d.getElementById('polygon-tool').click();inputPresetAction(app,'remove');await tick();assert(!inputPresetState(app),'delete input');app.w.undo();assert(inputPresetState(app).entries.polygon,'undo deletion');
+  }finally{app.element.remove();}
+});
+
+await check('Primitive draft calculation and rendering failures preserve editable inputs without stale artwork and recover with selected methods',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    const host=app.w.toolManager.host;host.registerRenderer({id:'shape-draft-failure',label:'Failure',algorithm:'Explicit test failure',supports:()=>true,prepare:()=>{throw Error('shape draft rendering failed');}});
+    for(const name of shapeDraftNames){
+      const tool=shapeDraftInput(app,name);if(name==='arc'){tool.points=shapeDraftPoints.slice(0,3);tool.redrawDraft();}inputPresetAction(app,'record');await tick();draftKey(app,'Escape');const saved=JSON.stringify(inputPresetState(app)),history=app.w.undoStack.length;
+      host.registerImplementation(name,{id:'shape-draft-failure',label:'Failure',algorithm:'Explicit test error',run:()=>{throw Error('shape draft calculation failed');}});host.selectImplementation(name,'shape-draft-failure');inputPresetAction(app,'restore');assert(tool.implementationError.includes('shape draft calculation failed'),'restore calculation failure '+name);constructionEnter(app);await tick();assert(!shapeDraftOutput(app,name)&&app.w.undoStack.length===history,'failed calculation never commits');
+      host.selectImplementation(name,'default');host.selectRenderer(name,'shape-draft-failure');inputPresetAction(app,'restore');assert(tool.implementationError.includes('shape draft rendering failed'),'render error '+name);constructionEnter(app);assert(!shapeDraftOutput(app,name),'no stale geometry');
+      host.selectRenderer(name,'default');inputPresetAction(app,'restore');assert(!tool.implementationError,'working preview '+name);constructionEnter(app);await tick();assert(shapeDraftOutput(app,name)&&JSON.stringify(inputPresetState(app))===saved,'retry succeeds with unchanged stored input');
+    }
+  }finally{app.element.remove();}
+});
+
+await check('Primitive records survive real SVG downloads without browser storage and future versions remain inert',async()=>{
+  const app=await preferenceEditor('{preferences:{storage:()=>{throw Error("blocked");}}}');
+  try{
+    for(const name of shapeDraftNames){shapeDraftInput(app,name);inputPresetAction(app,'record');draftKey(app,'Escape');}await tick();const saved=JSON.stringify(inputPresetState(app));let blob;
+    const url=app.w.URL.createObjectURL,revoke=app.w.URL.revokeObjectURL,click=app.w.HTMLAnchorElement.prototype.click;
+    app.w.URL.createObjectURL=value=>{blob=value;return 'blob:shape-drafts';};app.w.URL.revokeObjectURL=()=>{};app.w.HTMLAnchorElement.prototype.click=function(){};
+    try{app.d.getElementById('save-btn').click();const xml=await blob.text();app.w.DrawingDocument.open(xml);assert(JSON.stringify(inputPresetState(app))===saved,'download has four inputs');}
+    finally{app.w.URL.createObjectURL=url;app.w.URL.revokeObjectURL=revoke;app.w.HTMLAnchorElement.prototype.click=click;}
+    for(const name of shapeDraftNames){shapeDraftRestore(app,name);if(name==='arc')parameterClick(app,280,100);else constructionEnter(app);await tick();assert(shapeDraftOutput(app,name),'restored drawing without storage '+name);}
+    const future={version:1,entries:Object.fromEntries(shapeDraftNames.map(name=>[name,{version:2,input:{later:true}}]))};app.w.DrawingDocument.open(inputPresetSVG(app,future));
+    for(const name of shapeDraftNames){app.d.getElementById(name+'-tool').click();assert(app.d.querySelector('[data-construction-input-action="restore"]').disabled,'future disabled '+name);}app.w.DrawingDocument.open(app.w.DrawingDocument.serialize());assert(JSON.stringify(inputPresetState(app))===JSON.stringify(future),'future entries retained');
+  }finally{app.element.remove();}
+});
+
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
 </script>

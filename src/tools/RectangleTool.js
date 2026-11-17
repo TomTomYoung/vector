@@ -11,17 +11,42 @@ class RectangleTool extends BaseTool {
     this.selectedRectangleObserver = null;
     this.selectedRectangleObserverTarget = null;
     this.selectedRectangleMutationHandle = null;
+    this.inputPresetVersion = 1;
+    this.inputPresetInstructions = 'ドラッグ中にSpaceで一時停止すると、プロパティから入力を記録できます。停止・復元後はEnterで保存した形のまま確定、または対角の終点をクリックして確定します。Spaceでカーソル追従を停止・再開、Escで取消できます。';
+    this.restoredDraft = false;
+    this.draftPaused = false;
+    this.draftEndPoint = null;
+    this.implementationError = '';
   }
+
+  exportInputPreset() {
+    return window.VectorUtils.parseShapeDraft('rectangle',{version:1,input:{points:this.isDrawing?[this.startPoint,this.draftEndPoint]:[]}});
+  }
+
+  restoreInputPreset(entry) {
+    const {input}=window.VectorUtils.parseShapeDraft('rectangle',entry);
+    if(!this.isActive)throw Error('復元する作図ツールを先に選択してください。');
+    this.cancel();
+    if(input.points.length){this.beginRectangle(input.points[0]);this.restoredDraft=true;this.updateDrawingRectangle(input.points[1]);}
+  }
+
+  cancel() {
+    super.cancel();this.restoredDraft=false;this.draftPaused=false;this.draftEndPoint=null;this.implementationError='';
+  }
+
+  onImplementationChanged() {if(this.isDrawing&&this.draftEndPoint)this.updateDrawingRectangle(this.draftEndPoint);}
 
   getTitle() {
     return "長方形";
   }
 
   getInstructions() {
+    if(this.restoredDraft)return [this.inputPresetInstructions];
     return {
       items: [
         "左クリック+ドラッグ: 始点から終点までドラッグして長方形を描画",
         "マウスボタンを離す: 長方形を確定",
+        "Space: カーソル追従を一時停止して下書きを記録",
         "Esc: キャンセル",
       ],
     };
@@ -77,6 +102,8 @@ class RectangleTool extends BaseTool {
   }
 
   handleMouseDown(event) {
+    if(!this.isActive||event.button!==0)return;
+    if(this.restoredDraft){this.updateDrawingRectangle(this.getMousePosition(event));this.finishRectangle();return;}
     this.selectionInteractionInProgress = false;
     if (this.tryBeginSelectionDelegation(event)) {
       return;
@@ -88,7 +115,11 @@ class RectangleTool extends BaseTool {
       return;
     }
 
-    this.saveState();
+    this.beginRectangle(this.startPoint);
+  }
+
+  beginRectangle(point) {
+    this.cancel();this.startPoint={...point};this.draftEndPoint={...point};
     this.isDrawing = true;
 
     this.drawingObject = window.SvgUtils.createElement("rect", {
@@ -111,7 +142,7 @@ class RectangleTool extends BaseTool {
 
     super.handleMouseMove(event);
 
-    if (!this.isActive || !this.isDrawing || !this.drawingObject) {
+    if (!this.isActive || !this.isDrawing || !this.drawingObject || this.draftPaused) {
       return;
     }
 
@@ -129,7 +160,7 @@ class RectangleTool extends BaseTool {
       return;
     }
 
-    this.finishRectangle();
+    if(!this.restoredDraft)this.finishRectangle();
   }
 
   handleMouseLeave(event) {
@@ -143,14 +174,13 @@ class RectangleTool extends BaseTool {
   }
 
   handleKeyDown(event) {
-    if (event.key === "Escape" && this.isDrawing) {
-      if (this.drawingObject) {
-        this.canvas.removeChild(this.drawingObject);
-      }
-      this.isDrawing = false;
-      this.drawingObject = null;
-      this.updatePanel();
+    if(!this.isActive)return;
+    if(event.key===' '&&this.isDrawing&&!event.target?.closest?.('button')){
+      event.preventDefault();if(event.repeat)return;
+      this.restoredDraft=true;this.draftPaused=!this.draftPaused;this.updatePanel();
     }
+    if(event.key==='Escape'){event.preventDefault();this.cancel();this.updatePanel();}
+    if(event.key==='Enter'&&this.isDrawing){event.preventDefault();this.finishRectangle();}
   }
 
   updateDrawingRectangle(currentPoint) {
@@ -158,7 +188,12 @@ class RectangleTool extends BaseTool {
       return;
     }
 
-    this.draw("rectangle", {start: this.startPoint, end: currentPoint}, this.drawingObject);
+    this.draftEndPoint={...currentPoint};this.implementationError='';
+    try {
+      const drawn=this.draw('rectangle',{start:this.startPoint,end:currentPoint},this.drawingObject);
+      if(!drawn)throw Error('選択した実装では矩形を作図できません。');
+      this.drawingObject=drawn;drawn.removeAttribute('visibility');
+    } catch(error){this.implementationError=error.message;this.drawingObject.setAttribute('visibility','hidden');}
   }
 
   finishRectangle() {
@@ -166,12 +201,15 @@ class RectangleTool extends BaseTool {
       return null;
     }
 
+    this.updateDrawingRectangle(this.draftEndPoint);
+    if(this.implementationError){this.updatePanel();return null;}
     const width = parseFloat(this.drawingObject.getAttribute("width"));
     const height = parseFloat(this.drawingObject.getAttribute("height"));
 
     let finishedRectangle = null;
 
-    if (width < 2 || height < 2) {
+    if (!Number.isFinite(width)||!Number.isFinite(height)||width < 2 || height < 2) {
+      if(this.restoredDraft){this.implementationError="確定には幅・高さが2以上必要です。";this.updatePanel();return null;}
       this.canvas.removeChild(this.drawingObject);
     } else {
       this.drawingObject.setAttribute("data-layer", window.currentLayerId);
@@ -181,6 +219,7 @@ class RectangleTool extends BaseTool {
 
     this.isDrawing = false;
     this.drawingObject = null;
+    this.restoredDraft=false;this.draftPaused=false;this.draftEndPoint=null;
 
     if (finishedRectangle && this.autoSelectAfterDraw) {
       if (

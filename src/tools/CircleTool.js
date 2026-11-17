@@ -12,18 +12,43 @@ class CircleTool extends BaseTool {
     this.selectedCircleObserver = null;
     this.selectedCircleObserverTarget = null;
     this.selectedCircleMutationHandle = null;
+    this.inputPresetVersion = 1;
+    this.inputPresetInstructions = 'ドラッグ中にSpaceで一時停止すると、プロパティから入力を記録できます。停止・復元後はEnterで保存した形のまま確定、または円周上の点をクリックして確定します。Spaceでカーソル追従を停止・再開、Escで取消できます。';
+    this.restoredDraft = false;
+    this.draftPaused = false;
+    this.draftEndPoint = null;
+    this.implementationError = '';
   }
+
+  exportInputPreset() {
+    return window.VectorUtils.parseShapeDraft('circle',{version:1,input:{points:this.isDrawing?[this.startPoint,this.draftEndPoint]:[]}});
+  }
+
+  restoreInputPreset(entry) {
+    const {input}=window.VectorUtils.parseShapeDraft('circle',entry);
+    if(!this.isActive)throw Error('復元する作図ツールを先に選択してください。');
+    this.cancel();
+    if(input.points.length){this.beginCircle(input.points[0]);this.restoredDraft=true;this.updateDrawingCircle(input.points[1]);}
+  }
+
+  cancel() {
+    super.cancel();this.restoredDraft=false;this.draftPaused=false;this.draftEndPoint=null;this.implementationError='';this.lastCircleGeometry=null;
+  }
+
+  onImplementationChanged() {if(this.isDrawing&&this.draftEndPoint)this.updateDrawingCircle(this.draftEndPoint);}
 
   getTitle() {
     return "円";
   }
 
   getInstructions() {
+    if(this.restoredDraft)return [this.inputPresetInstructions];
     if (!this.isDrawing) {
       return [
         "左クリック: 円の中心を指定",
         "そのままドラッグして半径を調整",
         "マウスボタンを離す: 円を確定",
+        "Space: カーソル追従を一時停止して下書きを記録",
         "Esc: 描画をリセット",
       ];
     }
@@ -31,7 +56,8 @@ class CircleTool extends BaseTool {
     return [
       "マウス移動: 半径を調整",
       "マウスボタンを離す: 円を確定",
-      "Esc: 描画中の円をキャンセル",
+      "Space: カーソル追従を一時停止して下書きを記録",
+        "Esc: 描画中の円をキャンセル",
     ];
   }
 
@@ -85,6 +111,8 @@ class CircleTool extends BaseTool {
   }
 
   handleMouseDown(event) {
+    if(!this.isActive||event.button!==0)return;
+    if(this.restoredDraft){this.updateDrawingCircle(this.getMousePosition(event));this.finishCircle();return;}
     this.selectionInteractionInProgress = false;
     if (this.tryBeginSelectionDelegation(event)) {
       return;
@@ -96,7 +124,11 @@ class CircleTool extends BaseTool {
       return;
     }
 
-    this.saveState();
+    this.beginCircle(this.startPoint);
+  }
+
+  beginCircle(point) {
+    this.cancel();this.startPoint={...point};this.draftEndPoint={...point};
     this.isDrawing = true;
     this.lastCircleGeometry = null;
 
@@ -118,12 +150,11 @@ class CircleTool extends BaseTool {
 
     super.handleMouseMove(event);
 
-    if (!this.isActive || !this.isDrawing || !this.drawingObject) {
+    if (!this.isActive || !this.isDrawing || !this.drawingObject || this.draftPaused) {
       return;
     }
 
-    this.lastCircleGeometry = this.run('circle', {center: this.startPoint, point: this.currentPoint});
-    this.drawingObject = this.toolManager.host.render(this.lastCircleGeometry, this.drawingObject, {toolName: 'circle'});
+    this.updateDrawingCircle(this.currentPoint);
   }
 
   handleMouseUp(event) {
@@ -137,7 +168,7 @@ class CircleTool extends BaseTool {
       return;
     }
 
-    this.finishCircle();
+    if(!this.restoredDraft)this.finishCircle();
   }
 
   handleMouseLeave(event) {
@@ -151,14 +182,25 @@ class CircleTool extends BaseTool {
   }
 
   handleKeyDown(event) {
-    if (event.key === "Escape" && this.isDrawing) {
-      if (this.drawingObject) {
-        this.canvas.removeChild(this.drawingObject);
-      }
-      this.isDrawing = false;
-      this.drawingObject = null;
-      this.updatePanel();
+    if(!this.isActive)return;
+    if(event.key===' '&&this.isDrawing&&!event.target?.closest?.('button')){
+      event.preventDefault();if(event.repeat)return;
+      this.restoredDraft=true;this.draftPaused=!this.draftPaused;this.updatePanel();
     }
+    if(event.key==='Escape'){event.preventDefault();this.cancel();this.updatePanel();}
+    if(event.key==='Enter'&&this.isDrawing){event.preventDefault();this.finishCircle();}
+  }
+
+  updateDrawingCircle(point) {
+    if(!this.drawingObject||!point)return;
+    this.draftEndPoint={...point};this.implementationError='';this.lastCircleGeometry=null;
+    try {
+      const geometry=this.run('circle',{center:this.startPoint,point});
+      if(!geometry)throw Error('選択した実装では円を作図できません。');
+      const drawn=this.toolManager.host.render(geometry,this.drawingObject,{toolName:'circle'});
+      if(!drawn)throw Error('選択した実装では円を描画できません。');
+      this.lastCircleGeometry=geometry;this.drawingObject=drawn;drawn.removeAttribute('visibility');
+    } catch(error){this.implementationError=error.message;this.drawingObject.setAttribute('visibility','hidden');}
   }
 
   finishCircle() {
@@ -166,10 +208,13 @@ class CircleTool extends BaseTool {
       return null;
     }
 
+    this.updateDrawingCircle(this.draftEndPoint);
+    if(this.implementationError){this.updatePanel();return null;}
     const radius = this.lastCircleGeometry?.radius ?? parseFloat(this.drawingObject.getAttribute("r"));
     let finishedCircle = null;
 
     if (!Number.isFinite(radius) || radius < 1) {
+      if(this.restoredDraft){this.implementationError="確定には半径が1以上必要です。";this.updatePanel();return null;}
       this.canvas.removeChild(this.drawingObject);
     } else {
       this.drawingObject.setAttribute("data-layer", window.currentLayerId);
@@ -180,6 +225,7 @@ class CircleTool extends BaseTool {
 
     this.isDrawing = false;
     this.drawingObject = null;
+    this.restoredDraft=false;this.draftPaused=false;this.draftEndPoint=null;
 
     if (finishedCircle && this.autoSelectAfterDraw) {
       if (
