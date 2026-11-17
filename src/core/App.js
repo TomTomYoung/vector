@@ -52,6 +52,7 @@ class App {
     this.toolManager.preferences = this.preferences;
     this.toolManager.documentPreset = window.VectorUtils.createDocumentImplementationPreset(this.host);
     this.toolManager.inputPresets = window.VectorUtils.createConstructionInputPresets();
+    this.toolManager.namedInputPresets = window.VectorUtils.createNamedConstructionInputs();
     window.toolManager = this.toolManager;
     this.setupKeyboardEvents();
 

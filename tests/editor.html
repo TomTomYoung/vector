@@ -2902,6 +2902,111 @@ await check('Text draft limits and focused editing keys preserve the old record,
   }finally{app.element.remove();}
 });
 
+const namedState=app=>JSON.parse(app.w.DrawingDocument.capture().querySelector('metadata[data-vector-document]').textContent).namedConstructionInputs;
+const namedName=(app,value)=>{const input=app.d.querySelector('[data-named-construction-name]');assert(input,'named record name field');input.value=value;input.dispatchEvent(new app.w.Event('input'));};
+const namedAction=(app,id)=>{const button=app.d.querySelector('[data-named-construction-action="'+id+'"]');assert(button&&!button.disabled,'enabled named action '+id);button.click();};
+const namedChoose=(app,id)=>{const select=app.d.querySelector('[data-named-construction-select]');select.value=id;select.dispatchEvent(new app.w.Event('change'));};
+const namedSelected=app=>app.d.querySelector('[data-named-construction-select]').value;
+function namedSVG(app,value){const root=app.w.DrawingDocument.capture(),meta=root.querySelector('metadata[data-vector-document]'),data=JSON.parse(meta.textContent);data.namedConstructionInputs=value;meta.textContent=JSON.stringify(data);return new app.w.XMLSerializer().serializeToString(root);}
+
+await check('All 25 supported controllers can save named inputs and restore them after a fresh SVG load without changing methods or legacy records',async()=>{
+  const source=await preferenceEditor('{preferences:false}');let target;
+  try{
+    const names=Object.keys(source.w.toolManager.tools).filter(n=>typeof source.w.toolManager.tools[n].exportInputPreset==='function');assert(names.length===25,'25 supported controllers');
+    for(const name of names){source.d.getElementById(name+'-tool').click();namedName(source,'保存 '+name);namedAction(source,'create');await tick();}
+    const saved=namedState(source);assert(saved.entries.length===25&&!inputPresetState(source),'named records separate from legacy');
+    target=await preferenceEditor('{preferences:false}');const host=target.w.toolManager.host,execute=host.execute;let calls=0;host.execute=(...args)=>{calls++;return execute(...args);};target.w.DrawingDocument.open(source.w.DrawingDocument.serialize());target.w.saveState();await tick();assert(calls===0,'load does not calculate');const methods=JSON.stringify(host.exportPreferences()),history=target.w.undoStack.length;
+    for(const name of names){target.d.getElementById(name+'-tool').click();const item=saved.entries.find(e=>e.tool===name);assert(namedSelected(target)===item.id,'stable ID '+name);namedAction(target,'restore');assert(JSON.stringify(target.w.toolManager.tools[name].exportInputPreset())===JSON.stringify(item.entry),'restored input '+name);}
+    assert(JSON.stringify(namedState(target))===JSON.stringify(saved)&&JSON.stringify(host.exportPreferences())===methods&&target.w.undoStack.length===history&&!inputPresetState(target),'restoration preserves records, preferences and history');
+  }finally{source.element.remove();target?.element.remove();}
+});
+
+await check('Named text records support independent creation, rename, duplicate, update and deletion with one-step undo and redo',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    app.d.getElementById('text-tool').click();annotationText(app,'入力A');parameterClick(app,100,160);namedName(app,'A');namedAction(app,'create');await tick();const a=namedSelected(app);
+    annotationText(app,'入力B');namedName(app,'B');namedAction(app,'create');await tick();const b=namedSelected(app),draft=app.w.toolManager.tools.text.draftContent;
+    async function change(id,value,action,check){app.d.getElementById('text-tool').click();namedChoose(app,id);if(value!==null)namedName(app,value);const before=JSON.stringify(namedState(app)),history=app.w.undoStack.length;namedAction(app,action);await tick();const after=JSON.stringify(namedState(app));assert(after!==before&&app.w.undoStack.length===history+1,'single named mutation '+action);check();app.w.undo();assert(JSON.stringify(namedState(app))===before,'undo '+action);app.w.redo();assert(JSON.stringify(namedState(app))===after,'redo '+action);}
+    namedChoose(app,a);assert(app.w.toolManager.tools.text.draftContent===draft,'selection is inert');
+    await change(a,'改名A','rename',()=>assert(namedState(app).entries.find(e=>e.id===a).name==='改名A','rename retains ID'));
+    let copy;await change(a,'コピーA','duplicate',()=>{copy=namedSelected(app);assert(copy!==a&&namedState(app).entries.find(e=>e.id===copy).entry.input.content==='入力A','copy original input');});
+    app.d.getElementById('text-tool').click();namedChoose(app,a);namedAction(app,'restore');annotationText(app,'更新A');const history=app.w.undoStack.length;namedAction(app,'update');await tick();assert(app.w.undoStack.length===history+1,'update once');assert(namedState(app).entries.find(e=>e.id===a).entry.input.content==='更新A'&&namedState(app).entries.find(e=>e.id===copy).entry.input.content==='入力A'&&namedState(app).entries.find(e=>e.id===b).entry.input.content==='入力B','update affects one ID');app.w.undo();assert(namedState(app).entries.find(e=>e.id===a).entry.input.content==='入力A','undo update');app.w.redo();
+    await change(copy,null,'remove',()=>assert(!namedState(app).entries.some(e=>e.id===copy),'selected copy removed'));
+  }finally{app.element.remove();}
+});
+
+await check('Choosing a named circle never applies it until restore, and actual drawing uses the current renderer with atomic undo',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    const tool=shapeDraftInput(app,'circle');namedName(app,'小円');namedAction(app,'create');await tick();const small=namedSelected(app);
+    draftKey(app,'p');parameterMouse(app,'mousemove',340,280);draftKey(app,'p');namedName(app,'大円');namedAction(app,'create');await tick();const large=JSON.stringify(tool.exportInputPreset()),saved=JSON.stringify(namedState(app)),history=app.w.undoStack.length;
+    namedChoose(app,small);assert(JSON.stringify(tool.exportInputPreset())===large&&app.w.undoStack.length===history,'choosing only changes UI');preferenceChoose(app,'rendering','cubic');const methods=JSON.stringify(app.w.toolManager.host.exportPreferences());namedAction(app,'restore');assert(!shapeDraftOutput(app,'circle'),'restore preview only');constructionEnter(app);await tick();const el=shapeDraftOutput(app,'circle'),record=namedState(app).entries.find(e=>e.id===small),[a,b]=record.entry.input.points;
+    assert(el.tagName==='path'&&Math.abs(JSON.parse(el.getAttribute('data-vector-circle')).model.radius-Math.hypot(b.x-a.x,b.y-a.y))<1e-5,'saved small radius with selected renderer');assert(JSON.parse(el.getAttribute('data-vector-implementation')).rendering.id==='cubic','actual renderer saved');assert(JSON.stringify(namedState(app))===saved&&JSON.stringify(app.w.toolManager.host.exportPreferences())===methods&&app.w.undoStack.length===history+1,'input and method independence');app.w.undo();assert(!shapeDraftOutput(app,'circle'),'undo shape');app.w.redo();assert(shapeDraftOutput(app,'circle'),'redo shape');
+  }finally{app.element.remove();}
+});
+
+await check('Named spline numerical settings and full point drafts coexist and retain version-specific restore and update semantics',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    const tool=curveDraftInput(app,'spline');namedName(app,'倍率だけ');namedAction(app,'create');await tick();const numeric=namedSelected(app);namedName(app,'通過点込み');namedAction(app,'create-draft');await tick();const draft=namedSelected(app),savedPoints=JSON.stringify(tool.points);
+    parameterClick(app,360,260);preferenceNumber(app,'標準実装の接線倍率',3);const livePoints=tool.points;namedChoose(app,numeric);namedAction(app,'restore');assert(tool.points===livePoints&&tool.tension===2,'numeric restore preserves current points');assert(app.d.querySelector('[data-named-construction-action="restore"]').textContent.includes('数値設定'),'numeric action label');
+    namedChoose(app,draft);namedAction(app,'restore');assert(JSON.stringify(tool.points)===savedPoints&&tool.tension===2,'full draft restores points');parameterClick(app,400,300);const updated=JSON.stringify(tool.points);namedAction(app,'update-draft');await tick();assert(JSON.stringify(namedState(app).entries.find(e=>e.id===draft).entry.input.points)===updated&&namedState(app).entries.find(e=>e.id===numeric).entry.version===1,'draft update leaves numeric record');
+    constructionEnter(app);await tick();assert(curveDraftShape(app,'spline'),'restored spline commits normally');
+  }finally{app.element.remove();}
+});
+
+await check('Legacy one-record presets can be copied into named records without cross-updating either storage mode',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    app.d.getElementById('text-tool').click();annotationText(app,'従来入力');parameterClick(app,100,180);inputPresetAction(app,'record');await tick();const legacy=JSON.stringify(inputPresetState(app)),tool=app.w.toolManager.tools.text;
+    annotationText(app,'現在入力');namedName(app,'旧記録の複製');namedAction(app,'copy-legacy');await tick();const id=namedSelected(app);assert(namedState(app).entries[0].entry.input.content==='従来入力'&&tool.draftContent==='現在入力'&&JSON.stringify(inputPresetState(app))===legacy,'copies saved legacy input rather than live draft');
+    namedAction(app,'update');await tick();assert(namedState(app).entries[0].entry.input.content==='現在入力'&&JSON.stringify(inputPresetState(app))===legacy,'named update leaves legacy');inputPresetAction(app,'remove');await tick();assert(!inputPresetState(app)&&namedState(app).entries[0].id===id,'legacy deletion leaves named');
+    app.w.undo();assert(JSON.stringify(inputPresetState(app))===legacy&&namedState(app).entries[0].id===id,'undo legacy deletion preserves named');app.w.DrawingDocument.open(app.w.DrawingDocument.serialize());assert(namedState(app).entries[0].entry.input.content==='現在入力'&&JSON.stringify(inputPresetState(app))===legacy,'both formats roundtrip together');
+  }finally{app.element.remove();}
+});
+
+await check('Invalid named metadata refuses the whole SVG before changing drafts or selection, while future entries remain inert and manageable',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    app.d.getElementById('text-tool').click();annotationText(app,'生きた下書き');parameterClick(app,140,200);namedName(app,'現在');namedAction(app,'create');inputPresetAction(app,'record');await tick();const tool=app.w.toolManager.tools.text,preview=tool.previewElement,before=app.w.DrawingDocument.serialize(),history=app.w.undoStack.length,id=namedSelected(app),item=namedState(app).entries[0];
+    for(const value of [{version:2,entries:[]},{version:1,entries:[item,{...item,name:'重複ID'}]},{version:1,entries:[{...item,entry:{version:1,input:{point:null,content:42}}}]}]){let failed=false;try{app.w.DrawingDocument.open(namedSVG(app,value));}catch{failed=true;}assert(failed&&app.w.DrawingDocument.serialize()===before&&tool.previewElement===preview&&namedSelected(app)===id&&app.w.undoStack.length===history,'atomic named import rejection');}
+    const future={version:1,entries:[{id:'future-text',tool:'text',name:'<b>将来版</b>',entry:{version:9,input:{later:true}}},{id:'plugin',tool:'missingPlugin',name:'外部入力',entry:{version:5,input:{next:[1,2]}}}]};app.w.DrawingDocument.open(namedSVG(app,future));app.d.getElementById('text-tool').click();assert(app.d.querySelector('[data-named-construction-action="restore"]').disabled,'unknown version disabled');assert(!app.d.querySelector('[data-named-construction-inputs] b'),'name is literal text');
+    namedName(app,'改名した将来版');namedAction(app,'rename');await tick();namedName(app,'将来版の複製');namedAction(app,'duplicate');await tick();const saved=JSON.stringify(namedState(app));app.w.DrawingDocument.open(app.w.DrawingDocument.serialize());assert(JSON.stringify(namedState(app))===saved&&namedState(app).entries.find(e=>e.id==='plugin').entry.version===5,'unknown tool and version retained');
+    app.w.DrawingDocument.open('<svg xmlns="http://www.w3.org/2000/svg"/>');assert(!namedState(app)&&!inputPresetState(app),'old document clears both fields');
+  }finally{app.element.remove();}
+});
+
+await check('Duplicate names, invalid labels and invalid live input preserve named records, selected IDs and undo history',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    app.d.getElementById('text-tool').click();annotationText(app,'保存済み');parameterClick(app,140,220);namedName(app,'A');namedAction(app,'create');await tick();const before=JSON.stringify(namedState(app)),id=namedSelected(app),history=app.w.undoStack.length;
+    for(const value of ['A',' ','x'.repeat(101)]){namedName(app,value);namedAction(app,value==='A'?'create':'rename');await tick();assert(JSON.stringify(namedState(app))===before&&namedSelected(app)===id&&app.w.undoStack.length===history,'invalid named operation is atomic');assert(app.w.toolManager.namedInputPresets.state.warning,'failure status');}
+    annotationText(app,'x'.repeat(20001));namedName(app,'B');namedAction(app,'create');await tick();assert(JSON.stringify(namedState(app))===before&&app.w.toolManager.tools.text.draftContent.length===20001,'bad live draft keeps old record and raw input');
+    namedName(app,'入力中の名前');app.w.toolPropertiesPanel.updatePanel();assert(app.d.querySelector('[data-named-construction-name]').value==='入力中の名前','typed name survives panel refresh');
+  }finally{app.element.remove();}
+});
+
+await check('Named restore reports calculation and rendering failures, keeps input records and retries with the working implementation',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    const tool=shapeDraftInput(app,'circle'),host=app.w.toolManager.host;namedName(app,'再試行');namedAction(app,'create');await tick();draftKey(app,'Escape');const saved=JSON.stringify(namedState(app)),history=app.w.undoStack.length;
+    host.registerImplementation('circle',{id:'named-fail',label:'Failure',algorithm:'Explicit test failure',run:()=>{throw Error('named calculation failed');}});host.selectImplementation('circle','named-fail');namedAction(app,'restore');assert(tool.implementationError.includes('calculation failed')&&app.d.querySelector('[data-named-construction-status]').textContent.includes('calculation failed'),'calculation failure visible');constructionEnter(app);assert(!shapeDraftOutput(app,'circle')&&app.w.undoStack.length===history,'failure creates no artwork');
+    host.selectImplementation('circle','default');host.registerRenderer({id:'named-fail',label:'Failure',algorithm:'Explicit test failure',supports:n=>n==='circle',prepare:()=>{throw Error('named rendering failed');}});host.selectRenderer('circle','named-fail');namedAction(app,'restore');assert(tool.implementationError.includes('rendering failed')&&!shapeDraftOutput(app,'circle'),'failed renderer leaves editable input');
+    host.selectRenderer('circle','default');namedAction(app,'restore');constructionEnter(app);await tick();assert(shapeDraftOutput(app,'circle')&&JSON.stringify(namedState(app))===saved&&app.w.undoStack.length===history+1,'retry commits with unchanged named records');
+  }finally{app.element.remove();}
+});
+
+await check('Named records survive actual SVG download without browser storage and restore independent values after reopening',async()=>{
+  const app=await preferenceEditor('{preferences:{storage:()=>{throw Error("blocked");}}}');
+  try{
+    app.d.getElementById('text-tool').click();annotationText(app,'一番目');parameterClick(app,100,200);namedName(app,'一番目');namedAction(app,'create');await tick();const first=namedSelected(app);annotationText(app,'二番目');namedName(app,'二番目');namedAction(app,'create');await tick();const second=namedSelected(app),saved=JSON.stringify(namedState(app));let blob;
+    const url=app.w.URL.createObjectURL,revoke=app.w.URL.revokeObjectURL,click=app.w.HTMLAnchorElement.prototype.click;app.w.URL.createObjectURL=value=>{blob=value;return'blob:named-inputs';};app.w.URL.revokeObjectURL=()=>{};app.w.HTMLAnchorElement.prototype.click=function(){};
+    try{app.d.getElementById('save-btn').click();app.w.DrawingDocument.open(await blob.text());assert(JSON.stringify(namedState(app))===saved&&!annotationOutput(app,'text'),'download retains records and omits live text');}finally{app.w.URL.createObjectURL=url;app.w.URL.revokeObjectURL=revoke;app.w.HTMLAnchorElement.prototype.click=click;}
+    for(const [id,content] of [[first,'一番目'],[second,'二番目']]){app.d.getElementById('text-tool').click();namedChoose(app,id);namedAction(app,'restore');assert(app.w.toolManager.tools.text.draftContent===content,'independent restored text');annotationAction(app,'apply');await tick();}
+    assert(app.w.DrawingDocument.capture().querySelectorAll('[data-text-tool]').length===2&&JSON.stringify(namedState(app))===saved,'both named inputs create actual text without storage');
+  }finally{app.element.remove();}
+});
+
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
 </script>

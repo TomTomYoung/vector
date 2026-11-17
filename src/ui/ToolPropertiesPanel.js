@@ -196,6 +196,7 @@ class ToolPropertiesPanel {
     this.createPreferenceControls(section);
     this.createDocumentPresetControls(section, name);
     this.createConstructionInputControls(section, name);
+    this.createNamedConstructionInputControls(section, name);
     if (this.currentTool.implementationError) {
       const p = document.createElement('p'); p.textContent = this.currentTool.implementationError; p.style.color = '#a22'; section.append(p);
     }
@@ -316,21 +317,7 @@ class ToolPropertiesPanel {
     if(stored){const list=document.createElement('p');list.textContent='記録のあるツール: '+Object.keys(stored.entries).map(n=>this.toolManager.tools[n]?.getTitle()??n).join('、');details.append(list);}
     const status=document.createElement('p');status.dataset.constructionInputStatus='';status.setAttribute('role','status');status.textContent=presets.state.message;
     status.style.cssText='font-size:12px;line-height:1.6';if(presets.state.warning)status.style.color='#a22';details.append(status);
-    if(saved){
-      const p=document.createElement('p');p.dataset.constructionInputRecord='';p.textContent=name+' / 入力形式 '+saved.version;
-      if(canRestore){
-        if(Array.isArray(saved.input.points))p.textContent+=' / 点数 '+saved.input.points.length;
-        if(saved.input.degree!==undefined)p.textContent+=' / 次数 '+saved.input.degree;
-        if(saved.input.periodic!==undefined)p.textContent+=' / 周期 '+(saved.input.periodic?'あり':'なし');
-        if(saved.input.box)p.textContent+=' / 切り取り範囲 '+JSON.stringify(saved.input.box);
-        if(saved.input.dimensionType)p.textContent+=' / 寸法種別 '+(saved.input.dimensionType==='linear'?'長さ':'角度');
-        if(name==='text')p.textContent+=' / 文字数 '+saved.input.content.length+' / '+(saved.input.point?'配置位置 '+saved.input.point.x+', '+saved.input.point.y:'配置位置は未指定');
-        if(saved.input.pathMode)p.textContent+=' / 描画モード '+(saved.input.pathMode==='line'?'直線':'ベジェ');
-        if(Object.hasOwn(window.VectorUtils.constructionParameterFields,name))for(const [key,label] of window.VectorUtils.constructionParameterFields[name])p.textContent+=' / '+label+' '+saved.input[key];
-      }
-      if(!canRestore)p.textContent+=' / このツール・版は復元に未対応です。記録はSVGに保持します。';
-      details.append(p);
-    }
+    if(saved){const p=document.createElement('p');p.dataset.constructionInputRecord='';p.textContent=this.describeConstructionInputRecord(name,saved,canRestore);details.append(p);}
     const button=(label,id,enabled,action)=>{
       const b=document.createElement('button');b.type='button';b.textContent=label;b.dataset.constructionInputAction=id;b.disabled=!enabled;b.style.margin='3px';
       b.onclick=()=>{action();this.updatePanel();const next=this.panel.querySelector('[data-construction-input-presets]');if(next)next.open=true;};details.append(b);
@@ -343,6 +330,66 @@ class ToolPropertiesPanel {
     }
     if(!supported){const p=document.createElement('p');p.textContent='記録したツールを選択すると復元できます。';details.append(p);}
     const link=document.createElement('a');link.textContent='作図入力の保存範囲と復元方法';link.href='https://github.com/TomTomYoung/vector/blob/master/doc/construction-input-presets.md';link.target='_blank';link.rel='noopener';details.append(link);
+    section.append(details);
+  }
+
+  describeConstructionInputRecord(name,saved,canRestore) {
+    let text=name+' / 入力形式 '+saved.version;
+    if(canRestore){
+      if(Array.isArray(saved.input.points))text+=' / 点数 '+saved.input.points.length;
+      if(saved.input.degree!==undefined)text+=' / 次数 '+saved.input.degree;
+      if(saved.input.periodic!==undefined)text+=' / 周期 '+(saved.input.periodic?'あり':'なし');
+      if(saved.input.box)text+=' / 切り取り範囲 '+JSON.stringify(saved.input.box);
+      if(saved.input.dimensionType)text+=' / 寸法種別 '+(saved.input.dimensionType==='linear'?'長さ':'角度');
+      if(name==='text')text+=' / 文字数 '+saved.input.content.length+' / '+(saved.input.point?'配置位置 '+saved.input.point.x+', '+saved.input.point.y:'配置位置は未指定');
+      if(saved.input.pathMode)text+=' / 描画モード '+(saved.input.pathMode==='line'?'直線':'ベジェ');
+      if(Object.hasOwn(window.VectorUtils.constructionParameterFields,name))for(const [key,label] of window.VectorUtils.constructionParameterFields[name])text+=' / '+label+' '+saved.input[key];
+    }
+    if(!canRestore)text+=' / このツール・版は復元に未対応です。記録はSVGに保持します。';
+    return text;
+  }
+
+  createNamedConstructionInputControls(section, name) {
+    const presets=this.toolManager.namedInputPresets,tool=this.currentTool;
+    if(!presets)return;
+    const supported=typeof tool.exportInputPreset==='function'&&typeof tool.restoreInputPreset==='function';
+    const stored=presets.snapshot(),items=presets.list(name),saved=presets.entry(name),legacy=this.toolManager.inputPresets?.entry(name);
+    if(!supported&&!stored)return;
+    const dual=typeof tool.exportInputDraftPreset==='function',canRestore=window.VectorUtils.supportsConstructionInput(tool,saved?.entry);
+    const parameters=window.VectorUtils.constructionInputMode(tool,saved?.entry)==='parameters';
+    const details=document.createElement('details');details.dataset.namedConstructionInputs='';
+    const heading=document.createElement('summary');heading.textContent='名前付きの作図入力（SVGに複数保存）';details.append(heading);
+    const note=document.createElement('p');note.textContent='記録名を入力して新規保存します。記録を選ぶだけでは下書きは変わりません。復元は明示操作で行い、計算・描画の選択方式は維持します。';details.append(note);
+    const list=document.createElement('p');list.textContent='このツール: '+items.length+'件 / 図面全体: '+(stored?.entries.length??0)+'件';details.append(list);
+    if(stored?.entries.length){const names=document.createElement('p');names.textContent='記録のあるツール: '+[...new Set(stored.entries.map(e=>e.tool))].map(n=>this.toolManager.tools[n]?.getTitle()??n).join('、');details.append(names);}
+    const refresh=()=>{this.updatePanel();const next=this.panel.querySelector('[data-named-construction-inputs]');if(next)next.open=true;};
+    const select=document.createElement('select');select.dataset.namedConstructionSelect='';select.setAttribute('aria-label','名前付き作図入力の選択');select.style.width='100%';
+    if(!items.length)select.append(new Option('記録はありません',''));
+    for(const item of items)select.append(new Option(item.name+' / 入力形式 '+item.entry.version,item.id));
+    select.value=saved?.id??'';select.disabled=!items.length;
+    select.onchange=()=>{presets.choose(name,select.value);refresh();};details.append(select);
+    const label=document.createElement('label');label.textContent='記録名';
+    const input=document.createElement('input');input.type='text';input.maxLength=100;input.dataset.namedConstructionName='';input.setAttribute('aria-label','作図入力の記録名');input.style.cssText='width:100%;box-sizing:border-box';input.value=presets.nameDraft(name);
+    input.oninput=()=>presets.setNameDraft(name,input.value);label.append(input);details.append(label);
+    const status=document.createElement('p');status.dataset.namedConstructionStatus='';status.setAttribute('role','status');status.textContent=presets.state.message;status.style.cssText='font-size:12px;line-height:1.6';if(presets.state.warning)status.style.color='#a22';details.append(status);
+    if(saved){const p=document.createElement('p');p.dataset.namedConstructionRecord='';p.textContent=saved.name+' / '+this.describeConstructionInputRecord(name,saved.entry,canRestore);details.append(p);}
+    const button=(label,id,enabled,action,save=true)=>{
+      const b=document.createElement('button');b.type='button';b.textContent=label;b.dataset.namedConstructionAction=id;b.disabled=!enabled;b.style.margin='3px';
+      b.onclick=()=>{if(action()&&save)this.toolManager.host.save();refresh();};details.append(b);
+    };
+    if(supported)button(dual?'現在の数値設定を名前付き保存':'現在の入力を名前付き保存','create',true,()=>presets.record(name,input.value,tool));
+    if(dual)button('現在の下書きを名前付き保存','create-draft',true,()=>presets.record(name,input.value,tool,{draft:true}));
+    if(legacy)button('従来の1件記録を名前付きで複製','copy-legacy',true,()=>presets.add(name,input.value,legacy));
+    if(saved){
+      button(parameters?'選択した数値設定を復元':'選択した入力を下書きへ復元','restore',canRestore,()=>presets.restore(name,saved.id,tool),false);
+      button(dual?'選択記録を現在の数値設定で更新':'選択記録を現在の入力で更新','update',supported,()=>presets.update(name,saved.id,tool));
+      if(dual)button('選択記録を現在の下書きで更新','update-draft',true,()=>presets.update(name,saved.id,tool,{draft:true}));
+      button('選択記録を改名','rename',true,()=>presets.rename(name,saved.id,input.value));
+      button('選択記録を別名で複製','duplicate',true,()=>presets.duplicate(name,saved.id,input.value));
+      button('選択記録を削除','remove',true,()=>presets.remove(name,saved.id));
+    }
+    if(!supported){const p=document.createElement('p');p.textContent='対応する作図ツールを選択すると記録を使用できます。';details.append(p);}
+    const link=document.createElement('a');link.textContent='名前付き記録の保存・互換性・操作';link.href='https://github.com/TomTomYoung/vector/blob/master/doc/named-construction-inputs.md';link.target='_blank';link.rel='noopener';details.append(link);
     section.append(details);
   }
 

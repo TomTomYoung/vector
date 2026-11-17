@@ -16,10 +16,8 @@ const checkPoints = points => {
   for(const p of points){keys(p,['x','y']);if(!Number.isFinite(p.x)||!Number.isFinite(p.y))fail();}
 };
 
-// Validate stored drafts structurally; incomplete geometry and unfinished text are intentional.
-export function parseConstructionInputPresets(value) {
-  if(value===undefined)return undefined;
-  if(typeof value==='string'){if(value.length>2000000)throw RangeError('作図入力は2000000文字までです。');value=JSON.parse(value);}
+// Shared bounds for legacy and named input metadata, before JSON copying.
+export function validateConstructionInputData(value) {
   let count=0;
   function check(item,depth=0){
     if(depth>12||++count>50000)fail();
@@ -30,7 +28,14 @@ export function parseConstructionInputPresets(value) {
     const proto=Object.getPrototypeOf(item);if(proto&&proto.constructor?.name!=='Object')fail();
     for(const [k,v] of Object.entries(item)){if(['__proto__','prototype','constructor'].includes(k))fail();check(v,depth+1);}
   }
-  check(value);keys(value,['version','entries']);if(value.version!==1||!record(value.entries)||Object.keys(value.entries).length>256)fail();
+  check(value);
+}
+
+// Validate stored drafts structurally; incomplete geometry and unfinished text are intentional.
+export function parseConstructionInputPresets(value) {
+  if(value===undefined)return undefined;
+  if(typeof value==='string'){if(value.length>2000000)throw RangeError('作図入力は2000000文字までです。');value=JSON.parse(value);}
+  validateConstructionInputData(value);keys(value,['version','entries']);if(value.version!==1||!record(value.entries)||Object.keys(value.entries).length>256)fail();
   for(const [name,entry] of Object.entries(value.entries)){
     if(!validName(name))fail();keys(entry,['version','input']);
     if(!Number.isSafeInteger(entry.version)||entry.version<1||!record(entry.input))fail();
