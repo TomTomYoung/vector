@@ -2,6 +2,7 @@ import {bSplineCurve,nurbsCurve,homogeneousSplineBezierSpans,homogeneousSplineBe
 import {raiseHomogeneousBezier} from './splineDegreeElevation.js';
 import {boundedSplineDeviation} from './splineDeviation.js';
 import {addSparseQrRow,solveSparseQr} from './sparseQr.js';
+import {periodicReductionDomain} from './periodicReductionDomain.js';
 
 const finite=h=>h&&[h.x,h.y,h.w].every(Number.isFinite);
 function project(c,h){
@@ -38,15 +39,16 @@ export function prepareSplineDegreeReduction(input,{representation='bezier'}={})
   const start=spans[0].from,end=spans.at(-1).to,multiplicities=new Map();
   const source=model.periodic?model.knots.slice(p,p+model.controlCount):model.knots;
   for(const value of source){const t=model.periodic&&value===end?start:value;multiplicities.set(t,(multiplicities.get(t)??0)+1);}
-  // A simple periodic seam would disappear. Keep the active domain unchanged;
-  // moving that seam is a separate operation, not an implicit parameter shift.
-  if(!model.periodic||multiplicities.get(start)>1){
-    const target=model.periodic?spans.flatMap(s=>Array(multiplicities.get(s.from)-1).fill(s.from)):
-      [...Array(q+1).fill(start),...spans.slice(1).flatMap(s=>Array(multiplicities.get(s.from)-1).fill(s.from))];
-    target.push(...Array(model.periodic?1:q+1).fill(end));const size=target.length-(model.periodic?1:q+1),ends=new Map();
+  const target=model.periodic?spans.flatMap(s=>Array(multiplicities.get(s.from)-1).fill(s.from)):
+    [...Array(q+1).fill(start),...spans.slice(1).flatMap(s=>Array(multiplicities.get(s.from)-1).fill(s.from))];
+  const moved=model.periodic&&target.length&&target[0]!==start;
+  const domain=moved?periodicReductionDomain(model,spans,target[0],create):null;
+  if(!moved||domain){
+    target.push(...Array(model.periodic?1:q+1).fill(domain?.domainShift.to[1]??end));
+    const size=target.length-(model.periodic?1:q+1),ends=new Map();
     if(!model.periodic){ends.set(0,spans[0].controls[0]);ends.set(size-1,spans.at(-1).controls.at(-1));
       for(let i=1;i<spans.length;i++)if(spans[i].breakBefore){const k=target.indexOf(spans[i].from);ends.set(k-1,spans[i-1].controls.at(-1));ends.set(k,spans[i].controls[0]);}}
-    layouts.continuity={knots:target,count:size,fixed:ends};
+    layouts.continuity={knots:target,count:size,fixed:ends,...(domain??{})};
   }
   const c={model,create,rational,tolerance,p,q,origin,scale,sign,toHomogeneous,spans,knots,count,fixed:orderedFixed,layouts};
   for(const id of Object.keys(layouts)){const l=layouts[id];
@@ -56,7 +58,7 @@ export function prepareSplineDegreeReduction(input,{representation='bezier'}={})
 }
 
 function inspect(c,result,preferred){
-  const {model,create,rational,p,q,tolerance,scale,spans,layouts}=c,periodic=!!model.periodic,actual=periodic?result?.periodicKnots:result?.knots;
+  const {model,create,rational,p,q,tolerance,scale,layouts}=c,periodic=!!model.periodic,actual=periodic?result?.periodicKnots:result?.knots;
   if(!result||result.degree!==q||!!result.periodic!==periodic||!Array.isArray(result.points)||
     !Array.from(result.points).every(point=>point&&Number.isFinite(point.x)&&Number.isFinite(point.y))||rational!==(result.weights!==undefined))return null;
   if(rational&&(!Array.isArray(result.weights)||result.weights.length!==result.points.length||!Array.from(result.weights).every(w=>Number.isFinite(w)&&(w===0||w/scale!==0))))return null;
@@ -66,7 +68,7 @@ function inspect(c,result,preferred){
     const layout=layouts[id];return layout&&result.points.length===layout.count&&Array.isArray(actual)&&actual.length===layout.knots.length&&layout.knots.every((k,i)=>k===actual[i])&&
       [...layout.fixed].every(([i,h])=>{const expected=project(c,h),point=result.points[i];return expected&&point.x===expected.point.x&&point.y===expected.point.y&&(!rational||result.weights[i]===expected.weight);});
   });
-  if(!representation)return null;const {count,knots}=layouts[representation];
+  if(!representation)return null;const {count,knots,domainShift}=layouts[representation],spans=layouts[representation].spans??c.spans;
   const candidate=create(result);if(!candidate)return null;
   const homogeneous=c.toHomogeneous(candidate);if(!homogeneous.every(finite))return null;
 
@@ -84,8 +86,9 @@ function inspect(c,result,preferred){
   }
   return {points:result.points.map(point=>({x:point.x,y:point.y})),degree:q,periodic,[periodic?'periodicKnots':'knots']:[...knots],
     ...(rational?{weights:[...result.weights]}:{}),reduction:{fromDegree:p,toDegree:q,tolerance,errorBound,spans:spans.length,
+      ...(domainShift?{periodic:{algorithm:'単純継ぎ目の除去・残存ノットへの始端移動・元の全区間係数の周期再配置',source:'src/model/periodicReductionDomain.js',domainShift}}:{}),
       representation:{id:representation,label:representation==='continuity'?'元の連続性を保つノット列':'端点固定の区間ベジェ接続',controlCount:count,originalControlCount:model.controlCount??model.points.length,endpointPolicy:representation==='bezier'?'全区間端点固定':periodic?'周期の閉接続・継ぎ目は許容差内で移動':'両端と不連続点の片側端点を固定'},
-      verification:{algorithm:'再次数上げ・共通Bernstein基底の全区間偏差検証'+(denominatorSpans?'・Bernstein分母範囲検査':''),
+      verification:{algorithm:(domainShift?'元の全区間を周期再配置・':'')+'再次数上げ・共通Bernstein基底の全区間偏差検証'+(denominatorSpans?'・Bernstein分母範囲検査':''),
         source:'src/model/splineDegreeReduction.js',denominatorSpans,denominatorNodes}}};
 }
 

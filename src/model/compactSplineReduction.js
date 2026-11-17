@@ -8,7 +8,7 @@ import {addSparseQrRow,solveSparseQr} from './sparseQr.js';
 // ordinary joins and a periodic seam may move within the verified tolerance.
 export function reduceSplineDegreeContinuity(input){
   const c=prepareSplineDegreeReduction(input,{representation:'continuity'});if(!c)return null;
-  const {model,p,q,rational,spans}=c,{knots,count,fixed}=c.layouts.continuity,periodic=!!model.periodic;
+  const {model,p,q,rational}=c,{knots,count,fixed}=c.layouts.continuity,spans=c.layouts.continuity.spans??c.spans,periodic=!!model.periodic;
   const probe=bSplineCurve({degree:q,points:Array.from({length:count},()=>({x:0,y:0})),periodic,
     [periodic?'periodicKnots':'knots']:knots});if(!probe)return null;
   const order=Array.from({length:count},(_,i)=>periodic?(i+q)%count:i).filter(i=>!fixed.has(i));

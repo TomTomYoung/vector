@@ -3752,11 +3752,11 @@ await check('Continuity reduction retains compact knots, source identity, appear
     w.undo();assert(doc.getElementById('editable-spline').getAttribute('data-vector-spline')===original,'undo');w.redo();assert(doc.getElementById('editable-spline').getAttribute('data-vector-spline')===changed,'redo');w.DrawingDocument.open(w.DrawingDocument.serialize());curve=doc.getElementById('editable-spline');activate('select');w.selectTool.selectObject(curve);splineAction('begin');assert(w.toolPropertiesPanel.splineEditor.input().points.length===4&&w.toolPropertiesPanel.splineEditor.draft.refinement.id==='continuity','restored source and record');splineField('次数上げの実装','continuity','change');splineAction('elevate-degree');splineField('次数下げの実装','continuity','change');splineAction('reduce-degree');splineAction('apply');assert(JSON.parse(curve.getAttribute('data-vector-spline')).model.points.length===4,'successive compact operations');
   }
 });
-await check('Periodic continuity reduction preserves closure and signed curves and refuses a disappearing seam atomically',async()=>{
+await check('Periodic continuity reduction preserves closure and signed curves and refuses an empty remaining basis atomically',async()=>{
   for(const periodicKnots of [[0,0,1,3,5,7],[0,1,3,5,7,7],[0.1,0.3,1,1.4,1.7,2]])for(const weight of [0,-0.125,2]){
     fixture();await tick();const curve=addEditableSpline('nurbsCurve',reductionInput('nurbsCurve',true,weight,periodicKnots));activate('select');w.selectTool.selectObject(curve);splineAction('begin');splineField('次数下げの実装','continuity','change');splineAction('reduce-degree');const editor=w.toolPropertiesPanel.splineEditor;assert(editor.input().degree===3&&draftPoints().length===5&&editor.input().periodicKnots[0]===periodicKnots[0]&&editor.input().periodicKnots.at(-1)===periodicKnots.at(-1)&&editor.draft.refinement.errorBound<=1e-7,'same periodic domain and compact controls');splineAction('apply');assert(curve.getAttribute('d').endsWith('Z')&&doc.querySelector('[data-recorded-implementation]').textContent.includes('継ぎ目は許容差内で移動'),'closed output and seam policy');
   }
-  fixture();await tick();const curve=addEditableSpline('bSplineCurve',{degree:3,points:periodicRemovalPoints,periodic:true});activate('select');w.selectTool.selectObject(curve);splineAction('begin');splineField('次数下げの実装','continuity','change');splineField('次数下げの許容差','1000000');splineAction('preview');const editor=w.toolPropertiesPanel.splineEditor,before=JSON.stringify(editor.input()),preview=editor.preview;assert(doc.querySelector('[data-spline-reduction-info]').textContent.includes('単純な周期継ぎ目'),'unsupported seam explained');splineAction('reduce-degree');assert(JSON.stringify(editor.input())===before&&editor.preview===preview&&!editor.draft.refinement,'domain is not silently moved');splineAction('cancel');
+  fixture();await tick();const curve=addEditableSpline('bSplineCurve',{degree:3,points:periodicRemovalPoints,periodic:true});activate('select');w.selectTool.selectObject(curve);splineAction('begin');splineField('次数下げの実装','continuity','change');splineField('次数下げの許容差','1000000');splineAction('preview');const editor=w.toolPropertiesPanel.splineEditor,before=JSON.stringify(editor.input()),preview=editor.preview;assert(doc.querySelector('[data-spline-reduction-info]').textContent.includes('単純な周期継ぎ目'),'simple seam behavior explained');splineAction('reduce-degree');assert(JSON.stringify(editor.input())===before&&editor.preview===preview&&!editor.draft.refinement,'empty remaining basis leaves the draft intact');splineAction('cancel');
 });
 await check('Continuity reduction rechecks replacement geometry and metadata, preserves failed previews and supports cancellation',async()=>{
   fixture();await tick();const input=w.toolManager.host.execute('elevateSplineDegree',{degree:3,points:continuityPoints},{implementation:'continuity'}),curve=addEditableSpline('bSplineCurve',input),host=w.toolManager.host;let mode='throw';w.saveState();await tick();w.undoStack.length=0;
@@ -3898,6 +3898,63 @@ await check('Selection respects locked descendants, cancels on viewport changes 
   w.selectTool.deselectObject();selectionMouse('mousedown',20,20);const original=canvas.style.transform;canvas.style.transform='scale(1.2)';
   try {selectionMouse('mousemove',50,50);assert(!w.selectTool.isMarqueeSelecting&&!canvas.querySelector('.marquee-selection'),'zoom cancels stale coverage');}finally{canvas.style.transform=original;}
 });
+function shiftedReductionInput(name='bSplineCurve',values=[.5],weight=2,knots=[0,1,3,4,6,8],original){
+  const base=original??{degree:3,periodic:true,points:periodicRemovalPoints,periodicKnots:knots,...(name==='nurbsCurve'?{weights:[1,weight,1,1,1]}:{})};
+  let input=w.toolManager.host.execute('elevateSplineDegree',base,{implementation:'continuity'});assert(input,'raised seed');
+  for(const t of values)input=w.VectorUtils.insertEditableSplineKnot(name,input,t);
+  const u=input.periodicKnots,n=input.points.length,offset=u.indexOf(values[0]),period=u[n]-u[0],rotate=v=>[...v.slice(offset),...v.slice(0,offset)];
+  return {...input,points:rotate(input.points),periodicKnots:[...u.slice(offset,n),...u.slice(0,offset+1).map(t=>t+period)],...(input.weights?{weights:rotate(input.weights)}:{})};
+}
+await check('Periodic degree reduction relocates a simple seam and records the interval through apply, Undo/Redo and SVG',async()=>{
+  for(const name of ['bSplineCurve','nurbsCurve']){
+    fixture();await tick();let curve=addEditableSpline(name,shiftedReductionInput(name));curve.setAttribute('transform','translate(20 30) scale(0.8)');w.saveState();await tick();w.undoStack.length=0;
+    const original=curve.getAttribute('data-vector-spline'),hostPreferences=JSON.stringify(w.toolManager.host.exportPreferences());activate('select');w.selectTool.selectObject(curve);splineAction('begin');splineField('次数下げの実装','continuity','change');splineAction('reduce-degree');const editor=w.toolPropertiesPanel.splineEditor;
+    assert(editor.input().degree===3&&draftPoints().length===5&&editor.input().periodicKnots.join(',')==='1,3,4,6,8,9'&&editor.message.includes('0.5〜8.5 → 1〜9'),'new domain visible before apply');
+    assert(editor.draft.refinement.periodic.domainShift.period===8&&editor.preview&&curve.getAttribute('data-vector-spline')===original&&w.undoStack.length===0,'verified result stays in draft');
+    const saved=new w.DOMParser().parseFromString(w.DrawingDocument.serialize(),'image/svg+xml');assert(saved.querySelector('#editable-spline').getAttribute('data-vector-spline')===original,'unapplied shift excluded');
+    splineAction('apply');await tick();const changed=curve.getAttribute('data-vector-spline'),record=JSON.parse(curve.getAttribute('data-vector-implementation'));
+    assert(curve===doc.getElementById('editable-spline')&&curve.getAttribute('transform')==='translate(20 30) scale(0.8)'&&curve.getAttribute('stroke')==='#624382'&&curve.getAttribute('d').endsWith('Z')&&w.undoStack.length===1,'identity appearance closed output and one undo');
+    assert(record.refinement.periodic.source==='src/model/periodicReductionDomain.js'&&record.refinement.verification.algorithm.includes('元の全区間')&&doc.querySelector('[data-recorded-implementation]').textContent.includes('0.5〜8.5 → 1〜9'),'actual periodic implementation and shift displayed');
+    w.undo();assert(doc.getElementById('editable-spline').getAttribute('data-vector-spline')===original,'undo old seam');w.redo();assert(doc.getElementById('editable-spline').getAttribute('data-vector-spline')===changed,'redo shifted seam');
+    w.DrawingDocument.open(w.DrawingDocument.serialize());curve=doc.getElementById('editable-spline');activate('select');w.selectTool.selectObject(curve);splineAction('begin');assert(w.toolPropertiesPanel.splineEditor.draft.refinement.periodic.domainShift.from[0]===.5&&w.toolPropertiesPanel.splineEditor.input().periodicKnots[0]===1,'restored interval and provenance');splineAction('apply');assert(JSON.stringify(w.toolManager.host.exportPreferences())===hostPreferences,'operation methods remain scoped');
+  }
+});
+await check('Shifted degree reduction skips simple knots, preserves repeated new seams and signed weights, and keeps controls editable',async()=>{
+  for(const weight of [0,-.125,2]){
+    frame.scrollIntoView();fixture();await tick();const curve=addEditableSpline('nurbsCurve',shiftedReductionInput('nurbsCurve',[.25,.5,.75],weight,[0,1,1,1,3,8]));activate('select');w.selectTool.selectObject(curve);splineAction('begin');splineField('次数下げの実装','continuity','change');splineAction('reduce-degree');const editor=w.toolPropertiesPanel.splineEditor;
+    assert(editor.input().degree===3&&editor.input().periodicKnots.join(',')==='1,1,1,3,8,9'&&editor.draft.refinement.periodic.domainShift.from[0]===.25,'skip removed knots and keep new seam multiplicity');
+    const snap=w.snapToGrid,ortho=w.orthoMode;w.snapToGrid=false;w.orthoMode=false;
+    try {const from=draftPoints()[1],to={x:from.x+8,y:from.y+6};pointer('pointerdown',splineHandle(1),localScreen(curve,from));pointer('pointerup',doc,localScreen(curve,to));assert(closePoint(draftPoints()[1],to),'shifted controls draggable');splineAction('apply');assert(curve.getAttribute('d').endsWith('Z'),'edited periodic output stays closed');}
+    finally{w.snapToGrid=snap;w.orthoMode=ortho;}
+  }
+});
+await check('Numerically unrepresentable shifted intervals preserve the draft and preview, and a successful shift remains cancellable',async()=>{
+  for(const knots of [[.1,.3,.3,1,1,1.7,1.7,2],[0,.1,.1,.2,.2,.7,.7,1]]) {
+    fixture();await tick();const curve=addEditableSpline('bSplineCurve',{degree:3,periodic:true,points:Array.from({length:7},(_,i)=>({x:150+30*Math.sin(i),y:150+30*Math.cos(i)})),periodicKnots:knots});activate('select');w.selectTool.selectObject(curve);splineAction('begin');splineField('次数下げの実装','continuity','change');splineField('次数下げの許容差','1000000');splineAction('preview');const editor=w.toolPropertiesPanel.splineEditor,before=JSON.stringify(editor.input()),preview=editor.preview;
+    splineAction('reduce-degree');assert(JSON.stringify(editor.input())===before&&editor.preview===preview&&!editor.draft.refinement&&editor.message.includes('検証'),'numeric rejection is atomic');splineAction('cancel');
+  }
+  fixture();await tick();const curve=addEditableSpline('nurbsCurve',shiftedReductionInput('nurbsCurve'));w.saveState();await tick();w.undoStack.length=0;const original=curve.getAttribute('data-vector-spline');activate('select');w.selectTool.selectObject(curve);splineAction('begin');splineField('次数下げの実装','continuity','change');splineAction('reduce-degree');assert(w.toolPropertiesPanel.splineEditor.draft.refinement.periodic,'successful shift');splineAction('cancel');assert(curve.getAttribute('data-vector-spline')===original&&w.undoStack.length===0,'cancel preserves source and history');
+});
+await check('Replacement reduction cannot forge a periodic shift or bypass the wrapped-period verifier',async()=>{
+  fixture();await tick();const input=shiftedReductionInput(),curve=addEditableSpline('bSplineCurve',input),host=w.toolManager.host;let mode='throw';
+  host.registerImplementation('reduceSplineDegree',{id:'shift-reduction-test',label:'Shift test',algorithm:'Delegated shifted QR',run:(value,ops,execute)=>{
+    if(mode==='throw'){value.points[0].x=999;throw Error('shift failure');}const out=execute('reduceSplineDegree',value,{implementation:'continuity'});if(mode==='corrupt')out.points.at(-1).x+=100;
+    out.reduction={errorBound:0,spans:1,periodic:{domainShift:{from:[99,100],to:[99,100],period:1}}};return out;
+  }});
+  activate('select');w.selectTool.selectObject(curve);splineAction('begin');splineField('次数下げの実装','shift-reduction-test','change');splineAction('preview');const editor=w.toolPropertiesPanel.splineEditor,before=JSON.stringify(editor.input()),preview=editor.preview;
+  splineAction('reduce-degree');assert(JSON.stringify(editor.input())===before&&editor.preview===preview&&editor.message.includes('shift failure'),'copy isolates thrown mutation');mode='corrupt';splineAction('reduce-degree');assert(JSON.stringify(editor.input())===before&&editor.preview===preview&&editor.message.includes('偏差'),'wrapped geometry verified');mode='valid';splineAction('reduce-degree');assert(editor.draft.refinement.spans===6&&editor.draft.refinement.periodic.domainShift.to[1]===9&&editor.draft.refinement.errorBound<=1e-7,'metadata recomputed');splineAction('apply');
+  assert(doc.querySelector('[data-recorded-implementation]').textContent.includes('Delegated shifted QR')&&doc.querySelector('[data-recorded-implementation]').textContent.includes('0.5〜8.5 → 1〜9'),'real implementation and validated interval');
+});
+await check('Workbench Worker reduces a shifted thousand-control period and restores the method and input session',async()=>{
+  const page=await createWorkbench();try {
+    const original={degree:11,periodic:true,points:Array.from({length:499},(_,i)=>({x:20*Math.sin(i),y:30*Math.cos(i)}))},input=shiftedReductionInput('bSplineCurve',[.25,.5],2,undefined,original);assert(input.points.length===1000,'capacity input');
+    page.choose('tool','reduceSplineDegree');page.choose('implementation','continuity');page.edit(JSON.stringify(input));assert(page.get('algorithm').textContent.includes('始端移動'),'shift algorithm visible');
+    const output=JSON.parse(await page.run());assert(output.degree===11&&output.points.length===499&&output.reduction.periodic.domainShift.to[0]===1&&output.reduction.periodic.domainShift.period===499,'Worker full-period result');
+    const saved=await page.exportText();page.choose('implementation','default');await page.importText(saved);assert(page.get('implementation').value==='continuity'&&JSON.parse(page.get('input').value).periodicKnots[0]===.25,'session restores method and source domain');
+    assert(JSON.parse(await page.run()).reduction.periodic.domainShift.to[1]===500,'restored Worker output');
+  }finally{await page.close();}
+});
+
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
 </script>

@@ -60,8 +60,8 @@ Les Piegl・Wayne Tiller、Software-engineering approach to degree elevation of 
 
 Huang・Hu・Martin、[Fast degree elevation and knot insertion for B-spline curves](https://www.cs.utexas.edu/~huangqx/cagd2005_degree.pdf)、DOI:10.1016/j.cagd.2004.11.001 の導入部・概要も比較しました。導関数を計算し、ノット列を変更して制御点へ戻す方式で、今回のQR実装とは別です。導関数ベース方式を換装する場合は、端点と周期の扱い、重複ノット、高次導関数の数値精度、同次座標の契約を合わせ、同じ最終偏差検証へ接続する必要があります。未実装です。
 
-単純周期継ぎ目の移動を伴う次数下げ、曲線固有の余分なノットをさらに省く全体簡約、極を含む枝単位の操作、射影無限遠の制御点を保持する編集モデル、曲面や区間ごとに次数が異なるモデルへの拡張は残る範囲です。
+曲線固有の余分なノットをさらに省く全体簡約、極を含む枝単位の操作、射影無限遠の制御点を保持する編集モデル、曲面や区間ごとに次数が異なるモデルへの拡張は残る範囲です。
 
 端点を固定した同次係数最小二乗による[許容差付き次数下げ](spline-degree-reduction.md)は実装済みです。区間ベジェ接続を返し、高次連続性や最少制御点は保証しません。
 
-元のノット列が定める[連続性を保つ次数下げ](spline-continuity-reduction.md)も選択できます。通常の接続点と周期継ぎ目は許容差内で移動し、単純周期継ぎ目が消える場合は未対応です。
+元のノット列が定める[連続性を保つ次数下げ](spline-continuity-reduction.md)も選択できます。通常の接続点と周期継ぎ目は許容差内で移動し、単純周期継ぎ目が消える場合の[始端移動](periodic-degree-reduction.md)にも対応しています。
