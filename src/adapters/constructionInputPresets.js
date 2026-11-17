@@ -1,5 +1,6 @@
 export const constructionInputTools = ['bSplineCurve','nurbsCurve','convexHull','triangulatePolygon','delaunayTriangles','voronoiCells','fitLine','fitCircle','minimumEnclosingCircle'];
 export const constructionDraftTools = ['line','polyline','quadraticBezier','cubicBezier','nthBezier'];
+export const constructionShapeTools = ['rectangle','circle','arc','polygon'];
 export const constructionParameterFields = {
   spline:[['tension','標準実装の接線倍率',0,4]],
   fillet:[['radius','半径',0.5,1000]],
@@ -33,6 +34,13 @@ export function parseConstructionInputPresets(value) {
   for(const [name,entry] of Object.entries(value.entries)){
     if(!validName(name))fail();keys(entry,['version','input']);
     if(!Number.isSafeInteger(entry.version)||entry.version<1||!record(entry.input))fail();
+    if(constructionShapeTools.includes(name)&&entry.version===1){
+      keys(entry.input,['points']);checkPoints(entry.input.points);
+      const count=entry.input.points.length;
+      if(['rectangle','circle'].includes(name)&&count!==0&&count!==2)fail();
+      if(name==='arc'&&count>3)fail();
+      continue;
+    }
     if((name==='path'&&entry.version===1)||(name==='spline'&&entry.version===2)){
       const input=entry.input;keys(input,['points',name==='path'?'pathMode':'tension']);checkPoints(input.points);
       if(name==='path'&&!['line','bezier'].includes(input.pathMode))fail();
@@ -83,6 +91,11 @@ export function parseConstructionDraft(name, entry) {
 
 export function parseCurveDraft(name, entry) {
   if(!((name==='path'&&entry?.version===1)||(name==='spline'&&entry?.version===2)))throw Error('このパス・スプライン下書きのツール・版には対応していません。');
+  return parseConstructionInputPresets({version:1,entries:{[name]:entry}}).entries[name];
+}
+
+export function parseShapeDraft(name, entry) {
+  if(!constructionShapeTools.includes(name)||entry?.version!==1)throw Error('この図形下書きのツール・版には対応していません。');
   return parseConstructionInputPresets({version:1,entries:{[name]:entry}}).entries[name];
 }
 

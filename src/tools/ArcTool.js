@@ -16,6 +16,30 @@ class ArcTool extends BaseTool {
     this.points = []; // 始点、通過点、終点
     this.currentArc = null;
     this.previewCircle = null;
+    this.draftHandles = null;
+    this.implementationError = '';
+    this.inputPresetVersion = 1;
+    this.inputPresetInstructions = '3点目のクリックで確定します。3点を復元した場合はEnterで確定し、クリックで終点を変更できます。Backspaceで末尾点を削除、Escで取消できます。';
+  }
+
+  exportInputPreset() {return window.VectorUtils.parseShapeDraft('arc',{version:1,input:{points:this.points}});}
+  restoreInputPreset(entry) {
+    const {input}=window.VectorUtils.parseShapeDraft('arc',entry);
+    if(!this.isActive)throw Error('復元する作図ツールを先に選択してください。');
+    this.cancelArc();this.points=input.points;this.redrawDraft();
+  }
+  onImplementationChanged() {this.redrawDraft();}
+  cancel() {this.cancelArc();}
+
+  redrawDraft() {
+    this.currentArc?.remove();this.previewCircle?.remove();this.draftHandles?.remove();
+    this.currentArc=this.previewCircle=this.draftHandles=null;this.implementationError='';
+    if(!this.points.length)return;
+    this.draftHandles=window.SvgUtils.createElement('g',{'data-tool-layer':'construction-handles','pointer-events':'none'});
+    this.points.forEach(p=>this.draftHandles.appendChild(window.SvgUtils.createCircle(p.x,p.y,3,{fill:'#fff',stroke:'#2673c7'})));
+    this.canvas.appendChild(this.draftHandles);
+    if(this.points.length===1)this.createPreviewCircle(this.points[0]);
+    if(this.points.length===3)this.updateArcPreview(this.points[2]);
   }
 
   getTitle() {
@@ -40,6 +64,7 @@ class ArcTool extends BaseTool {
     }
 
     instructions.push("Esc: 入力中の円弧をキャンセル");
+    instructions.push('Backspace: 最後の入力点を削除、3点がそろったらEnterでも確定');
 
     return instructions;
   }
@@ -71,36 +96,31 @@ class ArcTool extends BaseTool {
       this.previewCircle = null;
     }
     this.points = [];
+    this.draftHandles?.remove();this.draftHandles=null;this.implementationError='';
     this.updatePanel();
   }
 
   handleMouseDown(event) {
+    if(!this.isActive||event.button!==0)return;
     super.handleMouseDown(event);
     const point = this.getMousePosition(event);
-
-    if (this.points.length === 0) {
-      // 始点
-      this.points.push(point);
-      this.createPreviewCircle(point);
-    } else if (this.points.length === 1) {
-      // 通過点
-      this.points.push(point);
-      this.updatePreview();
-    } else if (this.points.length === 2) {
-      // 終点
-      this.points.push(point);
-      this.finishArc();
-    }
+    if(this.points.length===3)this.points[2]=point;else this.points.push(point);
+    this.redrawDraft();
+    if(this.points.length===3)this.finishArc();
 
     this.updatePanel();
   }
 
   handleMouseMove(event) {
+    if(!this.isActive)return;
     super.handleMouseMove(event);
     const point = this.getMousePosition(event);
 
     if (this.points.length === 1) {
-      if (this.previewCircle) this.previewCircle = this.draw("circle", {center: this.points[0], point}, this.previewCircle);
+      if (this.previewCircle) {
+        try {const drawn=this.draw("circle", {center: this.points[0], point}, this.previewCircle);if(!drawn)throw Error('補助円を描画できません。');this.previewCircle=drawn;drawn.removeAttribute('visibility');this.implementationError='';}
+        catch(error){this.implementationError=error.message;this.previewCircle.setAttribute('visibility','hidden');}
+      }
     } else if (this.points.length === 2) {
       // 3点から円弧を計算してプレビュー
       this.updateArcPreview(point);
@@ -131,8 +151,10 @@ class ArcTool extends BaseTool {
       this.currentArc = null;
     }
 
-    this.currentArc = this.draw("arc", {start: this.points[0], through: this.points[1], end: endPoint});
-    if (!this.currentArc) return;
+    this.implementationError='';
+    try {this.currentArc = this.draw("arc", {start: this.points[0], through: this.points[1], end: endPoint});}
+    catch(error){this.implementationError=error.message;return;}
+    if (!this.currentArc) {this.implementationError='この3点では円弧を作成できません。入力点を修正してください。';return;}
     window.SvgUtils.setAttributes(this.currentArc, {
       stroke: this.currentStyle.stroke,
       "stroke-width": this.currentStyle.strokeWidth,
@@ -143,12 +165,15 @@ class ArcTool extends BaseTool {
   }
 
   finishArc() {
-    if (this.points.length !== 3) return;
+    if (this.points.length !== 3) {this.implementationError='確定には始点・通過点・終点の3点が必要です。';this.updatePanel();return;}
 
     const [start, through, end] = this.points;
-    const arc = this.draw("arc", {start, through, end});
+    this.currentArc?.remove();this.currentArc=null;this.implementationError='';
+    let arc;
+    try {arc = this.draw("arc", {start, through, end});}
+    catch(error){this.implementationError=error.message;this.updatePanel();return;}
     if (!arc) {
-      this.cancelArc();
+      this.implementationError='この3点では円弧を作成できません。入力点を修正してください。';this.updatePanel();
       return;
     }
 
@@ -163,6 +188,7 @@ class ArcTool extends BaseTool {
     this.currentArc = null;
 
     this.points = [];
+    this.draftHandles?.remove();this.draftHandles=null;
     if (this.previewCircle) {
       this.canvas.removeChild(this.previewCircle);
       this.previewCircle = null;
@@ -172,9 +198,12 @@ class ArcTool extends BaseTool {
   }
 
   handleKeyDown(event) {
+    if(!this.isActive)return;
     if (event.key === "Escape" && this.points.length > 0) {
       this.cancelArc();
     }
+    if(event.key==='Backspace'){event.preventDefault();this.points.pop();this.redrawDraft();this.updatePanel();}
+    if(event.key==='Enter'){event.preventDefault();this.finishArc();}
   }
 }
 
