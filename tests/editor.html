@@ -3208,6 +3208,59 @@ await check('Paired fillet parameters preserve target selection, work without st
   }finally{app.element.remove();}
 });
 
+function importFixture(){const input={version:1,input:{points:[{x:80,y:100},{x:180,y:180}]}},methods={version:1,calculation:{circle:'default'},rendering:{circle:{id:'cubic',options:{}}}};return {implementationPreset:methods,constructionInputs:{version:1,entries:{circle:input}},namedConstructionInputs:{version:1,entries:[{id:'source-i',tool:'circle',name:'円',entry:input}]},namedImplementationPresets:{version:1,entries:[{id:'source-m',name:'方式',preset:methods}]},constructionSets:{version:1,entries:[{id:'source-s',tool:'circle',name:'円セット',input,methods}]}};}
+function importXML(app,state){const doc=new app.w.DOMParser().parseFromString('<svg xmlns="http://www.w3.org/2000/svg"><metadata data-vector-document="1"/><circle id="not-imported" r="8"/><script>window.importExecuted=true;<\/script></svg>','image/svg+xml');doc.querySelector('metadata').textContent=JSON.stringify(state);return new app.w.XMLSerializer().serializeToString(doc);}
+function importAction(app,id){const button=app.d.querySelector(`[data-preset-import-action="${id}"]`);assert(button&&!button.disabled,'enabled import '+id);button.click();}
+async function importFile(app,xml){const file=app.d.querySelector('[data-preset-import-file]');Object.defineProperty(file,'files',{configurable:true,value:[new app.w.File([xml],'presets.svg',{type:'image/svg+xml'})]});await file.onchange();}
+function importSelected(app,kind,name){const row=Array.from(app.d.querySelectorAll('[data-import-row]')).find(row=>row.dataset.importKind===kind&&(!name||row.querySelector('[data-import-name]').value===name));assert(row,'import row '+kind+'/'+name);const check=row.querySelector('[data-import-check]');check.checked=true;check.dispatchEvent(new app.w.Event('change'));return row;}
+
+await check('Selective SVG import appends all five record formats atomically while preserving current drawing, draft, methods and transient selections',async()=>{
+ const app=await preferenceEditor('{preferences:false}');
+ try{
+  app.w.DrawingDocument.open('<svg xmlns="http://www.w3.org/2000/svg"><circle id="import-kept" r="20" data-layer="3"/></svg>');app.d.getElementById('text-tool').click();annotationText(app,'未確定の文字');parameterClick(app,130,220);namedName(app,'既存入力');namedAction(app,'create');methodName(app,'既存方式');methodAction(app,'create');setName(app,'既存セット');setAction(app,'create');await tick();const tool=app.w.toolManager.tools.text,preview=tool.previewElement,el=app.d.getElementById('import-kept'),methods=JSON.stringify(app.w.toolManager.host.exportPreferences()),before=app.w.DrawingDocument.serialize(),history=app.w.undoStack.length,selected=namedSelected(app);namedName(app,'入力中');
+  app.d.getElementById('import-presets-btn').click();await importFile(app,importXML(app,importFixture()));assert(app.d.querySelectorAll('[data-import-row]').length===5&&app.d.querySelector('[data-preset-import-action="apply"]').disabled,'all formats staged without selection');assert(app.w.DrawingDocument.serialize()===before&&tool.previewElement===preview,'staging leaves document unchanged');importAction(app,'all');importAction(app,'apply');await tick();
+  assert(namedState(app).entries.length===3&&methodState(app).entries.length===3&&setState(app).entries.length===2,'legacy converted to named plus other records');assert(!inputPresetState(app)&&!documentSettings(app),'single-record fields untouched');assert(!app.d.getElementById('not-imported')&&!app.w.importExecuted&&app.d.getElementById('import-kept')===el&&tool.previewElement===preview&&app.w.toolManager.activeToolName==='text','source nodes never inserted and current draft retained');assert(JSON.stringify(app.w.toolManager.host.exportPreferences())===methods&&namedSelected(app)===selected&&app.d.querySelector('[data-named-construction-name]').value==='入力中','active methods and transient state preserved');assert(app.w.undoStack.length===history+1,'one import history step');const after=app.w.DrawingDocument.serialize();importAction(app,'close');app.w.undo();assert(app.w.DrawingDocument.serialize()===before,'undo all imported records');app.w.redo();assert(app.w.DrawingDocument.serialize()===after,'redo all imported records');
+ }finally{app.element.remove();}
+});
+
+await check('Selective import copies only checked records, assigns fresh IDs and resolves name collisions before real set use',async()=>{
+ const app=await preferenceEditor('{preferences:false}');
+ try{
+  const fixture=importFixture();app.w.toolManager.constructionSets.add('circle','円セット',fixture.constructionSets.entries[0].input,fixture.constructionSets.entries[0].methods);app.w.toolManager.host.save();await tick();const original=setState(app).entries[0];app.d.getElementById('import-presets-btn').click();await importFile(app,importXML(app,fixture));importSelected(app,'sets');importAction(app,'apply');await tick();assert(!namedState(app)&&!methodState(app)&&setState(app).entries.length===2,'only selected kind imported');const copy=setState(app).entries[1];assert(copy.id!==original.id&&copy.id!=='source-s'&&copy.name==='円セット (2)','new ID and suffixed name');importAction(app,'close');app.d.getElementById('circle-tool').click();setChoose(app,copy.id);setAction(app,'restore');constructionEnter(app);await tick();assert(shapeDraftOutput(app,'circle').tagName==='path'&&JSON.parse(shapeDraftOutput(app,'circle').getAttribute('data-vector-implementation')).rendering.id==='cubic','imported pair drives real drawing');
+ }finally{app.element.remove();}
+});
+
+await check('Malformed import sources and invalid selected names preserve current metadata and draft without history',async()=>{
+ const app=await preferenceEditor('{preferences:false}');
+ try{
+  const tool=shapeDraftInput(app,'circle');setName(app,'保持');setAction(app,'create');await tick();const before=app.w.DrawingDocument.serialize(),input=JSON.stringify(tool.exportInputPreset()),history=app.w.undoStack.length;app.d.getElementById('import-presets-btn').click();
+  for(const xml of ['<svg>', '<html/>', '<!DOCTYPE svg><svg xmlns="http://www.w3.org/2000/svg"/>',importXML(app,{constructionSets:{version:2,entries:[]}}),'<svg xmlns="http://www.w3.org/2000/svg"><metadata data-vector-document="1">{}</metadata><metadata data-vector-document="1">{}</metadata></svg>']){await importFile(app,xml);assert(app.d.querySelector('[data-preset-import-status]').textContent.includes('読み込めません')&&!app.d.querySelector('[data-import-row]'),'bad source rejected');assert(app.w.DrawingDocument.serialize()===before&&JSON.stringify(tool.exportInputPreset())===input&&app.w.undoStack.length===history,'bad source changes nothing');}
+  await importFile(app,importXML(app,importFixture()));const row=importSelected(app,'inputs','円');row.querySelector('[data-import-name]').value=' ';importAction(app,'apply');assert(app.w.DrawingDocument.serialize()===before&&app.w.undoStack.length===history&&app.d.querySelector('[data-preset-import-status]').textContent.includes('追加できません'),'invalid name does not partially import');importAction(app,'close');assert(JSON.stringify(tool.exportInputPreset())===input,'closing does not cancel active drawing');
+ }finally{app.element.remove();}
+});
+
+await check('Import discards obsolete file reads and rejects a staged selection after document replacement',async()=>{
+ const app=await preferenceEditor('{preferences:false}');
+ try{
+  app.d.getElementById('import-presets-btn').click();const file=app.d.querySelector('[data-preset-import-file]');let resolve;Object.defineProperty(file,'files',{configurable:true,value:[{size:1,name:'slow.svg',text:()=>new Promise(r=>resolve=r)}]});const reading=file.onchange();await importFile(app,importXML(app,{implementationPreset:importFixture().implementationPreset}));resolve(importXML(app,importFixture()));await reading;assert(app.d.querySelectorAll('[data-import-row]').length===1,'latest file wins');importAction(app,'all');app.w.DrawingDocument.open('<svg xmlns="http://www.w3.org/2000/svg"><rect id="new-document" width="10" height="10"/></svg>');const before=app.w.DrawingDocument.serialize(),history=app.w.undoStack.length;importAction(app,'apply');await tick();assert(app.w.DrawingDocument.serialize()===before&&app.w.undoStack.length===history&&app.d.querySelector('[data-preset-import-status]').textContent.includes('図面が切り替わりました'),'staged import never crosses document replacement');importAction(app,'close');
+  app.d.getElementById('import-presets-btn').click();Object.defineProperty(file,'files',{configurable:true,value:[{size:1,name:'closed.svg',text:()=>new Promise(r=>resolve=r)}]});const closed=file.onchange();importAction(app,'close');resolve(importXML(app,importFixture()));await closed;assert(!app.d.querySelector('[data-preset-import]').open&&!app.d.querySelector('[data-import-row]'),'closing invalidates pending file read');
+ }finally{app.element.remove();}
+});
+
+await check('Unknown imported input versions and methods remain inert and literal names survive SVG save and reload',async()=>{
+ const app=await preferenceEditor('{preferences:false}');
+ try{
+  const data=importFixture();data.namedConstructionInputs.entries[0].entry={version:99,input:{future:'kept'}};data.namedConstructionInputs.entries[0].name='<b>未知</b>';data.namedImplementationPresets.entries[0].preset.calculation.futureTool='future';app.d.getElementById('import-presets-btn').click();await importFile(app,importXML(app,data));importSelected(app,'inputs','<b>未知</b>');importSelected(app,'methods','方式');importAction(app,'apply');await tick();importAction(app,'close');assert(namedState(app).entries[0].entry.version===99&&methodState(app).entries[0].preset.calculation.futureTool==='future','unknown values retained');assert(app.w.toolManager.host.describeRendering('circle').id==='default','unknown methods not applied');const before=app.w.DrawingDocument.serialize();app.w.DrawingDocument.open(before);app.d.getElementById('circle-tool').click();assert(app.d.querySelector('[data-named-construction-action="restore"]').disabled&&!app.d.querySelector('[data-named-construction-inputs] b'),'future version disabled and label literal after save');
+ }finally{app.element.remove();}
+});
+
+await check('Import collection limits reject all selected groups, and oversized or empty SVGs add no records',async()=>{
+ const app=await preferenceEditor('{preferences:false}');
+ try{
+  const input=importFixture().namedConstructionInputs.entries[0].entry;app.w.toolManager.namedInputPresets.open({version:1,entries:Array.from({length:256},(_,i)=>({id:'full-'+i,tool:'circle',name:'記録'+i,entry:input}))});app.w.toolManager.host.save();await tick();const before=app.w.DrawingDocument.serialize(),history=app.w.undoStack.length;app.d.getElementById('import-presets-btn').click();await importFile(app,importXML(app,importFixture()));importAction(app,'all');importAction(app,'apply');await tick();assert(app.w.DrawingDocument.serialize()===before&&!methodState(app)&&!setState(app)&&app.w.undoStack.length===history,'capacity refusal is all or nothing');const file=app.d.querySelector('[data-preset-import-file]');Object.defineProperty(file,'files',{configurable:true,value:[{name:'large.svg',size:33554433,text:()=>{throw Error('must not read');}}]});await file.onchange();assert(app.d.querySelector('[data-preset-import-status]').textContent.includes('32MiB'),'size rejected before read');await importFile(app,'<svg xmlns="http://www.w3.org/2000/svg"/>');assert(app.d.querySelector('[data-preset-import-status]').textContent.includes('0件')&&app.d.querySelector('[data-preset-import-action="apply"]').disabled,'empty source has no import');
+ }finally{app.element.remove();}
+});
+
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
 </script>

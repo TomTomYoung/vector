@@ -57,6 +57,11 @@ class FileManager {
       stack.appendChild(loadBtn);
     }
 
+    if(!document.getElementById('import-presets-btn')){
+      const importBtn=document.createElement("button");importBtn.id="import-presets-btn";importBtn.textContent="別SVGから記録を取り込む";
+      importBtn.onclick=()=>{this.presetImport??=new PresetImportDialog();this.presetImport.open();};stack.append(importBtn);
+    }
+
     if (!document.getElementById("export-png-btn")) {
       const exportPNGBtn = document.createElement("button");
       exportPNGBtn.id = "export-png-btn";

@@ -34,6 +34,7 @@ export function createConstructionSets(host,{createId=()=> 'set-'+crypto.randomU
   return {state,
     get canRecord(){return typeof host.exportPreferences==='function';},
     get canRestore(){return typeof host.restorePreferencesAtomically==='function';},
+    replaceRecords(value){const next=parseConstructionSets(value);data=next?.entries.length?next:undefined;},
     snapshot:()=>parseConstructionSets(data),
     list(tool){return this.snapshot()?.entries.filter(e=>e.tool===tool)??[];},
     selectedId(tool){const items=data?.entries.filter(e=>e.tool===tool)??[];return items.some(e=>e.id===chosen.get(tool))?chosen.get(tool):items[0]?.id;},

@@ -1,5 +1,6 @@
 // The SVG artwork and its editable metadata, shared by file I/O and undo.
 class DrawingDocument {
+  static revision = 0;
   static helpers = "#grid, .control-handle, .rotate-handle, .rotate-line, .translate-handle, .marquee-selection, .snap-indicator, [data-tool-layer='vertices-handles'], [data-tool-layer='construction-handles'], [data-vector-preview]";
   static metadata = "metadata[data-vector-document]";
   static sizeAttributes = ["width", "height", "viewBox", "preserveAspectRatio"];
@@ -76,6 +77,7 @@ class DrawingDocument {
     const sets = window.VectorUtils.parseConstructionSets(state.constructionSets);
 
     // Validate the complete new document before replacing the current one.
+    this.revision++;
     const canvas = document.getElementById("canvas");
     const nodes = Array.from(root.children, el => document.importNode(el, true));
     window.toolManager.activateTool("select");
