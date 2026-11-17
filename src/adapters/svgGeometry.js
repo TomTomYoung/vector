@@ -1,4 +1,5 @@
 import {createElement, setAttributes} from "../utils/svg.js";
+import {renderDimension} from './dimensionSvg.js';
 import {buildPathData} from "../utils/bezier.js";
 
 const pair = p => p.x + " " + p.y;
@@ -28,6 +29,7 @@ export function pathData(shape, options = {}) {
 
 export function renderGeometry(shape, element = null, options = {}, encodePath = pathData) {
   if (!shape) return null;
+  if (shape.kind === 'dimension') return renderDimension(shape, element);
   if (shape.kind === 'group') {
     const group = element ?? createElement('g');
     group.replaceChildren(...shape.children.map(child => renderGeometry(child, null, options, encodePath)).filter(Boolean));

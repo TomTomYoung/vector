@@ -1,74 +1,34 @@
-// DimensionTool.js
-// 寸法線描画ツール
-//
-// 【依存関係】
-// - SvgUtils (window.SvgUtils): SVG要素作成
-// - GeometryUtils (window.GeometryUtils): 幾何計算
-//
-// 【使用する外部関数】
-// - SvgUtils.createElement(): SVG要素作成
-// - GeometryUtils.distance(): 2点間距離
-
+// DimensionTool.js — resumable linear/angular annotations.
 class DimensionTool extends BaseTool {
   constructor(canvas, toolManager) {
     super(canvas, toolManager);
-    this.points = [];
-    this.dimensionType = "linear"; // 'linear' or 'angular'
-    this.currentDimension = null;
+    this.points=[];this.dimensionType='linear';this.currentDimension=null;this.draftHandles=null;
+    this.implementationError='';this.inputPresetVersion=1;
+    this.inputPresetInstructions='不足する点をクリックして続けられます。必要な点がそろった下書きはEnterで確定し、クリックで最後の点を変更できます。Backspaceで末尾点を削除、Escで取消できます。';
   }
-
-  getTitle() {
-    return "寸法";
-  }
-
+  getTitle() {return '寸法';}
+  get requiredPoints() {return this.dimensionType==='linear'?2:3;}
   getInstructions() {
-    const instructions = ["左パネルの『寸法タイプ』で長さ寸法と角度寸法を切り替え"];
-
-    if (this.dimensionType === "linear") {
-      if (this.points.length === 0) {
-        instructions.push("1点目をクリック: 寸法線の始点を指定");
-      } else {
-        instructions.push("2点目をクリック: 寸法線の終点を指定");
-      }
-      instructions.push("2点指定で寸法線が確定");
-    } else {
-      const stepTexts = [
-        "1点目をクリック: 角度寸法の1辺の端点を指定",
-        "2点目をクリック: 角度の頂点を指定",
-        "3点目をクリック: もう一方の辺の端点を指定",
-      ];
-      instructions.push(stepTexts[this.points.length] || stepTexts[2]);
-      instructions.push("3点指定で角度寸法が確定");
-    }
-
-    instructions.push("Esc: 入力中の寸法をリセット");
-
-    return instructions;
+    return ['左パネルの寸法タイプで長さ寸法と角度寸法を切り替え',
+      this.dimensionType==='linear'?'始点・終点の2点をクリックして長さ寸法を作成':'第一辺の端点・頂点・第二辺の端点の3点をクリックして角度寸法を作成',
+      this.inputPresetInstructions];
   }
-
-  updatePanel() {
-    if (window.toolPropertiesPanel) {
-      window.toolPropertiesPanel.updatePanel();
-    }
+  updatePanel() {window.toolPropertiesPanel?.updatePanel();}
+  activate() {super.activate();this.canvas.style.cursor='crosshair';this.createDimensionTypeSelector();this.updatePanel();}
+  deactivate() {this.cancel();this.removeDimensionTypeSelector();super.deactivate();}
+  cancel() {
+    this.currentDimension?.remove();this.draftHandles?.remove();
+    this.currentDimension=this.draftHandles=null;this.points=[];this.implementationError='';
   }
-
-  activate() {
-    super.activate();
-    this.canvas.style.cursor = "crosshair";
-    this.createDimensionTypeSelector();
-    this.updatePanel();
+  exportInputPreset() {return window.VectorUtils.parseAnnotationDraft('dimension',{version:1,input:{points:this.points,dimensionType:this.dimensionType}});}
+  restoreInputPreset(entry) {
+    const {input}=window.VectorUtils.parseAnnotationDraft('dimension',entry);
+    if(!this.isActive)throw Error('復元する作図ツールを先に選択してください。');
+    this.cancel();this.points=input.points;this.dimensionType=input.dimensionType;
+    const selector=document.getElementById('dimension-type-selector');if(selector)selector.value=this.dimensionType;
+    this.redrawDraft();
   }
-
-  deactivate() {
-    super.deactivate();
-    this.removeDimensionTypeSelector();
-    if (this.currentDimension) {
-      this.canvas.removeChild(this.currentDimension);
-      this.currentDimension = null;
-    }
-    this.points = [];
-  }
-
+  onImplementationChanged() {this.redrawDraft();}
   createDimensionTypeSelector() {
     if (document.getElementById("dimension-type-controls")) return;
 
@@ -102,11 +62,7 @@ class DimensionTool extends BaseTool {
 
     selector.addEventListener("change", (e) => {
       this.dimensionType = e.target.value;
-      this.points = [];
-      if (this.currentDimension) {
-        this.canvas.removeChild(this.currentDimension);
-        this.currentDimension = null;
-      }
+      this.cancel();
       this.updatePanel();
     });
 
@@ -124,217 +80,51 @@ class DimensionTool extends BaseTool {
   }
 
   handleMouseDown(event) {
-    super.handleMouseDown(event);
-    const point = this.getMousePosition(event);
-
-    if (this.dimensionType === "linear") {
-      this.handleLinearDimension(point);
-    } else {
-      this.handleAngularDimension(point);
-    }
-
-    this.updatePanel();
+    if(!this.isActive||event.button!==0)return;
+    const point=this.getMousePosition(event);
+    if(this.points.length===this.requiredPoints)this.points[this.points.length-1]={...point};else this.points.push({...point});
+    this.redrawDraft();
+    if(this.points.length===this.requiredPoints)this.finishDimension();else this.updatePanel();
   }
-
-  handleLinearDimension(point) {
-    this.points.push(point);
-
-    if (this.points.length === 1) {
-      // 開始点を設定
-      this.createPreviewLine();
-    } else if (this.points.length === 2) {
-      // 終点を設定して寸法線を作成
-      this.createLinearDimension();
-      this.points = [];
-    }
-  }
-
-  handleAngularDimension(point) {
-    this.points.push(point);
-
-    if (this.points.length === 3) {
-      // 3点で角度寸法を作成
-      this.createAngularDimension();
-      this.points = [];
-    }
-  }
-
   handleMouseMove(event) {
-    super.handleMouseMove(event);
-
-    if (this.points.length === 1 && this.currentDimension) {
-      const point = this.getMousePosition(event);
-      this.updatePreviewLine(point);
+    if(!this.isActive||!this.points.length||this.points.length>=this.requiredPoints)return;
+    this.currentDimension?.remove();
+    this.currentDimension=window.SvgUtils.createElement('polyline',{points:[...this.points,this.getMousePosition(event)].map(p=>p.x+','+p.y).join(' '),stroke:'#ff0000','stroke-width':1,'stroke-dasharray':'5,5',fill:'none','pointer-events':'none'});
+    this.canvas.append(this.currentDimension);
+  }
+  redrawDraft() {
+    this.currentDimension?.remove();this.draftHandles?.remove();this.currentDimension=this.draftHandles=null;this.implementationError='';
+    if(!this.points.length)return;
+    this.draftHandles=window.SvgUtils.createElement('g',{'data-tool-layer':'construction-handles','pointer-events':'none'});
+    this.points.forEach(p=>this.draftHandles.append(window.SvgUtils.createCircle(p.x,p.y,3,{fill:'#fff',stroke:'#2673c7'})));
+    this.canvas.append(this.draftHandles);
+    if(this.points.length===this.requiredPoints){
+      try {this.currentDimension=this.renderCurrentDimension();this.canvas.append(this.currentDimension);}
+      catch(error){this.implementationError=error.message;}
     }
   }
-
-  createPreviewLine() {
-    if (this.currentDimension) {
-      this.canvas.removeChild(this.currentDimension);
-    }
-
-    // グループ要素作成（SvgUtils.createElement を使用）
-    this.currentDimension = window.SvgUtils.createElement("g");
-    this.canvas.appendChild(this.currentDimension);
+  renderCurrentDimension() {
+    const {input}=this.exportInputPreset();
+    if(input.points.length!==this.requiredPoints)throw Error('確定には'+this.requiredPoints+'点が必要です。');
+    if(input.dimensionType==='angular'&&[input.points[0],input.points[2]].some(p=>p.x===input.points[1].x&&p.y===input.points[1].y))throw Error('角度の頂点と辺の端点は異なる位置を指定してください。');
+    const result=this.run('dimension',{points:input.points,mode:input.dimensionType});
+    const group=this.toolManager.host.render({kind:'dimension',mode:input.dimensionType,result},null,{toolName:'dimension'});
+    if(!group)throw Error('選択した実装では寸法を描画できません。');
+    window.SvgUtils.setAttributes(group,{'data-layer':window.currentLayerId,'data-dimension-tool':'true'});group.classList.add('dimension');
+    return group;
   }
-
-  updatePreviewLine(endPoint) {
-    if (!this.currentDimension) return;
-
-    this.currentDimension.innerHTML = "";
-
-    const startPoint = this.points[0];
-
-    // 寸法線（SvgUtils.createLine を使用）
-    const line = window.SvgUtils.createLine(
-      startPoint.x,
-      startPoint.y,
-      endPoint.x,
-      endPoint.y,
-      {
-        stroke: "#ff0000",
-        "stroke-width": "1",
-        "stroke-dasharray": "5,5"
-      }
-    );
-    this.currentDimension.appendChild(line);
+  finishDimension() {
+    this.currentDimension?.remove();this.currentDimension=null;this.implementationError='';
+    try {
+      const group=this.renderCurrentDimension();this.canvas.append(group);
+      this.points=[];this.draftHandles?.remove();this.draftHandles=null;this.saveState();this.updatePanel();return group;
+    } catch(error){this.implementationError=error.message;this.updatePanel();return null;}
   }
-
-  createLinearDimension() {
-    this.saveState();
-
-    const {start: p1, end: p2, angle, middle, length} = this.run("dimension", {points: this.points});
-
-    // グループ要素作成（SvgUtils.createElement を使用）
-    const group = window.SvgUtils.createElement("g", {
-      "data-layer": window.currentLayerId,
-      "data-dimension-tool": "true"
-    });
-    group.classList.add("dimension");
-
-    // 寸法線（SvgUtils.createLine を使用）
-    const line = window.SvgUtils.createLine(p1.x, p1.y, p2.x, p2.y, {
-      stroke: "#ff0000",
-      "stroke-width": "1.5"
-    });
-    group.appendChild(line);
-
-    // 矢印
-    const arrowSize = 8;
-
-    // 始点の矢印
-    const arrow1 = this.createArrow(p1, angle, arrowSize);
-    group.appendChild(arrow1);
-
-    // 終点の矢印
-    const arrow2 = this.createArrow(p2, angle + Math.PI, arrowSize);
-    group.appendChild(arrow2);
-
-    // テキスト要素作成（SvgUtils.createElement を使用）
-    const text = window.SvgUtils.createElement("text", {
-      x: middle.x,
-      y: middle.y - 5,
-      fill: "#ff0000",
-      "font-size": "14",
-      "font-family": "Arial",
-      "text-anchor": "middle"
-    });
-    text.textContent = length.toFixed(1);
-    group.appendChild(text);
-
-    this.toolManager.host.annotate?.(group, 'dimension');
-    this.canvas.appendChild(group);
-
-    if (this.currentDimension) {
-      this.canvas.removeChild(this.currentDimension);
-      this.currentDimension = null;
-    }
-  }
-
-  createAngularDimension() {
-    this.saveState();
-
-    const {vertex: p2, startAngle, endAngle, turn: angleDiff} =
-      this.run("dimension", {points: this.points, mode: "angular"});
-
-    // グループ要素作成（SvgUtils.createElement を使用）
-    const group = window.SvgUtils.createElement("g", {
-      "data-layer": window.currentLayerId,
-      "data-dimension-tool": "true"
-    });
-    group.classList.add("dimension");
-
-    const angleDeg = (angleDiff * 180) / Math.PI;
-
-    // 円弧の半径
-    const arcRadius = 30;
-
-    // 円弧を描画（SvgUtils.createElement を使用）
-    const x1 = p2.x + arcRadius * Math.cos(startAngle);
-    const y1 = p2.y + arcRadius * Math.sin(startAngle);
-    const x2 = p2.x + arcRadius * Math.cos(endAngle);
-    const y2 = p2.y + arcRadius * Math.sin(endAngle);
-
-    const largeArcFlag = angleDiff > Math.PI ? 1 : 0;
-
-    const arcPath = `M ${x1} ${y1} A ${arcRadius} ${arcRadius} 0 ${largeArcFlag} 1 ${x2} ${y2}`;
-    const arc = window.SvgUtils.createElement("path", {
-      d: arcPath,
-      stroke: "#ff0000",
-      "stroke-width": "1.5",
-      fill: "none"
-    });
-    group.appendChild(arc);
-
-    // 角度テキスト（SvgUtils.createElement を使用）
-    const textAngle = startAngle + angleDiff / 2;
-    const textRadius = arcRadius + 15;
-    const textX = p2.x + textRadius * Math.cos(textAngle);
-    const textY = p2.y + textRadius * Math.sin(textAngle);
-
-    const text = window.SvgUtils.createElement("text", {
-      x: textX,
-      y: textY,
-      fill: "#ff0000",
-      "font-size": "14",
-      "font-family": "Arial",
-      "text-anchor": "middle",
-      "dominant-baseline": "middle"
-    });
-    text.textContent = angleDeg.toFixed(1) + "°";
-    group.appendChild(text);
-
-    this.toolManager.host.annotate?.(group, 'dimension');
-    this.canvas.appendChild(group);
-  }
-
-  createArrow(point, angle, size) {
-    const x1 = point.x;
-    const y1 = point.y;
-    const x2 = x1 + size * Math.cos(angle + Math.PI / 6);
-    const y2 = y1 + size * Math.sin(angle + Math.PI / 6);
-    const x3 = x1 + size * Math.cos(angle - Math.PI / 6);
-    const y3 = y1 + size * Math.sin(angle - Math.PI / 6);
-
-    // 矢印ポリゴン作成（SvgUtils.createElement を使用）
-    const arrow = window.SvgUtils.createElement("polygon", {
-      points: `${x1},${y1} ${x2},${y2} ${x3},${y3}`,
-      fill: "#ff0000"
-    });
-
-    return arrow;
-  }
-
   handleKeyDown(event) {
-    if (event.key === "Escape") {
-      this.points = [];
-      if (this.currentDimension) {
-        this.canvas.removeChild(this.currentDimension);
-        this.currentDimension = null;
-      }
-      this.updatePanel();
-    }
+    if(!this.isActive)return;
+    if(event.key==='Escape'){event.preventDefault();this.cancel();this.updatePanel();}
+    if(event.key==='Backspace'){event.preventDefault();this.points.pop();this.redrawDraft();this.updatePanel();}
+    if(event.key==='Enter'){event.preventDefault();this.finishDimension();}
   }
 }
-
-window.DimensionTool = DimensionTool;
+window.DimensionTool=DimensionTool;

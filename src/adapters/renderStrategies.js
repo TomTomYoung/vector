@@ -86,7 +86,7 @@ export function defaultRenderDescription(name) {
   if (name === 'delaunayTriangles') return '三角形インデックスを入力座標へ戻し、SVG g内のpolygonで描画';
   if (name === 'arc' || name === 'fillet') return 'SVG A（円弧）';
   if (name === 'vertices') return '指定方式に対応するSVG要素・Q/C、任意次数はde Casteljau → M/L';
-  if (name === 'dimension') return 'DimensionToolのSVG線・円弧・矢印・文字';
+  if (name === 'dimension') return 'SVG g内の線・矢印・文字、角度寸法はSVG A';
   if (name === 'select') return 'SelectToolのSVG選択枠・ハンドル';
   return '図形に対応するSVG要素・パス。画素化はブラウザー';
 }

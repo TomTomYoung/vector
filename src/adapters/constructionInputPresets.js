@@ -34,6 +34,17 @@ export function parseConstructionInputPresets(value) {
   for(const [name,entry] of Object.entries(value.entries)){
     if(!validName(name))fail();keys(entry,['version','input']);
     if(!Number.isSafeInteger(entry.version)||entry.version<1||!record(entry.input))fail();
+    if(name==='dimension'&&entry.version===1){
+      keys(entry.input,['points','dimensionType']);checkPoints(entry.input.points);
+      if(!['linear','angular'].includes(entry.input.dimensionType)||entry.input.points.length>(entry.input.dimensionType==='linear'?2:3))fail();
+      continue;
+    }
+    if(name==='text'&&entry.version===1){
+      keys(entry.input,['point','content']);
+      if(entry.input.point!==null)checkPoints([entry.input.point]);
+      if(typeof entry.input.content!=='string'||entry.input.content.length>20000)fail();
+      continue;
+    }
     if(constructionShapeTools.includes(name)&&entry.version===1){
       keys(entry.input,['points']);checkPoints(entry.input.points);
       const count=entry.input.points.length;
@@ -96,6 +107,11 @@ export function parseCurveDraft(name, entry) {
 
 export function parseShapeDraft(name, entry) {
   if(!constructionShapeTools.includes(name)||entry?.version!==1)throw Error('この図形下書きのツール・版には対応していません。');
+  return parseConstructionInputPresets({version:1,entries:{[name]:entry}}).entries[name];
+}
+
+export function parseAnnotationDraft(name, entry) {
+  if(!['dimension','text'].includes(name)||entry?.version!==1)throw Error('この寸法・文字下書きのツール・版には対応していません。');
   return parseConstructionInputPresets({version:1,entries:{[name]:entry}}).entries[name];
 }
 

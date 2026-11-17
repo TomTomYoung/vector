@@ -2779,6 +2779,129 @@ await check('Primitive records survive real SVG downloads without browser storag
   }finally{app.element.remove();}
 });
 
+const annotationDrawing=await import('../src/model/drawing.js');
+const annotationOutput=(app,name)=>app.w.DrawingDocument.capture().querySelector('[data-'+name+'-tool]');
+const annotationEntries={dimension:{version:1,input:{dimensionType:'angular',points:[{x:220,y:120},{x:140,y:120},{x:140,y:220}]}},text:{version:1,input:{point:{x:140,y:220},content:' 記録 <>& 日本語\n次行 '}}};
+function annotationSelect(app,type){app.d.getElementById('dimension-tool').click();const select=app.d.getElementById('dimension-type-selector');select.value=type;select.dispatchEvent(new app.w.Event('change'));return app.w.toolManager.tools.dimension;}
+function annotationText(app,content){const area=app.d.querySelector('[data-text-draft-content]');assert(area,'text draft field');area.value=content;area.dispatchEvent(new app.w.Event('input'));return area;}
+function annotationAction(app,id){const button=app.d.querySelector('[data-text-draft-action="'+id+'"]');assert(button,'text draft action '+id);button.click();}
+function annotationSeed(app,name,entry=annotationEntries[name]){app.d.getElementById(name+'-tool').click();app.w.toolManager.inputPresets.open({version:1,entries:{[name]:entry}});app.w.toolPropertiesPanel.updatePanel();inputPresetAction(app,'restore');return app.w.toolManager.tools[name];}
+
+await check('Linear and angular partial dimension records roundtrip into a fresh editor and commit once with actual measurements',async()=>{
+  for(const type of ['linear','angular']){
+    const source=await preferenceEditor('{preferences:false}');let target;
+    try{
+      const tool=annotationSelect(source,type);parameterClick(source,220,120);if(type==='angular')parameterClick(source,140,120);
+      parameterMouse(source,'mousemove',140,220);inputPresetAction(source,'record');await tick();const saved=inputPresetState(source);assert(!annotationOutput(source,'dimension'),'preview excluded');
+      target=await preferenceEditor('{preferences:false}');const host=target.w.toolManager.host,execute=host.execute;let calls=0;host.execute=(...args)=>{calls++;return execute(...args);};target.w.DrawingDocument.open(source.w.DrawingDocument.serialize());target.w.saveState();await tick();assert(calls===0,'opening is inert');
+      target.d.getElementById('dimension-tool').click();const history=target.w.undoStack.length,methods=JSON.stringify(host.exportPreferences());inputPresetAction(target,'restore');assert(target.d.getElementById('dimension-type-selector').value===type,'type selector restored');
+      assert(!annotationOutput(target,'dimension')&&target.w.undoStack.length===history,'partial restore is not artwork');const end=draftClickPoint(target,140,220);await tick();const shape=annotationOutput(target,'dimension'),points=[...saved.entries.dimension.input.points,end],expected=annotationDrawing.dimension({points,mode:type});
+      assert(shape?.tagName==='g'&&shape.querySelector('text').textContent===(type==='linear'?expected.length.toFixed(1):(expected.turn*180/Math.PI).toFixed(1)+'°'),'actual dimension label '+type);
+      assert(JSON.parse(shape.getAttribute('data-vector-implementation')).tool==='dimension'&&JSON.stringify(host.exportPreferences())===methods,'actual method recorded without changing preferences');
+      assert(target.w.undoStack.length===history+1,'single commit');target.w.undo();assert(!annotationOutput(target,'dimension'),'undo');target.w.redo();assert(annotationOutput(target,'dimension'),'redo');assert(JSON.stringify(inputPresetState(target))===JSON.stringify(saved),'record stays independent');
+    }finally{source.element.remove();target?.element.remove();}
+  }
+});
+
+await check('Complete dimension drafts require confirmation and allow Backspace, degenerate angle correction, type changes and cancellation',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    const tool=annotationSeed(app,'dimension');assert(tool.currentDimension&&!annotationOutput(app,'dimension'),'complete restored dimension is only preview');const history=app.w.undoStack.length;
+    draftKey(app,'Backspace');assert(tool.points.length===2&&!tool.currentDimension,'last point removed');constructionEnter(app);assert(tool.points.length===2&&tool.implementationError,'incomplete input kept');
+    const vertex=tool.points[1];tool.points.push({...vertex});tool.redrawDraft();constructionEnter(app);assert(tool.points.length===3&&tool.implementationError.includes('異なる位置')&&!annotationOutput(app,'dimension'),'zero ray retained for correction');
+    parameterClick(app,140,220);await tick();assert(annotationOutput(app,'dimension')&&app.w.undoStack.length===history+1,'corrected last point commits');
+    inputPresetAction(app,'restore');const selector=app.d.getElementById('dimension-type-selector');selector.value='linear';selector.dispatchEvent(new app.w.Event('change'));assert(!tool.points.length&&!tool.currentDimension&&!tool.draftHandles,'type change clears only draft');assert(inputPresetState(app).entries.dimension.input.dimensionType==='angular','record keeps old type');
+    inputPresetAction(app,'restore');draftKey(app,'Escape');assert(!tool.points.length&&!tool.currentDimension&&!tool.draftHandles,'cancel all helpers');inputPresetAction(app,'restore');app.d.getElementById('text-tool').click();assert(!tool.points.length&&!app.d.querySelector('[data-tool-layer="construction-handles"]'),'switch cleans helpers');
+    annotationSeed(app,'dimension',{version:1,input:{dimensionType:'angular',points:[]}});assert(tool.dimensionType==='angular'&&!tool.points.length&&!tool.currentDimension,'empty type preserved');
+  }finally{app.element.remove();}
+});
+
+await check('Text drafts preserve literal Unicode whitespace and markup through SVG, edit in the panel and commit explicitly with undo',async()=>{
+  const source=await preferenceEditor('{preferences:false}');let target;
+  try{
+    source.d.getElementById('text-tool').click();const original='  日本語 <svg>& "文字"\n\u{1F680}  ';annotationText(source,original);const point=draftClickPoint(source,230,260);inputPresetAction(source,'record');await tick();const saved=inputPresetState(source);assert(!annotationOutput(source,'text'),'text preview excluded');
+    target=await preferenceEditor('{preferences:false}');let prompts=0;target.w.prompt=()=>{prompts++;return null;};target.w.DrawingDocument.open(source.w.DrawingDocument.serialize());target.w.saveState();await tick();target.d.getElementById('text-tool').click();const history=target.w.undoStack.length;inputPresetAction(target,'restore');const tool=target.w.toolManager.tools.text;
+    assert(tool.previewElement?.textContent===original&&tool.draftPoint.x===point.x&&!annotationOutput(target,'text'),'literal saved text preview');
+    let area=annotationText(target,original+'追加');area.focus();const enter=new target.w.KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true});area.dispatchEvent(enter);assert(!enter.defaultPrevented&&!annotationOutput(target,'text'),'Enter belongs to text editing');area.blur();
+    const placed=draftClickPoint(target,320,280);assert(!annotationOutput(target,'text')&&tool.previewElement,'click repositions without commit');annotationAction(target,'apply');await tick();const el=annotationOutput(target,'text');assert(el?.tagName==='text'&&el.textContent===original+'追加'&&!el.querySelector('svg'),'content remains literal');assert(Math.abs(Number(el.getAttribute('x'))-placed.x)<1e-5,'new position');
+    assert(prompts===0&&target.w.undoStack.length===history+1,'no prompt and single commit');target.w.undo();assert(!annotationOutput(target,'text'),'undo text');target.w.redo();assert(annotationOutput(target,'text'),'redo text');assert(JSON.stringify(inputPresetState(target))===JSON.stringify(saved),'edit did not change record');
+  }finally{source.element.remove();target?.element.remove();}
+});
+
+await check('Text drafts retain missing position and blank content and coexist with normal prompt creation and cancellation',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    app.d.getElementById('text-tool').click();const tool=app.w.toolManager.tools.text;annotationText(app,'位置待ち');inputPresetAction(app,'record');await tick();annotationAction(app,'apply');assert(tool.draftContent==='位置待ち'&&tool.implementationError.includes('配置位置'),'missing position kept');
+    inputPresetAction(app,'restore');assert(tool.draftPoint===null&&app.d.querySelector('[data-construction-input-record]').textContent.includes('未指定'),'null position restored and displayed');parameterClick(app,100,180);annotationText(app,' \n ');annotationAction(app,'apply');assert(tool.draftPoint&&tool.draftContent===' \n '&&!annotationOutput(app,'text'),'blank content kept');
+    annotationText(app,'完成');annotationAction(app,'apply');await tick();assert(annotationOutput(app,'text'),'corrected draft commits');
+    let prompts=0;app.w.prompt=()=>{prompts++;return null;};const history=app.w.undoStack.length;parameterClick(app,280,280);await tick();assert(prompts===1&&!tool.draftMode&&app.w.undoStack.length===history,'cancel prompt leaves no edit');
+    app.w.prompt=()=>{prompts++;return '即時入力';};parameterClick(app,320,300);await tick();assert(app.w.DrawingDocument.capture().querySelectorAll('[data-text-tool]').length===2&&app.w.undoStack.length===history+1,'normal prompt commits once');
+    annotationAction(app,'begin');parameterClick(app,400,300);assert(tool.draftMode&&tool.draftPoint&&!tool.draftContent&&prompts===2,'begin permits position first without prompt');annotationAction(app,'cancel');assert(!tool.draftMode&&!tool.draftPoint,'cancel draft mode');
+    const canvas=app.d.getElementById('canvas');canvas.dispatchEvent(new app.w.MouseEvent('mousedown',{button:2,bubbles:true}));assert(prompts===2,'right click does not prompt');
+  }finally{app.element.remove();}
+});
+
+await check('Annotation record updates and deletion are undoable and invalid or future SVG preserves current work atomically',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    const tool=annotationSeed(app,'text');inputPresetAction(app,'record');await tick();const before=app.w.DrawingDocument.serialize(),point=tool.draftPoint,preview=tool.previewElement,history=app.w.undoStack.length;
+    for(const entries of [{dimension:{version:1,input:{dimensionType:'linear',points:annotationEntries.dimension.input.points}}},{text:{version:1,input:{point:{x:'1',y:2},content:'bad'}}}]){
+      let failed=false;try{app.w.DrawingDocument.open(inputPresetSVG(app,{version:1,entries}));}catch{failed=true;}assert(failed&&app.w.DrawingDocument.serialize()===before&&tool.draftPoint===point&&tool.previewElement===preview&&app.w.undoStack.length===history,'invalid SVG retains document and draft');
+    }
+    annotationText(app,'変更');inputPresetAction(app,'record');await tick();assert(inputPresetState(app).entries.text.input.content==='変更','record update');app.w.undo();assert(inputPresetState(app).entries.text.input.content===annotationEntries.text.input.content,'undo record');app.w.redo();assert(inputPresetState(app).entries.text.input.content==='変更','redo record');
+    app.d.getElementById('text-tool').click();inputPresetAction(app,'remove');await tick();assert(!inputPresetState(app),'record deleted');app.w.undo();assert(inputPresetState(app).entries.text,'undo delete');app.w.redo();assert(!inputPresetState(app),'redo delete');
+    const future={version:1,entries:{dimension:{version:2,input:{later:true}},text:{version:2,input:{later:true}}}};app.w.DrawingDocument.open(inputPresetSVG(app,future));
+    for(const name of ['dimension','text']){app.d.getElementById(name+'-tool').click();assert(app.d.querySelector('[data-construction-input-action="restore"]').disabled,'future cannot execute');}app.w.DrawingDocument.open(app.w.DrawingDocument.serialize());assert(JSON.stringify(inputPresetState(app))===JSON.stringify(future),'future roundtrip');
+    app.w.DrawingDocument.open('<svg xmlns="http://www.w3.org/2000/svg"/>');assert(!inputPresetState(app),'legacy clears old records');
+  }finally{app.element.remove();}
+});
+
+await check('Annotation calculation and rendering failures retain editable inputs and recover without stale output or history entries',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    const host=app.w.toolManager.host;host.registerRenderer({id:'annotation-fail',label:'Failure',algorithm:'Explicit test failure',supports:n=>['dimension','text'].includes(n),prepare:()=>{throw Error('annotation rendering failed');}});
+    for(const name of ['dimension','text']){
+      const tool=annotationSeed(app,name);inputPresetAction(app,'record');await tick();draftKey(app,'Escape');const history=app.w.undoStack.length,saved=JSON.stringify(inputPresetState(app));
+      host.registerImplementation(name,{id:'annotation-fail',label:'Failure',algorithm:'Explicit test failure',run:()=>{throw Error('annotation calculation failed');}});host.selectImplementation(name,'annotation-fail');inputPresetAction(app,'restore');assert(tool.implementationError.includes('calculation failed'),'restore calculation error '+name);constructionEnter(app);assert(!annotationOutput(app,name)&&app.w.undoStack.length===history,'failed calculation no commit');
+      host.selectImplementation(name,'default');host.selectRenderer(name,'annotation-fail');inputPresetAction(app,'restore');assert(tool.implementationError.includes('rendering failed'),'restore render error '+name);constructionEnter(app);assert(!annotationOutput(app,name),'failed rendering no stale output');
+      host.selectRenderer(name,'default');inputPresetAction(app,'restore');constructionEnter(app);await tick();assert(annotationOutput(app,name)&&app.w.undoStack.length===history+1&&JSON.stringify(inputPresetState(app))===saved,'working implementation recovers '+name);
+    }
+  }finally{app.element.remove();}
+});
+
+await check('Dimension renderer selection updates the live restored preview and saves the actual selected calculation and rendering metadata',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    const host=app.w.toolManager.host;host.registerImplementation('dimension',{id:'quarter-turn',label:'Quarter turn',algorithm:'Test quarter turn',run:input=>({...annotationDrawing.dimension(input),turn:Math.PI/2})});
+    let descriptor;host.registerRenderer({id:'dimension-label',label:'Label only',algorithm:'Test dimension label layout',supports:n=>n==='dimension',prepare:shape=>{descriptor=shape;return{kind:'text',point:shape.result.vertex,content:'角度 '+(shape.result.turn*180/Math.PI).toFixed(1)};}});
+    const tool=annotationSeed(app,'dimension');preferenceChoose(app,'calculation','quarter-turn');preferenceChoose(app,'rendering','dimension-label');assert(tool.currentDimension.tagName==='text'&&tool.currentDimension.textContent==='角度 90.0','selected renderer updates preview');assert(descriptor.kind==='dimension'&&descriptor.mode==='angular','dimension descriptor contract');
+    assert(app.d.querySelector('[data-implementation-panel]').textContent.includes('Test dimension label layout'),'property describes real renderer');constructionEnter(app);await tick();const output=annotationOutput(app,'dimension'),record=JSON.parse(output.getAttribute('data-vector-implementation'));assert(output.tagName==='text'&&record.calculation.id==='quarter-turn'&&record.rendering.id==='dimension-label','output records actual selected methods');
+    app.w.selectTool.selectObject(app.d.querySelector('[data-dimension-tool]'));app.w.toolPropertiesPanel.updatePanel();assert(app.d.querySelector('[data-recorded-implementation]')?.textContent.includes('Test dimension label layout'),'selected object reports renderer');
+  }finally{app.element.remove();}
+});
+
+await check('Both annotation inputs survive actual SVG download with storage denied and document opening cancels active previews',async()=>{
+  const app=await preferenceEditor('{preferences:{storage:()=>{throw Error("blocked");}}}');
+  try{
+    annotationSelect(app,'angular');parameterClick(app,220,120);parameterClick(app,140,120);inputPresetAction(app,'record');draftKey(app,'Escape');
+    app.d.getElementById('text-tool').click();annotationText(app,'保存拒否でも記録');parameterClick(app,300,200);inputPresetAction(app,'record');await tick();const saved=JSON.stringify(inputPresetState(app)),textTool=app.w.toolManager.tools.text;let blob;
+    const url=app.w.URL.createObjectURL,revoke=app.w.URL.revokeObjectURL,click=app.w.HTMLAnchorElement.prototype.click;app.w.URL.createObjectURL=value=>{blob=value;return'blob:annotations';};app.w.URL.revokeObjectURL=()=>{};app.w.HTMLAnchorElement.prototype.click=function(){};
+    try{app.d.getElementById('save-btn').click();const xml=await blob.text();app.w.DrawingDocument.open(xml);assert(JSON.stringify(inputPresetState(app))===saved&&!textTool.previewElement&&!textTool.draftMode,'download roundtrip and old preview cancellation');}finally{app.w.URL.createObjectURL=url;app.w.URL.revokeObjectURL=revoke;app.w.HTMLAnchorElement.prototype.click=click;}
+    app.d.getElementById('dimension-tool').click();inputPresetAction(app,'restore');parameterClick(app,140,220);await tick();assert(annotationOutput(app,'dimension'),'dimension resumes without storage');app.d.getElementById('text-tool').click();inputPresetAction(app,'restore');annotationAction(app,'apply');await tick();assert(annotationOutput(app,'text'),'text resumes without storage');
+  }finally{app.element.remove();}
+});
+
+await check('Text draft limits and focused editing keys preserve the old record, selection and uncommitted content',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    const tool=annotationSeed(app,'text');annotationText(app,'x'.repeat(20000));inputPresetAction(app,'record');await tick();const saved=JSON.stringify(inputPresetState(app)),history=app.w.undoStack.length;
+    let area=annotationText(app,'x'.repeat(20001));inputPresetAction(app,'record');await tick();assert(JSON.stringify(inputPresetState(app))===saved&&app.w.undoStack.length===history&&tool.draftContent.length===20001,'oversize record failure retains both versions');annotationAction(app,'apply');assert(!annotationOutput(app,'text')&&tool.draftContent.length===20001,'oversize commit rejected');
+    area=annotationText(app,'編集中');area.focus();for(const key of ['Enter','Escape','Backspace']){const event=new app.w.KeyboardEvent('keydown',{key,bubbles:true,cancelable:true});area.dispatchEvent(event);assert(!event.defaultPrevented&&tool.draftContent==='編集中'&&tool.draftMode,'editing key remains in textarea '+key);}area.blur();
+    draftKey(app,'Escape');assert(!tool.draftMode&&!tool.previewElement,'canvas Escape cancels');inputPresetAction(app,'restore');assert(tool.draftContent.length===20000,'boundary value restores');
+    app.d.getElementById('line-tool').click();assert(!tool.draftMode&&!tool.previewElement&&!tool.draftContent,'switch clears text draft');
+  }finally{app.element.remove();}
+});
+
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
 </script>
