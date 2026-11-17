@@ -82,7 +82,8 @@ class SplineEditor {
       if(next.periodic)d.periodicKnotsText=next.periodicKnots.join(', ');else d.knotsText=next.knots.join(', ');
       if(next.weights)d.weightsText=next.weights.join(', ');
       this.changed();this.showPreview(false);
-      this.message=`ノットを下書きから1個削除しました。推定偏差上限 ${next.removal.errorBound}、許容差 ${next.removal.tolerance}。「適用」で反映します。 `+this.message;
+      const moved=next.removal.periodic?.domainShift;
+      this.message=`ノットを下書きから1個削除しました。${moved?`パラメータ区間 ${moved.from.join('〜')} → ${moved.to.join('〜')}（周期 ${moved.period}）。`:''}推定偏差上限 ${next.removal.errorBound}、許容差 ${next.removal.tolerance}。「適用」で反映します。 `+this.message;
     }catch(error){this.message=error.message;}
     this.refresh();
   }
@@ -205,7 +206,7 @@ class SplineEditor {
     }
 
     const removalInfo=document.createElement('p');removalInfo.dataset.splineRemovalInfo='';removalInfo.style.fontSize='12px';
-    removalInfo.textContent=(d.periodic?'3周期展開・中央周期抽出・再挿入照合で、内部ノットと重複した継ぎ目を削除します。両端は同じ継ぎ目として扱い、継ぎ目の最後のノットは保持します。':'内部ノットを1個削除し、制御点から推定した偏差上限が許容差以下の場合に下書きを更新します。')+'NURBSの重みは全て正、または全て負が対象です。許容差は図形のローカル座標で指定し、各削除の直前の曲線と比較します。';container.append(removalInfo);
+    removalInfo.textContent=(d.periodic?'3周期展開・1周期抽出・再挿入照合でノットを削除します。両端は同じ継ぎ目として扱います。継ぎ目の最後のノットを削除すると、周期を保ってパラメータ区間の始端を次のノットへ移します。':'内部ノットを1個削除し、制御点から推定した偏差上限が許容差以下の場合に下書きを更新します。')+'NURBSの重みは全て正、または全て負が対象です。許容差は図形のローカル座標で指定し、各削除の直前の曲線と比較します。';container.append(removalInfo);
     {
       for(const [labelText,key] of [['削除するノット値','removeKnotText'],['ノット削除の許容差','removalToleranceText']]){
         const label=document.createElement('label');label.textContent=labelText;label.style.cssText='display:block;font-size:12px;margin:10px 0';
