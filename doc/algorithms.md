@@ -329,3 +329,7 @@ $$
 ## 連続性を保つ次数上げの代替方式
 
 `elevateSplineDegree/continuity` は、元の内部・周期ノットの重複度を1つ増やす基底へ、同次ベジェ係数をGivens回転の疎QR解法で変換します。標準の区間ベジェ接続より制御点・ノットを抑え、全区間の偏差を独立検証します。描画は既存のSVG折れ線です。Piegl・Tillerの関連原論文の確認範囲、LAPACKの回転式、未導入の導関数方式との区別は [spline-continuity-elevation.md](spline-continuity-elevation.md) に記録しています。
+
+## 許容差付きの次数下げ
+
+2026-11-17に `reduceSplineDegree` を追加し、計算122機能としました。計算は極形式de Boorの区間ベジェ抽出、端点固定の同次Bernstein係数最小二乗、Givens QR、再次数上げと全区間偏差検証です。描画は既存のSVG折れ線です。Piegl–Tiller、Eck、Zheng–Wangの関連論文と実装の相違、実装時に照合した式、換装条件と未導入方式は [spline-degree-reduction.md](spline-degree-reduction.md) に記録しています。

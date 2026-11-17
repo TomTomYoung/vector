@@ -17,6 +17,7 @@ class SplineEditor {
       this.originalPath=this.element.getAttribute('d');this.originalSource=this.element.getAttribute('data-vector-spline');
       const {input,options}=source;
       this.draft={...source,insertKnotText:'',knotImplementation:this.manager.host.describe('insertSplineKnot').id,
+        reductionToleranceText:'0.0000001',reduceImplementation:this.manager.host.describe('reduceSplineDegree').id,
         elevationToleranceText:'0.0000001',elevateImplementation:this.manager.host.describe('elevateSplineDegree').id,
         removeKnotText:'',removalToleranceText:'0.0000001',removeImplementation:this.manager.host.describe('removeSplineKnot').id,
         pointsText:input.points.map(p=>p.x+', '+p.y).join('\n'),degree:input.degree,periodic:!!input.periodic,
@@ -105,6 +106,26 @@ class SplineEditor {
       if(next.weights)d.weightsText=next.weights.join(', ');
       this.changed();this.showPreview(false);
       this.message=`次数 ${next.elevation.fromDegree} → ${next.degree}。${next.elevation.representation.label}、制御点 ${next.points.length}個。推定偏差上限 ${next.elevation.errorBound}、許容差 ${next.elevation.tolerance}。「適用」で図形へ反映します。 `+this.message;
+    }catch(error){this.message=error.message;}
+    this.refresh();
+  }
+  reduceDegree() {
+    try {
+      this.assertTarget();
+      const d=this.draft,host=this.manager.host;
+      if(d.implementation!=='default'||host.implementations(d.method).find(v=>v.id==='default')?.source!=='src/model/splineCurves.js')
+        throw Error('次数下げは標準の曲線計算を選択してください。');
+      if(!d.reductionToleranceText.trim())throw Error('次数下げの許容差を入力してください。');
+      const info=host.implementations('reduceSplineDegree').find(v=>v.id===d.reduceImplementation);
+      if(!info)throw Error('選択した次数下げ実装がありません。');
+      const next=window.VectorUtils.reduceEditableSplineDegree(d.method,this.input(),Number(d.reductionToleranceText),
+        input=>host.execute('reduceSplineDegree',input,{implementation:d.reduceImplementation}));
+      d.refinement={tool:'reduceSplineDegree',id:info.id,label:info.label,algorithm:info.algorithm,source:info.source??null,...next.reduction};
+      d.degree=next.degree;d.pointsText=next.points.map(p=>p.x+', '+p.y).join('\n');
+      if(next.periodic)d.periodicKnotsText=next.periodicKnots.join(', ');else d.knotsText=next.knots.join(', ');
+      if(next.weights)d.weightsText=next.weights.join(', ');
+      this.changed();this.showPreview(false);
+      this.message=`次数 ${next.reduction.fromDegree} → ${next.degree}、制御点 ${next.points.length}個。推定偏差上限 ${next.reduction.errorBound}、許容差 ${next.reduction.tolerance}。「適用」で図形へ反映します。 `+this.message;
     }catch(error){this.message=error.message;}
     this.refresh();
   }
@@ -246,6 +267,16 @@ class SplineEditor {
       value.addEventListener('input',()=>{d.elevationToleranceText=value.value;});label.append(value);container.append(label);
       choice('次数上げの実装','elevateImplementation',this.manager.host.implementations('elevateSplineDegree'));
       button('形状を保って次数を1上げる',()=>this.elevateDegree(),'elevate-degree');
+    }
+
+    const reductionInfo=document.createElement('p');reductionInfo.dataset.splineReductionInfo='';reductionInfo.style.fontSize='12px';
+    reductionInfo.textContent='区間端点と周期の継ぎ目を固定し、許容差内で次数を1つ下げます。次数2〜12、結果1000制御点まで。区間を分けて保持するため制御点が増える場合があり、接続部の接線や高次の滑らかさは保証しません。許容差はローカル座標で各操作直前の曲線と比較します。';container.append(reductionInfo);
+    {
+      const label=document.createElement('label');label.textContent='次数下げの許容差';label.style.cssText='display:block;font-size:12px;margin:10px 0';
+      const value=document.createElement('input');value.type='text';value.value=d.reductionToleranceText;value.setAttribute('aria-label','次数下げの許容差');value.style.width='100%';
+      value.addEventListener('input',()=>{d.reductionToleranceText=value.value;});label.append(value);container.append(label);
+      choice('次数下げの実装','reduceImplementation',this.manager.host.implementations('reduceSplineDegree'));
+      button('許容差内で次数を1下げる',()=>this.reduceDegree(),'reduce-degree');
     }
 
     container.append(message);

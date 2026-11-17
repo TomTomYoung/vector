@@ -30,8 +30,8 @@ test('atomic preference restoration rolls back all selections and renderer optio
   assert.throws(()=>host.restorePreferencesAtomically(methods(),()=>{assert.equal(host.describeRendering('circle').id,'cubic');throw Error('controller failed');}),/controller failed/);assert.deepEqual(host.exportPreferences(),before);assert.equal(saves,0);
 });
 
-test('construction sets snapshot current input and all 121 methods with independent copies across editors',()=>{
-  const host=createEditorHost(),sets=store(host),tool=controller();host.selectImplementation('spline','centripetal');assert.equal(sets.record('circle','  円セット  ',tool),true);const id=sets.selectedId('circle'),saved=sets.entry('circle');assert.equal(saved.name,'円セット');assert.equal(Object.keys(saved.methods.calculation).length,121);assert.equal(Object.keys(saved.methods.rendering).length,121);
+test('construction sets snapshot current input and all 122 methods with independent copies across editors',()=>{
+  const host=createEditorHost(),sets=store(host),tool=controller();host.selectImplementation('spline','centripetal');assert.equal(sets.record('circle','  円セット  ',tool),true);const id=sets.selectedId('circle'),saved=sets.entry('circle');assert.equal(saved.name,'円セット');assert.equal(Object.keys(saved.methods.calculation).length,122);assert.equal(Object.keys(saved.methods.rendering).length,122);
   tool.value.input.points[0].x=999;saved.input.input.points[0].x=111;saved.methods.calculation.spline='uniform';host.selectImplementation('spline','chordal');assert.equal(sets.entry('circle').input.input.points[0].x,20);assert.equal(sets.entry('circle').methods.calculation.spline,'centripetal');
   const other=store();other.open(sets.snapshot());sets.remove('circle',id);assert.equal(other.entry('circle').id,id);assert.equal(sets.snapshot(),undefined);
 });

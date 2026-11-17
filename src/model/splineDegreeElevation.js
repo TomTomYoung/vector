@@ -2,7 +2,7 @@ import {bSplineCurve,nurbsCurve,homogeneousSplineBezierSpans} from './splineCurv
 import {boundedSplineDeviation} from './splineDeviation.js';
 
 const finite=h=>h&&[h.x,h.y,h.w].every(Number.isFinite);
-const raise=controls=>{
+export const raiseHomogeneousBezier=controls=>{
   const q=controls.length;
   return [controls[0],...controls.slice(1).map((h,i)=>{
     const a=(i+1)/q,b=controls[i];return {x:a*b.x+(1-a)*h.x,y:a*b.y+(1-a)*h.y,w:a*b.w+(1-a)*h.w};
@@ -26,7 +26,7 @@ export function prepareSplineDegreeElevation(input,{representation='bezier'}={})
   });
   if(rational&&model.weights.some(w=>w!==0&&w/scale===0))return null;
   const controls=toHomogeneous(model);if(!controls.every(finite))return null;
-  const q=model.degree+1,spans=homogeneousSplineBezierSpans({controls,degree:model.degree,knots:model.knots}).map(s=>({...s,controls:raise(s.controls)}));
+  const q=model.degree+1,spans=homogeneousSplineBezierSpans({controls,degree:model.degree,knots:model.knots}).map(s=>({...s,controls:raiseHomogeneousBezier(s.controls)}));
   if(!spans.length||spans.some(s=>!s.controls.every(finite)))return null;
   let layout=[],knots=[];
   if(model.periodic) {
