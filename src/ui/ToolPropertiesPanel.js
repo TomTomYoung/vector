@@ -222,7 +222,8 @@ class ToolPropertiesPanel {
             (record.rendering?.options && Object.keys(record.rendering.options).length ? ' / 描画設定 ' + JSON.stringify(record.rendering.options) : '') +
             (record.refinement?.tool==='insertSplineKnot' ? ` / 最後のノット挿入 ${record.refinement.algorithm} (${record.refinement.id})、値 ${record.refinement.t}` +
               (record.refinement.periodic ? `、周期処理 ${record.refinement.periodic.algorithm}、周期値 ${record.refinement.periodic.t}` : '') : '') +
-            (record.refinement?.tool==='removeSplineKnot' ? ` / 最後のノット削除 ${record.refinement.algorithm} (${record.refinement.id})、値 ${record.refinement.t}、許容差 ${record.refinement.tolerance}、推定偏差上限 ${record.refinement.errorBound}、検証 ${record.refinement.verification?.algorithm??'不明'}` : '') +
+            (record.refinement?.tool==='removeSplineKnot' ? ` / 最後のノット削除 ${record.refinement.algorithm} (${record.refinement.id})、値 ${record.refinement.t}、許容差 ${record.refinement.tolerance}、推定偏差上限 ${record.refinement.errorBound}、検証 ${record.refinement.verification?.algorithm??'不明'}` +
+              (record.refinement.periodic?`、周期処理 ${record.refinement.periodic.algorithm}、周期値 ${record.refinement.periodic.t}`:'') : '') +
             (record.parameters ? ' / 図形設定 ' + JSON.stringify(record.parameters) : '') +
             (record.circleEdit?.origin ? ` / 元の生成 ${record.circleEdit.origin.tool}: ${record.circleEdit.origin.calculation?.algorithm ?? '不明'} / 元の描画 ${record.circleEdit.origin.rendering?.algorithm ?? '不明'}` : '') +
             (record.arcEdit?.origin ? ` / 元の生成 ${record.arcEdit.origin.tool}: ${record.arcEdit.origin.calculation?.algorithm ?? '不明'} / 元の描画 ${record.arcEdit.origin.rendering?.algorithm ?? '不明'}` : '') +

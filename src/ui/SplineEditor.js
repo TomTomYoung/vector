@@ -76,8 +76,10 @@ class SplineEditor {
       const next=window.VectorUtils.removeEditableSplineKnot(d.method,this.input(),Number(d.removeKnotText),Number(d.removalToleranceText),
         input=>host.execute('removeSplineKnot',input,{implementation:d.removeImplementation}));
       d.refinement={tool:'removeSplineKnot',id:info.id,label:info.label,algorithm:info.algorithm,source:info.source??null,...next.removal,
-        verification:{algorithm:'共通ノット列の制御点から偏差上限を推定',source:'src/model/splineKnotRemoval.js'}};
-      d.pointsText=next.points.map(p=>p.x+', '+p.y).join('\n');d.knotsText=next.knots.join(', ');
+        verification:next.periodic?{algorithm:'周期再構成・標準再挿入後の1周期全体の偏差上限を推定',source:'src/adapters/periodicSplineRemoval.js'}:
+          {algorithm:'共通ノット列の制御点から偏差上限を推定',source:'src/model/splineKnotRemoval.js'}};
+      d.pointsText=next.points.map(p=>p.x+', '+p.y).join('\n');
+      if(next.periodic)d.periodicKnotsText=next.periodicKnots.join(', ');else d.knotsText=next.knots.join(', ');
       if(next.weights)d.weightsText=next.weights.join(', ');
       this.changed();this.showPreview(false);
       this.message=`ノットを下書きから1個削除しました。推定偏差上限 ${next.removal.errorBound}、許容差 ${next.removal.tolerance}。「適用」で反映します。 `+this.message;
@@ -203,8 +205,8 @@ class SplineEditor {
     }
 
     const removalInfo=document.createElement('p');removalInfo.dataset.splineRemovalInfo='';removalInfo.style.fontSize='12px';
-    removalInfo.textContent=d.periodic?'周期曲線のノット削除は未対応です。':'内部ノットを1個削除し、制御点から推定した偏差上限が許容差以下の場合に下書きを更新します。NURBSの重みは全て正、または全て負が対象です。許容差は図形のローカル座標で指定し、各削除の直前の曲線と比較します。';container.append(removalInfo);
-    if(!d.periodic){
+    removalInfo.textContent=(d.periodic?'3周期展開・中央周期抽出・再挿入照合で、内部ノットと重複した継ぎ目を削除します。両端は同じ継ぎ目として扱い、継ぎ目の最後のノットは保持します。':'内部ノットを1個削除し、制御点から推定した偏差上限が許容差以下の場合に下書きを更新します。')+'NURBSの重みは全て正、または全て負が対象です。許容差は図形のローカル座標で指定し、各削除の直前の曲線と比較します。';container.append(removalInfo);
+    {
       for(const [labelText,key] of [['削除するノット値','removeKnotText'],['ノット削除の許容差','removalToleranceText']]){
         const label=document.createElement('label');label.textContent=labelText;label.style.cssText='display:block;font-size:12px;margin:10px 0';
         const value=document.createElement('input');value.type='text';value.value=d[key];value.setAttribute('aria-label',labelText);value.style.width='100%';
