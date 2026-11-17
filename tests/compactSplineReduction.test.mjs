@@ -70,6 +70,10 @@ test('zero and mixed rational weights, common extreme scales and translated coor
   for(const periodic of [false,true])for(const w of [0,-.125])for(const scale of [1,1e-250,-1e-250,1e250,-1e250]){
     const input=raise({degree:3,periodic,points:points(7),weights:[1,w,1,1,1,1,1].map(v=>v*scale)}),out=reduce(input);compare(input,out);assert.ok(out.weights.every(Number.isFinite));
   }
+  const seamPoints=[{x:80,y:100},{x:150,y:220},{x:240,y:110},{x:300,y:190},{x:350,y:150}];
+  for(const periodicKnots of [[0,0,1,3,5,7],[0,1,3,5,7,7],[.1,.3,1,1.4,1.7,2]])for(const weight of [0,-.125,2]){
+    const input=raise({degree:3,points:seamPoints,weights:[1,weight,1,1,1],periodic:true,periodicKnots}),out=reduce(input);compare(input,out);assert.ok(out.points.every(p=>Number.isFinite(p.x)&&Number.isFinite(p.y)));
+  }
   const input=raise({degree:3,points:points(7).map(p=>({x:p.x+1e8,y:p.y-1e8}))});compare(input,reduce(input));
 });
 test('a thousand-control input reduces beyond the temporary Bezier limit without expanding the editable cap',()=>{

@@ -38,5 +38,9 @@ export function reduceSplineDegreeContinuity(input){
   }
   const solved=solveSparseQr(rows);if(!solved)return null;
   const controls=Array.from({length:count},(_,i)=>{if(fixed.has(i))return fixed.get(i);const h=solved[columns.get(i)];return {x:h[0],y:h[1],w:rational?h[2]:1};});
-  return projectSplineDegreeReduction(c,controls,'continuity');
+  // QR can recover an exactly zero weight with a small nonzero x/y residual.
+  // Use the representable zero homogeneous vector as a candidate, then subject
+  // the changed curve to the same independent full-domain error/denominator test.
+  const finiteCandidate=controls.map(h=>h.w===0?{x:0,y:0,w:0}:h);
+  return projectSplineDegreeReduction(c,finiteCandidate,'continuity');
 }
