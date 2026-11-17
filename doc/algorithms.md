@@ -321,3 +321,7 @@ $$
 最後の継ぎ目の削除では、制御点・重みの循環で始端を次のノットへ移し、周期と支持ノットの一致を検査します。移動後の1周期全体を標準再挿入で検証し、旧区間・新区間・周期・使用方式を記録します。2026-11-17にOCCTの `SetOrigin(Index)` 仕様も照合しました。仕様参照と本リポジトリの実装の区別、操作例は [periodic-knot-removal.md](periodic-knot-removal.md) に記載しています。
 
 零・正負混在のNURBS重みにもノット削除を拡張しました。同次de Boor極形式で区間ベジェ化し、Bernstein分母範囲をde Casteljau再分割で検証して、全区間の偏差上限を推定します。2026-11-17に照合した一次資料、式の導出、実装・描画の分担、換装、記録、残る極の処理は [signed-knot-removal.md](signed-knot-removal.md) に記載しています。
+
+## B-spline・NURBSの次数上げ
+
+2026-11-17に `elevateSplineDegree` を追加し、計算121機能としました。極形式de Boorの区間ベジェ抽出、同次Bernstein次数上げ、再接続と偏差検証を組み合わせます。描画は既存のSVG折れ線です。MIT Hyperbookの次数上げ式を実装時に照合し、OCCTのAPI仕様も比較しました。参照履歴、最小ノット方式との違い、周期・有理曲線の扱い、換装と残る方式は [spline-degree-elevation.md](spline-degree-elevation.md) に記録しています。

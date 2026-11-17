@@ -17,6 +17,7 @@ class SplineEditor {
       this.originalPath=this.element.getAttribute('d');this.originalSource=this.element.getAttribute('data-vector-spline');
       const {input,options}=source;
       this.draft={...source,insertKnotText:'',knotImplementation:this.manager.host.describe('insertSplineKnot').id,
+        elevationToleranceText:'0.0000001',elevateImplementation:this.manager.host.describe('elevateSplineDegree').id,
         removeKnotText:'',removalToleranceText:'0.0000001',removeImplementation:this.manager.host.describe('removeSplineKnot').id,
         pointsText:input.points.map(p=>p.x+', '+p.y).join('\n'),degree:input.degree,periodic:!!input.periodic,
         knotsText:input.knots?.join(', ') ?? '',periodicKnotsText:input.periodicKnots?.join(', ') ?? '',weightsText:input.weights?.join(', ') ?? '',options:{...options}};
@@ -84,6 +85,26 @@ class SplineEditor {
       this.changed();this.showPreview(false);
       const moved=next.removal.periodic?.domainShift;
       this.message=`ノットを下書きから1個削除しました。${moved?`パラメータ区間 ${moved.from.join('〜')} → ${moved.to.join('〜')}（周期 ${moved.period}）。`:''}推定偏差上限 ${next.removal.errorBound}、許容差 ${next.removal.tolerance}。「適用」で反映します。 `+this.message;
+    }catch(error){this.message=error.message;}
+    this.refresh();
+  }
+  elevateDegree() {
+    try {
+      this.assertTarget();
+      const d=this.draft,host=this.manager.host;
+      if(d.implementation!=='default'||host.implementations(d.method).find(v=>v.id==='default')?.source!=='src/model/splineCurves.js')
+        throw Error('形状を保つ次数上げは標準の曲線計算を選択してください。');
+      if(!d.elevationToleranceText.trim())throw Error('次数上げの検証許容差を入力してください。');
+      const info=host.implementations('elevateSplineDegree').find(v=>v.id===d.elevateImplementation);
+      if(!info)throw Error('選択した次数上げ実装がありません。');
+      const next=window.VectorUtils.elevateEditableSplineDegree(d.method,this.input(),Number(d.elevationToleranceText),
+        input=>host.execute('elevateSplineDegree',input,{implementation:d.elevateImplementation}));
+      d.refinement={tool:'elevateSplineDegree',id:info.id,label:info.label,algorithm:info.algorithm,source:info.source??null,...next.elevation};
+      d.degree=next.degree;d.pointsText=next.points.map(p=>p.x+', '+p.y).join('\n');
+      if(next.periodic)d.periodicKnotsText=next.periodicKnots.join(', ');else d.knotsText=next.knots.join(', ');
+      if(next.weights)d.weightsText=next.weights.join(', ');
+      this.changed();this.showPreview(false);
+      this.message=`次数 ${next.elevation.fromDegree} → ${next.degree}。推定偏差上限 ${next.elevation.errorBound}、許容差 ${next.elevation.tolerance}。「適用」で図形へ反映します。 `+this.message;
     }catch(error){this.message=error.message;}
     this.refresh();
   }
@@ -215,6 +236,16 @@ class SplineEditor {
       }
       choice('ノット削除の実装','removeImplementation',this.manager.host.implementations('removeSplineKnot'));
       button('許容差内でノットを削除',()=>this.removeKnot(),'remove-knot');
+    }
+
+    const elevationInfo=document.createElement('p');elevationInfo.dataset.splineElevationInfo='';elevationInfo.style.fontSize='12px';
+    elevationInfo.textContent='区間ごとのベジェ次数上げで形状を保ちます。次数は11まで、結果は1000制御点までです。再接続によって制御点とノットが増えます。検証許容差はローカル座標の各操作直前との偏差に用います。上の次数欄の直接変更は形状を保持しません。';container.append(elevationInfo);
+    {
+      const label=document.createElement('label');label.textContent='次数上げの検証許容差';label.style.cssText='display:block;font-size:12px;margin:10px 0';
+      const value=document.createElement('input');value.type='text';value.value=d.elevationToleranceText;value.setAttribute('aria-label','次数上げの検証許容差');value.style.width='100%';
+      value.addEventListener('input',()=>{d.elevationToleranceText=value.value;});label.append(value);container.append(label);
+      choice('次数上げの実装','elevateImplementation',this.manager.host.implementations('elevateSplineDegree'));
+      button('形状を保って次数を1上げる',()=>this.elevateDegree(),'elevate-degree');
     }
 
     container.append(message);

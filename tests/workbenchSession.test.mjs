@@ -8,8 +8,8 @@ const session=(storage=memory(),options={})=>createWorkbenchSession({examples:ge
 const data=(entries={},activeTool='spline')=>({version:1,activeTool,entries});
 const entry=(inputText='{',implementation='uniform')=>({inputText,implementation});
 
-test('Workbench initializes all 120 operations and remembers per-operation drafts and choices without changing the catalog',()=>{
-  const catalog=createToolset(),s=session(undefined,{catalog});assert.equal(Object.keys(JSON.parse(s.exportText()).entries).length,120);assert.equal(s.activeTool,'segmentContact');
+test('Workbench initializes all 121 operations and remembers per-operation drafts and choices without changing the catalog',()=>{
+  const catalog=createToolset(),s=session(undefined,{catalog});assert.equal(Object.keys(JSON.parse(s.exportText()).entries).length,121);assert.equal(s.activeTool,'segmentContact');
   s.selectTool('spline');s.setInput('{ unfinished');s.setImplementation('chordal');s.selectTool('convexHull');s.setInput('');s.setImplementation('exact');s.selectTool('spline');
   assert.deepEqual(s.entry(),entry('{ unfinished','chordal'));assert.equal(catalog.describe('spline').id,'default');s.selectTool('convexHull');assert.deepEqual(s.entry(),entry('','exact'));
   const copy=s.entry();copy.inputText='changed';assert.equal(s.entry().inputText,'');assert.throws(()=>s.selectTool('missing'));assert.throws(()=>s.setImplementation('missing'));assert.equal(s.activeTool,'convexHull');

@@ -10,7 +10,7 @@ test('document presets snapshot all registered methods and rendering options wit
   host.selectImplementation('spline','centripetal');host.selectRenderer('cubicBezier','adaptive',{tolerance:0.125,maxDepth:7});
   host.selectRenderer('nurbsCurve','default',{sampleCount:130,poleTolerance:1e-6,maxNodes:32000});
   assert.equal(preset.record(),true);const saved=preset.snapshot();
-  assert.equal(Object.keys(saved.calculation).length,120);assert.equal(Object.keys(saved.rendering).length,120);
+  assert.equal(Object.keys(saved.calculation).length,121);assert.equal(Object.keys(saved.rendering).length,121);
   host.selectImplementation('spline','chordal');saved.rendering.nurbsCurve.options.sampleCount=2;
   assert.equal(preset.snapshot().calculation.spline,'centripetal');assert.equal(preset.snapshot().rendering.nurbsCurve.options.sampleCount,130);
   const other=createDocumentImplementationPreset(createEditorHost());other.open(preset.snapshot());preset.clear();
