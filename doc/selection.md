@@ -45,3 +45,5 @@ GUIの判定は [selectionGeometry.js](../src/adapters/selectionGeometry.js) の
 ## 検証
 
 `tests/selection.test.mjs` で範囲・距離・偶奇規則・保存復元・不正値・保存失敗を検査します。`tests/editor.html` では4形状、実際のPath2D描画、拡大時の半径、優先順位、ロック・非表示、線幅、破線、塗りの穴、曲線、プレビュー、保存除外、取消、複数選択、画面外の終了、新規エディタへの設定復元を操作して検査します。
+
+[PR #94](https://github.com/TomTomYoung/vector/pull/94) の実装コミット `894f880` に対する [CI 44120490546](https://github.com/TomTomYoung/vector/actions/runs/44120490546) で、Node 356件・実Chrome 270件が全て成功しました。新規分はNode 6件・ブラウザー13件です。最初の検証で数値欄の確定イベント、近傍同距離の扱い、SVGMatrixの文字列化に依存した枠表示・倍率変更検知を確認・修正し、枠の画面行列そのものを回帰検査へ追加しています。ローカルChromiumはソケット制約で起動できないため、ブラウザーの成功記録はGitHub Actionsの実Chromeです。
