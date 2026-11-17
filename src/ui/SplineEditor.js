@@ -16,7 +16,7 @@ class SplineEditor {
       const source=window.VectorUtils.readSplineSource(this.element.getAttribute('data-vector-spline'),this.element.getAttribute('data-vector-implementation'),this.element.getAttribute('d'));
       this.originalPath=this.element.getAttribute('d');this.originalSource=this.element.getAttribute('data-vector-spline');
       const {input,options}=source;
-      this.draft={...source,pointsText:input.points.map(p=>p.x+', '+p.y).join('\n'),degree:input.degree,periodic:!!input.periodic,
+      this.draft={...source,insertKnotText:'',knotImplementation:this.manager.host.describe('insertSplineKnot').id,pointsText:input.points.map(p=>p.x+', '+p.y).join('\n'),degree:input.degree,periodic:!!input.periodic,
         knotsText:input.knots?.join(', ') ?? '',periodicKnotsText:input.periodicKnots?.join(', ') ?? '',weightsText:input.weights?.join(', ') ?? '',options:{...options}};
       this.message='座標は図形のローカル座標です。移動・回転・色・線幅・レイヤーは保持します。';
     } catch(error){this.message=error.message;}
@@ -39,6 +39,26 @@ class SplineEditor {
       ...(d.periodic && d.periodicKnotsText.trim() ? {periodicKnots:numbers(d.periodicKnotsText)} : {}),
       ...(d.method==='nurbsCurve' && d.weightsText.trim() ? {weights:numbers(d.weightsText)} : {})};
   }
+  insertKnot() {
+    try {
+      this.assertTarget();
+      const d=this.draft,host=this.manager.host;
+      if(d.implementation!=='default' || host.implementations(d.method).find(v=>v.id==='default')?.source!=='src/model/splineCurves.js')
+        throw Error('形状を保つノット挿入は標準の曲線計算を選択してください。');
+      if(!d.insertKnotText.trim())throw Error('挿入するノット値を入力してください。');
+      const info=host.implementations('insertSplineKnot').find(v=>v.id===d.knotImplementation);
+      if(!info)throw Error('選択したノット挿入実装がありません。');
+      const refinement={tool:'insertSplineKnot',id:info.id,label:info.label,algorithm:info.algorithm,source:info.source ?? null,t:Number(d.insertKnotText)};
+      const next=window.VectorUtils.insertEditableSplineKnot(d.method,this.input(),Number(d.insertKnotText),
+        input=>host.execute('insertSplineKnot',input,{implementation:d.knotImplementation}));
+      d.refinement=refinement;
+      d.pointsText=next.points.map(p=>p.x+', '+p.y).join('\n');d.knotsText=next.knots.join(', ');
+      if(next.weights)d.weightsText=next.weights.join(', ');
+      this.changed();this.showPreview(false);
+      this.message='ノットを下書きへ1個挿入しました。「適用」で図形へ反映します。 '+this.message;
+    } catch(error){this.message=error.message;}
+    this.refresh();
+  }
   build() {
     this.assertTarget();
     const host=this.manager.host,d=this.draft;
@@ -51,6 +71,7 @@ class SplineEditor {
       if(!shape || shape.kind!=='splineCurve')throw Error('制御点数・次数・ノット・重みを確認してください。');
       const result=host.render(shape,null,{...d.options,toolName:d.method,renderer:d.renderer});
       if(!result || result.tagName!=='path' || !result.hasAttribute('data-vector-spline'))throw Error('現在の条件では再編集できるパスを作成できません。分母検査の上限・重み・実装を確認してください。');
+      if(d.refinement){const record=JSON.parse(result.getAttribute('data-vector-implementation'));record.refinement=d.refinement;result.setAttribute('data-vector-implementation',JSON.stringify(record));}
       return result;
     } finally {host.selectImplementation(d.method,previous);}
   }
@@ -146,6 +167,16 @@ class SplineEditor {
     };
     choice('再計算の実装','implementation',this.manager.host.implementations(d.method));
     choice('再描画の実装','renderer',this.manager.host.renderers(d.method));
+    const knotInfo=document.createElement('p');knotInfo.dataset.splineKnotInfo='';knotInfo.style.fontSize='12px';
+    knotInfo.textContent=d.periodic?'周期曲線の形状保持ノット挿入は未対応です。':'標準B-spline・NURBSの形状を保ちながら、内部ノットと制御点を1個増やします。複数回挿入も「適用」までは下書きです。';container.append(knotInfo);
+    if(!d.periodic){
+      const label=document.createElement('label');label.textContent='挿入するノット値';label.style.cssText='display:block;font-size:12px;margin:10px 0';
+      const knot=document.createElement('input');knot.type='text';knot.value=d.insertKnotText;knot.setAttribute('aria-label','挿入するノット値');knot.style.width='100%';
+      knot.addEventListener('input',()=>{d.insertKnotText=knot.value;});label.append(knot);container.append(label);
+      choice('ノット挿入の実装','knotImplementation',this.manager.host.implementations('insertSplineKnot'));
+      button('形状を保ってノットを挿入',()=>this.insertKnot(),'insert-knot');
+    }
+
     container.append(message);
     button('プレビュー',()=>this.showPreview(),'preview');button('適用',()=>this.apply(),'apply');button('取消',()=>this.cancel(),'cancel');
   }
