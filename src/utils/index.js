@@ -26,6 +26,7 @@ import {createEditorHost} from "../adapters/editorHost.js";
 import {readSplineSource} from '../adapters/splineSource.js';
 import {insertEditableSplineKnot} from '../adapters/splineRefinement.js';
 import {reduceEditableSplineToDegree} from '../adapters/splineReductionPlan.js';
+import {simplifyEditableSplineKnots} from '../adapters/splineSimplification.js';
 import {reduceEditableSplineDegree} from '../adapters/splineReduction.js';
 import {elevateEditableSplineDegree} from '../adapters/splineElevation.js';
 import {removeEditableSplineKnot} from '../adapters/splineRemoval.js';
@@ -66,6 +67,7 @@ window.VectorUtils = {
   elevateEditableSplineDegree,
   reduceEditableSplineDegree,
   reduceEditableSplineToDegree,
+  simplifyEditableSplineKnots,
   circleSource,
   arcSource,
   pointSetSource,
@@ -120,4 +122,3 @@ window.BezierUtils = bezier;
 
 console.log('VectorUtils loaded:', Object.keys(window.VectorUtils));
 
-export {simplifyEditableSplineKnots} from '../adapters/splineSimplification.js';
