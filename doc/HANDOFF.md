@@ -80,6 +80,8 @@ PR #101のマージ後は [master CI](https://github.com/TomTomYoung/vector/acti
 
 境界線を選んでいる途中と、Enterで確定して加工対象を待つ段階を、1件記録・名前付き入力・作図セットへ保存できます。SVGを開いて復元すると、複数の境界線が元の順番で選択されます。次のクリックで現在位置の境界を使って加工します。1本でも使用できない場合は、残りだけを使った加工を防ぎます。対応する入力保存は27ツールです。[トリムと延長の境界線](construction-input-presets.md#トリムと延長の境界線)
 
+[PR #102](https://github.com/TomTomYoung/vector/pull/102) の実装コミット `5a3cdc4` に対する [CI 44277613070](https://github.com/TomTomYoung/vector/actions/runs/44277613070) で、Node 411件・実Chrome 306件が全件成功しました。新規の各4件で境界線の順序・参照の重複・保存失敗、2段階の復元、変形した境界による加工、コピー・分割、作図セットの復元失敗と再試行、加工後のUndo/Redoを検証しました。名前付き入力・作図セットのSVG往復試験は対象を27ツールに広げました。
+
 ## 現在の到達点
 
 リポジトリは [TomTomYoung/vector](https://github.com/TomTomYoung/vector)、開発・公開の基準ブランチは `master` です。[エディタ](https://tomtomyoung.github.io/vector/)と[演算室](https://tomtomyoung.github.io/vector/geometry.html)を GitHub Pages で公開しています。
