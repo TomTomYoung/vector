@@ -55,7 +55,7 @@ MIT Hyperbook、Patrikalakis・Maekawa・Cho、[1.3.5 Algorithms for Bézier cur
 
 Open CASCADEの [Geom_BSplineCurve::IncreaseDegree](https://www.occt3d.com/dev/doc/refman/html/class_geom___b_spline_curve.html) は、制御点・重み・重複度を変更して次数を上げるAPIの仕様を比較しました。独立したノット値の表を保持するAPIですが、今回はOCCTのソース実装を移植していません。OCCTの曲線オブジェクトをそのまま導入する場合は、JSの点列・展開済みノット列との変換、WASM等の実行環境、オブジェクト寿命管理、独自の許容差体系を接続する必要があります。
 
-元の連続性を保つノット列への次数上げは[実装済み](spline-continuity-elevation.md)です。曲線固有のさらに少ないノットへの全体簡約、極を含む曲線の枝単位の編集、射影無限遠の制御点を持つモデル、曲面の次数変更は未実装です。現行の有限2D座標・単一曲線モデルへ名前だけで置換できる範囲とは区別しています。
+元の連続性を保つノット列への次数上げは[実装済み](spline-continuity-elevation.md)です。曲線固有のさらに少ないノットへの全体簡約、極を含む曲線の枝単位の次数上げ、射影無限遠の制御点を持つモデル、曲面の次数変更は未実装です。現行の有限2D座標・単一曲線モデルへ名前だけで置換できる範囲とは区別しています。
 
 端点を固定した同次係数最小二乗による[許容差付き次数下げ](spline-degree-reduction.md)は実装済みです。区間ベジェ接続を返し、高次連続性や最少制御点は保証しません。
 
