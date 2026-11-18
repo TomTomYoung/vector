@@ -93,3 +93,6 @@ B-spline・NURBSの形状を保つ `elevateSplineDegree` は非周期・周期�
 `reduceSplineDegree` の `adaptive` は許容差を満たさない区間を自動で二分割します。全区間を元の曲線と再検証し、最終1000制御点までの端点固定の接続表現を返します。[分割・誤差・上限・換装契約](../../doc/adaptive-degree-reduction.md)を参照してください。
 
 `reduceSplineToDegree` は目標次数と全体許容差を指定する一括操作です。各段階の中間曲線を独立検証し、三角不等式で累積偏差を管理します。計算123機能です。[入出力・実装3種類・予算・換装・制約](../../doc/spline-reduction-budget.md)を参照してください。
+
+
+`simplifySplineKnots` は全体許容差内で余分なノットを順次減らす一括操作です。通常・周期の編集形式を扱うDOM非依存のアダプター層を共通の演算カタログから呼び出します。始端側・終端側の走査を選択でき、削除列と最終結果を独立検証します。計算124機能です。[入出力・予算・換装・参照資料・上限](../../doc/spline-knot-simplification.md)を参照してください。

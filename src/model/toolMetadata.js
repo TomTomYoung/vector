@@ -545,6 +545,11 @@ export const toolMetadata = Object.freeze({
     "algorithm": "曲線形状を保つ単一ノット挿入（Boehm系）。有理曲線は重みつきで補間",
     "source": "src/model/splines.js"
   },
+  "simplifySplineKnots": {
+    "label": "始端側からノットを一括簡約",
+    "algorithm": "昇順の反復走査・逆Boehm削除・周期再構成・独立した全区間検証・残予算と三角不等式による累積偏差上限",
+    "source": "src/adapters/splineSimplification.js"
+  },
   "reduceSplineToDegree": {
     "label": "適応分割で一括次数下げ",
     "algorithm": "適応二分割・同次係数最小二乗・Givens QR・残予算の等分配・全段階検証・三角不等式による累積偏差上限",

@@ -17,6 +17,7 @@ class SplineEditor {
       this.originalPath=this.element.getAttribute('d');this.originalSource=this.element.getAttribute('data-vector-spline');
       const {input,options}=source;
       this.draft={...source,insertKnotText:'',knotImplementation:this.manager.host.describe('insertSplineKnot').id,
+        simplificationToleranceText:'0.0000001',simplificationImplementation:this.manager.host.describe('simplifySplineKnots').id,
         planTargetText:String(Math.max(1,input.degree-2)),planToleranceText:'0.001',planImplementation:this.manager.host.describe('reduceSplineToDegree').id,
         reductionToleranceText:'0.0000001',reduceImplementation:this.manager.host.describe('reduceSplineDegree').id,
         elevationToleranceText:'0.0000001',elevateImplementation:this.manager.host.describe('elevateSplineDegree').id,
@@ -89,6 +90,22 @@ class SplineEditor {
       this.message=`ノットを下書きから1個削除しました。${moved?`パラメータ区間 ${moved.from.join('〜')} → ${moved.to.join('〜')}（周期 ${moved.period}）。`:''}推定偏差上限 ${next.removal.errorBound}、許容差 ${next.removal.tolerance}。「適用」で反映します。 `+this.message;
     }catch(error){this.message=error.message;}
     this.refresh();
+  }
+  simplifyKnots() {
+    try {
+      this.assertTarget();const d=this.draft,host=this.manager.host;
+      if(d.implementation!=='default'||host.implementations(d.method).find(v=>v.id==='default')?.source!=='src/model/splineCurves.js')throw Error('ノット一括簡約は標準の曲線計算を選択してください。');
+      if(!d.simplificationToleranceText.trim())throw Error('ノット一括簡約の全体許容差を入力してください。');
+      const info=host.implementations('simplifySplineKnots').find(v=>v.id===d.simplificationImplementation);if(!info)throw Error('選択したノット一括簡約実装がありません。');
+      const next=window.VectorUtils.simplifyEditableSplineKnots(d.method,this.input(),Number(d.simplificationToleranceText),input=>host.execute('simplifySplineKnots',input,{implementation:d.simplificationImplementation}));
+      if(!next.simplification.removedKnots){this.message='現在の方式と全体許容差では削除できるノットがありません。下書きは保持しています。';this.refresh();return;}
+      d.refinement={tool:'simplifySplineKnots',id:info.id,label:info.label,algorithm:info.algorithm,source:info.source??null,...next.simplification};
+      d.pointsText=next.points.map(p=>p.x+', '+p.y).join('\n');
+      if(next.periodic)d.periodicKnotsText=next.periodicKnots.join(', ');else d.knotsText=next.knots.join(', ');
+      if(next.weights)d.weightsText=next.weights.join(', ');
+      this.changed();this.showPreview(false);
+      this.message=`ノットを${next.simplification.removedKnots}個削除、制御点 ${next.simplification.originalControlCount} → ${next.simplification.controlCount}個。処理時の累積偏差上限 ${next.simplification.errorBound}、全体許容差 ${next.simplification.tolerance}。「適用」で図形へ反映します。 `+this.message;
+    }catch(error){this.message=error.message;}this.refresh();
   }
   elevateDegree() {
     try {
@@ -277,6 +294,16 @@ class SplineEditor {
       }
       choice('ノット削除の実装','removeImplementation',this.manager.host.implementations('removeSplineKnot'));
       button('許容差内でノットを削除',()=>this.removeKnot(),'remove-knot');
+    }
+
+    const simplificationInfo=document.createElement('p');simplificationInfo.dataset.splineSimplificationInfo='';simplificationInfo.style.fontSize='12px';
+    simplificationInfo.textContent='曲線全体を順に走査し、削除ごとの偏差上限の合計を全体許容差内に収めます。許容差は実行直前の曲線を基準とするローカル座標の距離です。周期継ぎ目が消える場合は区間始端を移します。走査順で結果が変わり、最少制御点数は保証しません。';container.append(simplificationInfo);
+    {
+      const label=document.createElement('label');label.textContent='ノット一括簡約の全体許容差';label.style.cssText='display:block;font-size:12px;margin:10px 0';
+      const value=document.createElement('input');value.type='text';value.value=d.simplificationToleranceText;value.setAttribute('aria-label',label.textContent);value.style.width='100%';
+      value.addEventListener('input',()=>{d.simplificationToleranceText=value.value;});label.append(value);container.append(label);
+      choice('ノット一括簡約の実装','simplificationImplementation',this.manager.host.implementations('simplifySplineKnots'));
+      button('全体許容差内でノットを一括簡約',()=>this.simplifyKnots(),'simplify-knots');
     }
 
     const elevationInfo=document.createElement('p');elevationInfo.dataset.splineElevationInfo='';elevationInfo.style.fontSize='12px';

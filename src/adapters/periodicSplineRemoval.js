@@ -50,9 +50,7 @@ function shiftedOrigin(model,create,{u,period,knotAt}) {
   return shifted;
 }
 
-// Each single removal is checked by the caller. After extracting and wrapping
-// the candidate, verify the actual periodic result on the original common basis.
-export function removePeriodicSplineKnot(method,model,requested,tolerance,create,removeChecked) {
+function context(model,requested,tolerance,create) {
   const {degree:p,controlCount:n}=model,u=model.knots.slice(p,p+n+1),a=u[0],b=u[n];
   if(n-1<=p)throw Error('削除後の元制御点数は次数より多くしてください。');
   if(!Number.isFinite(requested)||requested<a||requested>b||!u.includes(requested)||
@@ -70,17 +68,19 @@ export function removePeriodicSplineKnot(method,model,requested,tolerance,create
       domainShift={from:[a,b],to:[u[1],end],period:expansion.period};
     }
   }else nextKnots.splice(u.lastIndexOf(t),1);
-  const {period,originalPoints,originalWeights,expanded:initial}=expansion;
-  const copies=t===a?[a,b]:[t-period,t,t+period];let expanded=initial;
-  for(const value of copies)expanded=removeChecked(expanded,value,tolerance);
-  const probe=create({degree:p,periodic:true,periodicKnots:nextKnots,points:originalPoints.slice(0,-1),
-    ...(originalWeights?{weights:originalWeights.slice(0,-1)}:{})});
+  const copies=t===a?[a,b]:[t-expansion.period,t,t+expansion.period];
+  return {model,requested,tolerance,p,n,t,b,nextKnots,expansion,comparison,domainShift,copies};
+}
+
+function inspect(method,c,candidate,create) {
+  const {model,requested,tolerance,p,n,t,b,nextKnots,comparison,domainShift,copies}=c;
+  const rationalInput=!!model.weights;
+  if(!candidate||candidate.periodic!==true||candidate.knots!==undefined||candidate.degree!==p||
+    !Array.isArray(candidate.points)||candidate.points.length!==n-1||!Array.from(candidate.points).every(v=>v&&Number.isFinite(v.x)&&Number.isFinite(v.y))||
+    !Array.isArray(candidate.periodicKnots)||candidate.periodicKnots.length!==nextKnots.length||nextKnots.some((v,i)=>v!==candidate.periodicKnots[i])||
+    rationalInput!==(candidate.weights!==undefined)||rationalInput&&(!Array.isArray(candidate.weights)||candidate.weights.length!==n-1||!Array.from(candidate.weights).every(Number.isFinite)))
+    throw Error('周期ノット削除の出力形式が不正です。');
   const numericError=()=>Error('周期削除後のノット列または再挿入照合を有限精度で保持できません。');
-  if(!probe)throw numericError();
-  const start=nextKnots[0],offset=expanded.knots.indexOf(start)-probe.knots.indexOf(start),count=n-1;
-  if(offset<0||probe.knots.some((k,i)=>k!==expanded.knots[offset+i]))throw numericError();
-  const candidate={degree:p,periodic:true,periodicKnots:nextKnots,points:expanded.points.slice(offset,offset+count),
-    ...(expanded.weights?{weights:expanded.weights.slice(offset,offset+count)}:{})};
   const candidateModel=create(candidate);if(!candidateModel)throw numericError();
   // This fixed verifier is independent of the user's chosen insertion implementation.
   const rebuilt=create(insertEditableSplineKnot(method,candidate,domainShift?b:t,normalizedInsertion));
@@ -97,7 +97,28 @@ export function removePeriodicSplineKnot(method,model,requested,tolerance,create
   const radius=rational?Math.max(...after.points.map(point=>Math.hypot(point.x-origin.x,point.y-origin.y))):0;
   const deviation=boundedSplineDeviation(controls(before),controls(after),radius,rational,p,before.knots);
   if(!deviation||deviation.errorBound>tolerance)throw Error('周期再構成後の偏差が許容差を超えるか分母を検証できないため、ノットを削除できません。');
-  return {...candidate,removal:{t:requested,tolerance,...deviation,periodic:{
+  return {degree:p,periodic:true,periodicKnots:[...nextKnots],points:candidateModel.points.slice(0,n-1).map(v=>({x:v.x,y:v.y})),...(rationalInput?{weights:candidateModel.weights.slice(0,n-1)}:{}),removal:{t:requested,tolerance,...deviation,periodic:{
     algorithm:domainShift?'3周期展開・同値ノット削除・継ぎ目移動・1周期抽出・再挿入照合':'3周期展開・同値ノット削除・中央周期抽出・再挿入照合',
     source:'src/adapters/periodicSplineRemoval.js',t,copies:copies.length,...(domainShift?{domainShift}:{})}}};
+}
+
+// Validate an arbitrary final periodic candidate independently of its solver.
+export function validatePeriodicSplineKnotRemoval(method,model,t,tolerance,create,candidate) {
+  try {return inspect(method,context(model,t,tolerance,create),candidate,create);}catch{return null;}
+}
+
+// Each expanded removal and the actual wrapped result are checked separately.
+export function removePeriodicSplineKnot(method,model,requested,tolerance,create,removeChecked) {
+  const c=context(model,requested,tolerance,create),{p,n,nextKnots,expansion,copies}=c;
+  const {originalPoints,originalWeights,expanded:initial}=expansion;let expanded=initial;
+  for(const value of copies)expanded=removeChecked(expanded,value,tolerance);
+  const probe=create({degree:p,periodic:true,periodicKnots:nextKnots,points:originalPoints.slice(0,-1),
+    ...(originalWeights?{weights:originalWeights.slice(0,-1)}:{})});
+  const numericError=()=>Error('周期削除後のノット列または再挿入照合を有限精度で保持できません。');
+  if(!probe)throw numericError();
+  const start=nextKnots[0],offset=expanded.knots.indexOf(start)-probe.knots.indexOf(start),count=n-1;
+  if(offset<0||probe.knots.some((k,i)=>k!==expanded.knots[offset+i]))throw numericError();
+  const candidate={degree:p,periodic:true,periodicKnots:nextKnots,points:expanded.points.slice(offset,offset+count),
+    ...(expanded.weights?{weights:expanded.weights.slice(offset,offset+count)}:{})};
+  return inspect(method,c,candidate,create);
 }

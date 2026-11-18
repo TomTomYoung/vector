@@ -21,6 +21,7 @@ import {constrainedDelaunay} from "./constrainedMesh.js";
 import {bezierIntersections} from "./bezierIntersections.js";
 import {solveConstraints} from "./constraints.js";
 import {bSplineCurve, nurbsCurve} from "./splineCurves.js";
+import {simplifySplineKnots} from '../adapters/splineSimplification.js';
 import {reduceSplineToDegree} from "./splineReductionPlan.js";
 import {reduceSplineDegree} from "./splineDegreeReduction.js";
 import {elevateSplineDegree} from "./splineDegreeElevation.js";
@@ -32,7 +33,7 @@ const defaults = {select, line, rectangle, circle, arc, polygon, path, spline, q
   reflectPoint, polylineLength, signedArea,
   ...affine, ...intersections, ...conics, ...polygons, ...chains, ...curveAnalysis,
   ...regions, ...splines, ...pointSets, ...projective, ...mesh,
-  regionBoundary, constrainedDelaunay, bezierIntersections, solveConstraints, bSplineCurve, nurbsCurve, removeSplineKnot, elevateSplineDegree, reduceSplineDegree, reduceSplineToDegree};
+  regionBoundary, constrainedDelaunay, bezierIntersections, solveConstraints, bSplineCurve, nurbsCurve, removeSplineKnot, elevateSplineDegree, reduceSplineDegree, reduceSplineToDegree, simplifySplineKnots};
 
 export const toolNames = Object.freeze(Object.keys(defaults));
 
