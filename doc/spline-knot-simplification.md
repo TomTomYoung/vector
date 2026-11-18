@@ -59,3 +59,5 @@ $$
 削除誤差の小さい候補を優先する探索、全体の最小制御点数を求める最適化、サーフェスの複数行・列を連動させる簡約、極で分離した枝ごとの操作、可除特異点の相殺、無限遠の同次制御点、厳密算術は未導入です。曲面は現在の曲線入力・ハンドル・描画・保存形式に合わず、面のトポロジーと共有ノット方向を持つ別モデルが必要です。枝別の操作には極と端点条件を保存する表現が必要です。任意操作をまたぐ基準曲線と永続的な誤差予算も残る課題です。
 
 [数値・周期・換装・予算テスト](../tests/splineSimplification.test.mjs)と[実画面・Workerテスト](../tests/editor.html)で検証し、実行結果は [HANDOFF](HANDOFF.md)に記録します。
+
+[PR #98](https://github.com/TomTomYoung/vector/pull/98) の `2392cbe` を [CI 44243394115](https://github.com/TomTomYoung/vector/actions/runs/44243394115) で検証し、Node 395件・実Chrome 290件が成功しました。
