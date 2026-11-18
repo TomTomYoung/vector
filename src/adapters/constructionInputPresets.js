@@ -42,6 +42,18 @@ export function parseConstructionInputPresets(value) {
   for(const [name,entry] of Object.entries(value.entries)){
     if(!validName(name))fail();keys(entry,['version','input']);
     if(!Number.isSafeInteger(entry.version)||entry.version<1||!record(entry.input))fail();
+    if(['trim','extend'].includes(name)&&entry.version===2){
+      const {mode,edges}=entry.input;
+      keys(entry.input,['mode','edges']);
+      if(!['select',name].includes(mode)||!Array.isArray(edges)||(mode===name&&!edges.length))fail();
+      const ids=new Set();
+      for(const edge of edges){
+        keys(edge,['id','tag']);
+        if(!validDraftReferenceId(edge.id)||ids.has(edge.id)||!['line','polyline','path'].includes(edge.tag))fail();
+        ids.add(edge.id);
+      }
+      continue;
+    }
     if(name==='dimension'&&entry.version===1){
       keys(entry.input,['points','dimensionType']);checkPoints(entry.input.points);
       if(!['linear','angular'].includes(entry.input.dimensionType)||entry.input.points.length>(entry.input.dimensionType==='linear'?2:3))fail();
@@ -150,14 +162,20 @@ export function constructionInputMode(controller, entry) {
   return controller.inputPresetModeForEntry?.(entry)??controller.inputPresetMode;
 }
 
+export function canRecordConstructionInput(controller){
+  return typeof controller?.restoreInputPreset==='function'&&
+    (typeof controller.prepareInputPreset==='function'||typeof controller.exportInputPreset==='function');
+}
+
 export function hasConstructionDraft(controller){
   return typeof controller?.prepareInputDraftPreset==='function'||typeof controller?.exportInputDraftPreset==='function';
 }
 
 // Bind a new reference to its SVG element only after the entire record is accepted.
 export function saveConstructionInput(controller,draft,save){
-  if(draft&&controller?.prepareInputDraftPreset){
-    const prepared=controller.prepareInputDraftPreset();
+  const prepare=draft?controller?.prepareInputDraftPreset:controller?.prepareInputPreset;
+  if(typeof prepare==='function'){
+    const prepared=prepare.call(controller);
     if(!save(prepared.entry))return false;
     prepared.commit?.();
     return true;
