@@ -65,3 +65,5 @@ $$
 [数値・周期・換装・予算テスト](../tests/splineSimplification.test.mjs)と[実画面・Workerテスト](../tests/editor.html)で検証し、実行結果は [HANDOFF](HANDOFF.md)に記録します。
 
 [PR #98](https://github.com/TomTomYoung/vector/pull/98) の `2392cbe` を [CI 44243394115](https://github.com/TomTomYoung/vector/actions/runs/44243394115) で検証し、Node 395件・実Chrome 290件が成功しました。
+
+再編集を何度かに分ける場合は、[最初の曲線からの許容差と適用ごとの累積検査](spline-reference-budget.md)を設定できます。

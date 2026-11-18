@@ -4,7 +4,7 @@ class SplineEditor {
   select(element) {
     if(this.element!==element){this.cancel(false);this.element=element;}
   }
-  cancel(refresh=true) {this.controls.close();this.preview?.remove();this.preview=null;this.draft=null;this.message='';if(this.manager.activeToolName==='select')this.manager.tools.select.refreshHandles();if(refresh)this.refresh();}
+  cancel(refresh=true) {this.controls.close();this.preview?.remove();this.preview=null;this.draft=null;this.referenceCheck=null;this.message='';if(this.manager.activeToolName==='select')this.manager.tools.select.refreshHandles();if(refresh)this.refresh();}
   assertTarget() {
     if(!this.element?.isConnected || this.element.tagName!=='path' || !this.manager.tools.select.canSelect(this.element)) throw Error('編集対象が削除されたか、非表示・ロック中です。');
     if(this.draft && (this.manager.activeToolName!=='select' || window.selectedObjects?.length!==1 || window.selectedObjects[0]!==this.element))throw Error('編集対象の選択が変更されました。');
@@ -16,7 +16,7 @@ class SplineEditor {
       const source=window.VectorUtils.readSplineSource(this.element.getAttribute('data-vector-spline'),this.element.getAttribute('data-vector-implementation'),this.element.getAttribute('d'));
       this.originalPath=this.element.getAttribute('d');this.originalSource=this.element.getAttribute('data-vector-spline');
       const {input,options}=source;
-      this.draft={...source,insertKnotText:'',knotImplementation:this.manager.host.describe('insertSplineKnot').id,
+      this.draft={...source,countAppliedChanges:!!source.referenceBudget?.checkpoints,referenceToleranceText:String(source.referenceBudget?.tolerance??0.1),insertKnotText:'',knotImplementation:this.manager.host.describe('insertSplineKnot').id,
         simplificationToleranceText:'0.0000001',simplificationImplementation:this.manager.host.describe('simplifySplineKnots').id,
         planTargetText:String(Math.max(1,input.degree-2)),planToleranceText:'0.001',planImplementation:this.manager.host.describe('reduceSplineToDegree').id,
         reductionToleranceText:'0.0000001',reduceImplementation:this.manager.host.describe('reduceSplineDegree').id,
@@ -25,6 +25,7 @@ class SplineEditor {
         pointsText:input.points.map(p=>p.x+', '+p.y).join('\n'),degree:input.degree,periodic:!!input.periodic,
         knotsText:input.knots?.join(', ') ?? '',periodicKnotsText:input.periodicKnots?.join(', ') ?? '',weightsText:input.weights?.join(', ') ?? '',options:{...options}};
       this.message='座標は図形のローカル座標です。移動・回転・色・線幅・レイヤーは保持します。';
+      if(source.referenceReport)this.message+=' '+this.referenceText(source.referenceReport);
     } catch(error){this.message=error.message;}
     this.refresh();
     if(this.draft)this.controls.open();
@@ -45,6 +46,32 @@ class SplineEditor {
       ...(d.periodic && d.periodicKnotsText.trim() ? {periodicKnots:numbers(d.periodicKnotsText)} : {}),
       ...(d.method==='nurbsCurve' && d.weightsText.trim() ? {weights:numbers(d.weightsText)} : {})};
   }
+  referenceText(report) {
+    return '基準曲線からの推定偏差上限 '+report.errorBound+(report.cumulative===undefined?'':'、適用ごとの累積偏差上限 '+report.cumulative)+'、残りの許容差 '+report.remaining+'。';
+  }
+  checkReference(input,budget=this.draft.referenceBudget) {
+    if(!budget)return null;
+    const d=this.draft,host=this.manager.host;
+    if(d.implementation!=='default'||host.implementations(d.method).find(v=>v.id==='default')?.source!=='src/model/splineCurves.js')
+      throw Error('基準曲線との比較には標準の曲線計算を選択してください。');
+    if(this.referenceCheck?.budget!==budget){
+      this.referenceCheck={budget,compare:window.VectorUtils.prepareSplineReferenceBudget(d.method,budget)};
+    }
+    return this.referenceCheck.compare(input);
+  }
+  setReference() {
+    try {
+      this.assertTarget();
+      const d=this.draft,input=this.input();
+      if(!d.referenceToleranceText.trim())throw Error('基準曲線からの許容差を入力してください。');
+      const budget={version:1,reference:d.referenceBudget?.reference??input,tolerance:Number(d.referenceToleranceText),
+        ...(d.countAppliedChanges?{checkpoints:d.referenceBudget?.checkpoints??[]}: {})};
+      const report=this.checkReference(input,budget);
+      d.referenceBudget=budget;
+      this.message='基準曲線と許容差を下書きに設定しました。「適用」で保存します。 '+this.referenceText(report);
+    } catch(error){this.message=error.message;}
+    this.refresh();
+  }
   insertKnot() {
     try {
       this.assertTarget();
@@ -59,6 +86,7 @@ class SplineEditor {
         input=>host.execute('insertSplineKnot',input,{implementation:d.knotImplementation}));
       if(next.periodic){const start=next.periodicKnots[0],t=refinement.t===next.periodicKnots.at(-1)?start:refinement.t;
         refinement.periodic={algorithm:'3周期展開・同値ノット挿入・中央周期抽出',source:'src/adapters/periodicSplineRefinement.js',t,copies:t===start?2:3};}
+      this.checkReference(next);
       d.refinement=refinement;
       d.pointsText=next.points.map(p=>p.x+', '+p.y).join('\n');
       if(next.periodic)d.periodicKnotsText=next.periodicKnots.join(', ');else d.knotsText=next.knots.join(', ');
@@ -79,6 +107,7 @@ class SplineEditor {
       if(!info)throw Error('選択したノット削除実装がありません。');
       const next=window.VectorUtils.removeEditableSplineKnot(d.method,this.input(),Number(d.removeKnotText),Number(d.removalToleranceText),
         input=>host.execute('removeSplineKnot',input,{implementation:d.removeImplementation}));
+      this.checkReference(next);
       d.refinement={tool:'removeSplineKnot',id:info.id,label:info.label,algorithm:info.algorithm,source:info.source??null,...next.removal,
         verification:next.removal.denominator?{algorithm:(next.periodic?'周期再構成・標準再挿入後の':'')+'Bernstein分母範囲と区間別偏差上限を検証',source:'src/model/splineDeviation.js'}:next.periodic?{algorithm:'周期再構成・標準再挿入後の1周期全体の偏差上限を推定',source:'src/adapters/periodicSplineRemoval.js'}:
           {algorithm:'共通ノット列の制御点から偏差上限を推定',source:'src/model/splineKnotRemoval.js'}};
@@ -99,6 +128,7 @@ class SplineEditor {
       const info=host.implementations('simplifySplineKnots').find(v=>v.id===d.simplificationImplementation);if(!info)throw Error('選択したノット一括簡約実装がありません。');
       const next=window.VectorUtils.simplifyEditableSplineKnots(d.method,this.input(),Number(d.simplificationToleranceText),input=>host.execute('simplifySplineKnots',input,{implementation:d.simplificationImplementation}));
       if(!next.simplification.removedKnots){this.message='現在の方式と全体許容差では削除できるノットがありません。下書きは保持しています。';this.refresh();return;}
+      this.checkReference(next);
       d.refinement={tool:'simplifySplineKnots',id:info.id,label:info.label,algorithm:info.algorithm,source:info.source??null,...next.simplification};
       d.pointsText=next.points.map(p=>p.x+', '+p.y).join('\n');
       if(next.periodic)d.periodicKnotsText=next.periodicKnots.join(', ');else d.knotsText=next.knots.join(', ');
@@ -118,6 +148,7 @@ class SplineEditor {
       if(!info)throw Error('選択した次数上げ実装がありません。');
       const next=window.VectorUtils.elevateEditableSplineDegree(d.method,this.input(),Number(d.elevationToleranceText),
         input=>host.execute('elevateSplineDegree',input,{implementation:d.elevateImplementation}));
+      this.checkReference(next);
       d.refinement={tool:'elevateSplineDegree',id:info.id,label:info.label,algorithm:info.algorithm,source:info.source??null,...next.elevation};
       d.degree=next.degree;d.pointsText=next.points.map(p=>p.x+', '+p.y).join('\n');
       if(next.periodic)d.periodicKnotsText=next.periodicKnots.join(', ');else d.knotsText=next.knots.join(', ');
@@ -138,6 +169,7 @@ class SplineEditor {
       if(!info)throw Error('選択した次数下げ実装がありません。');
       const next=window.VectorUtils.reduceEditableSplineDegree(d.method,this.input(),Number(d.reductionToleranceText),
         input=>host.execute('reduceSplineDegree',input,{implementation:d.reduceImplementation}));
+      this.checkReference(next);
       d.refinement={tool:'reduceSplineDegree',id:info.id,label:info.label,algorithm:info.algorithm,source:info.source??null,...next.reduction};
       d.degree=next.degree;d.pointsText=next.points.map(p=>p.x+', '+p.y).join('\n');
       if(next.periodic)d.periodicKnotsText=next.periodicKnots.join(', ');else d.knotsText=next.knots.join(', ');
@@ -158,6 +190,7 @@ class SplineEditor {
       if(!d.planTargetText.trim()||!d.planToleranceText.trim())throw Error('目標次数と全体許容差を入力してください。');
       const info=host.implementations('reduceSplineToDegree').find(v=>v.id===d.planImplementation);if(!info)throw Error('選択した一括次数下げ実装がありません。');
       const next=window.VectorUtils.reduceEditableSplineToDegree(d.method,this.input(),Number(d.planTargetText),Number(d.planToleranceText),input=>host.execute('reduceSplineToDegree',input,{implementation:d.planImplementation}));
+      this.checkReference(next);
       d.refinement={tool:'reduceSplineToDegree',id:info.id,label:info.label,algorithm:info.algorithm,source:info.source??null,...next.reductionPlan};
       d.degree=next.degree;d.pointsText=next.points.map(p=>p.x+', '+p.y).join('\n');
       if(next.periodic)d.periodicKnotsText=next.periodicKnots.join(', ');else d.knotsText=next.knots.join(', ');
@@ -174,18 +207,31 @@ class SplineEditor {
     const previous=host.describe(d.method).id;
     try {
       host.selectImplementation(d.method,d.implementation);
-      const shape=host.execute(d.method,this.input());
+      const input=this.input();
+      const shape=host.execute(d.method,input);
       if(!shape || shape.kind!=='splineCurve')throw Error('制御点数・次数・ノット・重みを確認してください。');
       const result=host.render(shape,null,{...d.options,toolName:d.method,renderer:d.renderer});
       if(!result || result.tagName!=='path' || !result.hasAttribute('data-vector-spline'))throw Error('現在の条件では再編集できるパスを作成できません。分母検査の上限・重み・実装を確認してください。');
+      let report=null;
+      if(d.referenceBudget){
+        const raw=result.getAttribute('data-vector-spline');
+        const actual=window.VectorUtils.readSplineSource(raw,result.getAttribute('data-vector-implementation'),result.getAttribute('d'));
+        report=this.checkReference(actual.input);
+        const source=JSON.parse(raw);
+        const budget=d.referenceBudget;
+        source.referenceBudget=report.step>0?{...budget,checkpoints:[...budget.checkpoints,actual.input]}:budget;
+        const encoded=JSON.stringify(source);
+        if(encoded.length>4000000)throw Error('基準曲線を含むSVG編集データが保存上限を超えます。');
+        result.setAttribute('data-vector-spline',encoded);
+      }
       if(d.refinement){const record=JSON.parse(result.getAttribute('data-vector-implementation'));record.refinement=d.refinement;result.setAttribute('data-vector-implementation',JSON.stringify(record));}
-      return result;
+      return {result,report};
     } finally {host.selectImplementation(d.method,previous);}
   }
   showPreview(refresh=true) {
     this.preview?.remove();this.preview=null;
     try {
-      const result=this.build(),canvas=this.manager.canvas;
+      const {result,report}=this.build(),canvas=this.manager.canvas;
       const matrix=canvas.getScreenCTM().inverse().multiply(this.element.getScreenCTM());
       const coefficients=[matrix.a,matrix.b,matrix.c,matrix.d,matrix.e,matrix.f];
       if(!coefficients.every(Number.isFinite))throw Error('プレビューの座標変換を計算できません。');
@@ -198,13 +244,14 @@ class SplineEditor {
       canvas.append(result);this.preview=result;
       const record=JSON.parse(result.getAttribute('data-vector-implementation'));
       this.message=record.warning ?? '青い破線が再計算結果です。「適用」で元図形を更新します。';
+      if(report)this.message+=' '+this.referenceText(report);
     } catch(error){this.message=error.message;}
     this.controls.sync();
     if(refresh)this.refresh();else this.updateStatus();
   }
   apply() {
     try {
-      const result=this.build(),target=this.element;
+      const {result,report}=this.build(),target=this.element;
       const record=JSON.parse(result.getAttribute('data-vector-implementation'));
       if(record?.version!==1)throw Error('再計算結果の記録が不正です。');
       const warning=record.warning;
@@ -215,6 +262,7 @@ class SplineEditor {
       target.setAttribute('data-construction-tool',this.draft.method);
       if(result.hasAttribute('data-vector-partial')){target.setAttribute('fill','none');target.style.fill='none';}
       this.cancel(false);this.message=warning ? '適用しました。'+warning : '曲線を再計算して適用しました。';
+      if(report)this.message+=' '+this.referenceText(report);
       this.manager.host.save();this.manager.tools.select.refreshHandles();
     } catch(error){this.message=error.message;}
     this.refresh();
@@ -228,9 +276,9 @@ class SplineEditor {
   updatePointsField() {const el=document.querySelector('[aria-label="編集する制御点（1行に x, y）"]');if(el&&this.draft)el.value=this.draft.pointsText;}
   render(container) {
     const message=document.createElement('p');message.dataset.splineEditStatus='';message.textContent=this.message;message.style.cssText='font-size:12px;line-height:1.6';
-    const button=(text,action,id)=>{
+    const button=(text,action,id,parent=container)=>{
       const b=document.createElement('button');b.type='button';b.textContent=text;b.dataset.splineAction=id;
-      b.addEventListener('click',action);b.style.margin='4px 4px 4px 0';container.append(b);return b;
+      b.addEventListener('click',action);b.style.margin='4px 4px 4px 0';parent.append(b);return b;
     };
     if(!this.draft){button('曲線を再編集',()=>this.begin(),'begin');container.append(message);return;}
     const d=this.draft;
@@ -243,6 +291,20 @@ class SplineEditor {
       input.addEventListener('input',()=>{change(type==='number'?Number(input.value):input.value);this.changed();message.textContent=this.message;});
       wrapper.append(input);container.append(wrapper);return input;
     };
+    const group=document.createElement('fieldset'),legend=document.createElement('legend');
+    legend.textContent='基準曲線からの許容差';group.append(legend);container.append(group);
+    const label=document.createElement('label');label.textContent='許容差（図形のローカル座標）';
+    const tolerance=document.createElement('input');tolerance.type='text';tolerance.setAttribute('aria-label','基準曲線からの許容差');tolerance.value=d.referenceToleranceText;
+    tolerance.addEventListener('input',()=>{d.referenceToleranceText=tolerance.value;});label.append(tolerance);group.append(label);
+    const countLabel=document.createElement('label'),count=document.createElement('input');
+    count.type='checkbox';count.checked=d.countAppliedChanges;count.disabled=!!d.referenceBudget;
+    count.addEventListener('change',()=>{d.countAppliedChanges=count.checked;});
+    countLabel.append(count,'適用ごとの変化も累積する');group.append(countLabel);
+    button(d.referenceBudget?'許容差を更新':'現在の下書きを基準にする',()=>this.setReference(),'set-reference',group);
+    if(d.referenceBudget){
+      const note=document.createElement('p');note.textContent='設定中の許容差 '+d.referenceBudget.tolerance+'。プレビュー・適用時に保存した基準から曲線全体を検査します。';group.append(note);
+      button('基準を解除',()=>{delete d.referenceBudget;this.changed();this.refresh();},'clear-reference',group);
+    }
     field('編集する制御点（1行に x, y）',d.pointsText,v=>d.pointsText=v,{multiline:true});
     field('編集する次数',d.degree,v=>d.degree=v,{type:'number',min:1,max:12,step:1});
     const periodic=document.createElement('label');periodic.textContent='周期曲線';

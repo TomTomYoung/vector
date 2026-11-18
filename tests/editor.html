@@ -4405,6 +4405,67 @@ await check('Join selection tracks only the original pieces after paste and spli
   }finally{app.element.remove();}
 });
 
+const referenceShift=(points,offset)=>points.map(p=>p.x+', '+(p.y+offset)).join('\n');
+await check('Fixed spline reference survives independent applies, SVG reload and Undo; tightening and removal remain explicit',async()=>{
+  fixture();await tick();let curve=addEditableSpline('bSplineCurve',{points:editPoints,degree:3});
+  w.saveState();await tick();w.undoStack.length=0;
+  const begin=()=>{activate('select');w.selectTool.selectObject(curve);splineAction('begin');};
+  begin();const editor=w.toolPropertiesPanel.splineEditor;
+  splineField('基準曲線からの許容差','5');splineAction('set-reference');
+  splineField('編集する制御点（1行に x, y）',referenceShift(editPoints,3));splineAction('preview');
+  assert(editor.preview&&editor.message.includes('残りの許容差 2'),'fixed baseline preview');
+  splineAction('apply');await tick();
+  const xml=w.DrawingDocument.serialize();w.DrawingDocument.open(xml);curve=doc.getElementById('editable-spline');begin();
+  const raw=curve.getAttribute('data-vector-spline'),saved=JSON.parse(raw).referenceBudget;
+  assert(saved.reference.points[0].y===editPoints[0].y&&saved.tolerance===5&&editor.message.includes('偏差上限 3'),'persisted initial reference');
+  splineField('編集する制御点（1行に x, y）',referenceShift(editPoints,6));const history=w.undoStack.length;
+  splineAction('apply');await tick();assert(editor.draft&&editor.message.includes('超え')&&curve.getAttribute('data-vector-spline')===raw&&w.undoStack.length===history,'second small edit exceeds original budget');
+  splineField('基準曲線からの許容差','7');splineAction('set-reference');splineAction('apply');await tick();
+  assert(JSON.parse(curve.getAttribute('data-vector-spline')).referenceBudget.reference.points[0].y===editPoints[0].y,'larger tolerance retains old reference');
+  w.undo();curve=doc.getElementById('editable-spline');assert(curve.getAttribute('data-vector-spline')===raw,'undo exact source');w.redo();curve=doc.getElementById('editable-spline');begin();
+  splineAction('clear-reference');splineAction('cancel');begin();assert(editor.draft.referenceBudget,'cancel preserves saved reference');
+  splineAction('clear-reference');splineAction('apply');await tick();assert(!JSON.parse(curve.getAttribute('data-vector-spline')).referenceBudget,'explicit removal persisted');
+});
+await check('Cumulative spline budget replays applied curves across SVG load and charges direction reversals only on Apply',async()=>{
+  fixture();await tick();let curve=addEditableSpline('nurbsCurve',{points:editPoints,degree:3,weights:[2,2,2,2]});
+  w.saveState();await tick();const begin=()=>{activate('select');w.selectTool.selectObject(curve);splineAction('begin');};
+  begin();const editor=w.toolPropertiesPanel.splineEditor;
+  splineField('基準曲線からの許容差','5');
+  const count=Array.from(doc.querySelectorAll('label')).find(el=>el.textContent==='適用ごとの変化も累積する').querySelector('input');count.click();splineAction('set-reference');
+  splineField('編集する制御点（1行に x, y）',referenceShift(editPoints,3));splineAction('preview');splineAction('preview');splineAction('apply');await tick();
+  w.DrawingDocument.open(w.DrawingDocument.serialize());curve=doc.getElementById('editable-spline');begin();
+  assert(editor.draft.referenceBudget.checkpoints.length===1&&editor.message.includes('累積偏差上限 3'),'one accepted checkpoint');
+  splineField('編集する制御点（1行に x, y）',referenceShift(editPoints,0));splineAction('apply');
+  assert(editor.draft&&editor.message.includes('累積偏差上限')&&editor.message.includes('超え'),'return to original costs another three');
+  splineField('編集する制御点（1行に x, y）',referenceShift(editPoints,2));splineAction('apply');await tick();begin();
+  assert(editor.draft.referenceBudget.checkpoints.length===2&&Math.abs(editor.draft.referenceReport.cumulative-4)<1e-8,'charged actual applied change');
+  splineAction('apply');await tick();assert(JSON.parse(curve.getAttribute('data-vector-spline')).referenceBudget.checkpoints.length===2,'unchanged apply is free');
+});
+await check('Refinement honors the reference before changing a draft and permits exact knot simplification across a reopened SVG',async()=>{
+  for(const method of ['bSplineCurve','nurbsCurve']){
+    fixture();await tick();let curve=addEditableSpline(method,simplificationInput(method));
+    activate('select');w.selectTool.selectObject(curve);splineAction('begin');const editor=w.toolPropertiesPanel.splineEditor;
+    splineField('基準曲線からの許容差','.000001');splineAction('set-reference');splineAction('preview');
+    const before=JSON.stringify(editor.input()),preview=editor.preview;
+    splineField('次数下げの許容差','1000');splineAction('reduce-degree');
+    assert(editor.message.includes('基準曲線')&&editor.message.includes('超え')&&editor.preview===preview&&before===JSON.stringify(editor.input()),'budget rejects whole candidate');
+    splineAction('simplify-knots');assert(editor.preview&&editor.draft.refinement.removedKnots===3,'verified exact simplification passes');
+    splineAction('apply');await tick();w.DrawingDocument.open(w.DrawingDocument.serialize());curve=doc.getElementById('editable-spline');
+    activate('select');w.selectTool.selectObject(curve);splineAction('begin');assert(editor.draft.referenceBudget.reference.points.length===7&&draftPoints().length===4,'original control net retained');
+  }
+});
+await check('Spline control dragging and pole checks cannot bypass the reference on Apply',async()=>{
+  fixture();await tick();const curve=addEditableSpline('nurbsCurve',{points:editPoints.slice(0,3),degree:2,weights:[1,1,1]});
+  activate('select');w.selectTool.selectObject(curve);splineAction('begin');splineField('基準曲線からの許容差','.001');splineAction('set-reference');
+  const editor=w.toolPropertiesPanel.splineEditor,raw=curve.getAttribute('data-vector-spline');
+  const from=draftPoints()[0],to={x:from.x+20,y:from.y+10};
+  pointer('pointerdown',splineHandle(0),localScreen(curve,from));pointer('pointerup',doc,localScreen(curve,to));splineAction('apply');
+  assert(editor.draft&&editor.message.includes('超え')&&curve.getAttribute('data-vector-spline')===raw,'drag refuses out-of-budget commit');
+  splineField('編集する制御点（1行に x, y）',referenceShift(editPoints.slice(0,3),0));splineField('編集する重み（空欄で全て1）','1 -1 1');splineAction('apply');
+  assert(editor.draft&&curve.getAttribute('data-vector-spline')===raw,'pole rejected without changing source');
+  splineField('編集する重み（空欄で全て1）','1 1 1');splineAction('apply');await tick();assert(!editor.draft&&JSON.parse(curve.getAttribute('data-vector-spline')).referenceBudget,'retry succeeds');
+});
+
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
 </script>

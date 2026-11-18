@@ -23,6 +23,7 @@ import {createSelectionGeometry} from '../adapters/selectionGeometry.js';
 import {createSelectionPreferences} from '../adapters/selectionPreferences.js';
 import {makeSelectionRegion} from '../model/selectionRegion.js';
 import {createEditorHost} from "../adapters/editorHost.js";
+import {prepareSplineReferenceBudget} from '../model/splineReferenceBudget.js';
 import {readSplineSource} from '../adapters/splineSource.js';
 import {insertEditableSplineKnot} from '../adapters/splineRefinement.js';
 import {reduceEditableSplineToDegree} from '../adapters/splineReductionPlan.js';
@@ -64,6 +65,7 @@ window.VectorUtils = {
   makeSelectionRegion,
   createEditorHost,
   readSplineSource,
+  prepareSplineReferenceBudget,
   insertEditableSplineKnot,
   removeEditableSplineKnot,
   elevateEditableSplineDegree,

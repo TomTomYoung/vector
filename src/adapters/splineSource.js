@@ -1,3 +1,4 @@
+import {checkSplineReferenceBudget} from '../model/splineReferenceBudget.js';
 import {bSplineCurve, nurbsCurve} from '../model/splineCurves.js';
 import {prepareGeometry} from './renderStrategies.js';
 import {pathData} from './svgGeometry.js';
@@ -43,5 +44,8 @@ export function readSplineSource(sourceText, implementationText, currentPath) {
   const automatic = create({...input,knots:undefined,periodicKnots:undefined});
   if (!m.periodic && automatic && same(automatic.knots,input.knots)) delete input.knots;
   if (m.periodic && automatic && same(automatic.knots,m.knots)) delete input.periodicKnots;
-  return {method,input,options,...(record.refinement?{refinement:record.refinement}:{}),implementation:record.calculation?.id ?? 'default',renderer:record.rendering?.id ?? 'default'};
+  const budget=source.referenceBudget;
+  const reference=budget===undefined?{}:{referenceBudget:budget,referenceReport:checkSplineReferenceBudget(method,budget,input)};
+  if(reference.referenceReport?.step>0)throw Error('累積記録の最終状態と図形の元データが一致しません。');
+  return {method,input,options,...reference,...(record.refinement?{refinement:record.refinement}:{}),implementation:record.calculation?.id ?? 'default',renderer:record.rendering?.id ?? 'default'};
 }
