@@ -369,11 +369,11 @@ class ToolPropertiesPanel {
     const stored=presets.snapshot(),saved=presets.entry(name),supported=typeof tool.exportInputPreset==='function'&&typeof tool.restoreInputPreset==='function';
     const parameters=window.VectorUtils.constructionInputMode(tool,saved)==='parameters';
     const canRestore=window.VectorUtils.supportsConstructionInput(tool,saved);
-    const dual=typeof tool.exportInputDraftPreset==='function';
+    const dual=window.VectorUtils.hasConstructionDraft(tool);
     if(!supported&&!stored)return;
     const details=document.createElement('details');details.dataset.constructionInputPresets='';
     const heading=document.createElement('summary');heading.textContent='作図入力のプリセット（SVGに保存）';details.append(heading);
-    if(dual){const p=document.createElement('p');p.textContent='数値設定だけの記録と、入力点を含む下書きの記録を選べます。新しい記録で、このツールの記録1組を置き換えます。';details.append(p);}
+    if(dual){const p=document.createElement('p');p.textContent=tool.inputDraftNote??'数値設定だけの記録と、入力点を含む下書きの記録を選べます。新しい記録で、このツールの記録1組を置き換えます。';details.append(p);}
     const note=document.createElement('p');note.textContent=parameters?'数値設定をツールごとに1組記録できます。復元時は入力点と対象の選択を維持します。作図・加工は通常の確定操作で行います。':'ツールごとに入力を1組記録できます。復元は現在の下書きを置き換えます。'+(tool.inputPresetInstructions??'図形の確定はEnterで行います。');details.append(note);
     if(stored){const list=document.createElement('p');list.textContent='記録のあるツール: '+Object.keys(stored.entries).map(n=>this.toolManager.tools[n]?.getTitle()??n).join('、');details.append(list);}
     const status=document.createElement('p');status.dataset.constructionInputStatus='';status.setAttribute('role','status');status.textContent=presets.state.message;
@@ -384,7 +384,7 @@ class ToolPropertiesPanel {
       b.onclick=()=>{action();this.updatePanel();const next=this.panel.querySelector('[data-construction-input-presets]');if(next)next.open=true;};details.append(b);
     };
     if(supported)button(dual?'現在の数値設定だけを図面に記録':saved?'現在の入力で図面の記録を更新':'現在の入力を図面に記録','record',true,()=>{if(presets.record(name,tool))this.toolManager.host.save();});
-    if(dual)button('現在の入力点と数値設定を下書きとして記録','record-draft',true,()=>{if(presets.record(name,tool,{draft:true}))this.toolManager.host.save();});
+    if(dual)button(tool.inputDraftLabel??'現在の入力点と数値設定を下書きとして記録','record-draft',true,()=>{if(presets.record(name,tool,{draft:true}))this.toolManager.host.save();});
     if(saved){
       button(parameters?'記録した作図設定を復元':'記録した入力を下書きへ復元','restore',canRestore,()=>presets.restore(name,tool));
       button('このツールの入力記録を削除','remove',true,()=>{if(presets.remove(name))this.toolManager.host.save();});
@@ -403,6 +403,7 @@ class ToolPropertiesPanel {
       if(saved.input.box)text+=' / 切り取り範囲 '+JSON.stringify(saved.input.box);
       if(saved.input.dimensionType)text+=' / 寸法種別 '+(saved.input.dimensionType==='linear'?'長さ':'角度');
       if(name==='text')text+=' / 文字数 '+saved.input.content.length+' / '+(saved.input.point?'配置位置 '+saved.input.point.x+', '+saved.input.point.y:'配置位置は未指定');
+      if(Object.hasOwn(saved.input,'firstLine'))text+=' / 1本目の線分 '+(saved.input.firstLine?'選択済み':'未選択');
       if(saved.input.pathMode)text+=' / 描画モード '+(saved.input.pathMode==='line'?'直線':'ベジェ');
       if(Object.hasOwn(window.VectorUtils.constructionParameterFields,name))for(const [key,label] of window.VectorUtils.constructionParameterFields[name])text+=' / '+label+' '+saved.input[key];
     }
@@ -416,7 +417,7 @@ class ToolPropertiesPanel {
     const supported=typeof tool.exportInputPreset==='function'&&typeof tool.restoreInputPreset==='function';
     const stored=presets.snapshot(),items=presets.list(name),saved=presets.entry(name),legacy=this.toolManager.inputPresets?.entry(name);
     if(!supported&&!stored)return;
-    const dual=typeof tool.exportInputDraftPreset==='function',canRestore=window.VectorUtils.supportsConstructionInput(tool,saved?.entry);
+    const dual=window.VectorUtils.hasConstructionDraft(tool),canRestore=window.VectorUtils.supportsConstructionInput(tool,saved?.entry);
     const parameters=window.VectorUtils.constructionInputMode(tool,saved?.entry)==='parameters';
     const details=document.createElement('details');details.dataset.namedConstructionInputs='';
     const heading=document.createElement('summary');heading.textContent='名前付きの作図入力（SVGに複数保存）';details.append(heading);
@@ -461,7 +462,7 @@ class ToolPropertiesPanel {
     if(!sets)return;
     const supported=typeof tool.exportInputPreset==='function'&&typeof tool.restoreInputPreset==='function',stored=sets.snapshot();
     if(!supported&&!stored)return;
-    const items=sets.list(name),saved=sets.entry(name),dual=typeof tool.exportInputDraftPreset==='function';
+    const items=sets.list(name),saved=sets.entry(name),dual=window.VectorUtils.hasConstructionDraft(tool);
     const canRestore=supported&&sets.canRestore&&window.VectorUtils.supportsConstructionInput(tool,saved?.input);
     const inputSource=this.toolManager.namedInputPresets?.entry(name),methodSource=this.toolManager.namedImplementationPresets?.entry();
     const details=document.createElement('details');details.dataset.constructionSets='';

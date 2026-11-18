@@ -42,9 +42,10 @@ import {createDocumentImplementationPreset,parseDocumentImplementationPreset} fr
 import {createNamedImplementationPresets,parseNamedImplementationPresets} from '../adapters/namedImplementationPresets.js';
 import {filterPresets} from '../adapters/presetOrder.js';
 import {readPresetSVG,presetImportRecords,planPresetImport,commitPresetImport} from '../adapters/presetImport.js';
+import * as cornerInputDraft from '../adapters/cornerInputDraft.js';
 import {createConstructionSets,parseConstructionSets} from '../adapters/constructionSets.js';
 import {createNamedConstructionInputs,parseNamedConstructionInputs} from '../adapters/namedConstructionInputs.js';
-import {createConstructionInputPresets,parseConstructionInputPresets,parseConstructionInput,parseConstructionDraft,parseCurveDraft,parseShapeDraft,parseAnnotationDraft,supportsConstructionInput,constructionInputMode,constructionParameterFields,exportConstructionParameters,restoreConstructionParameters} from '../adapters/constructionInputPresets.js';
+import {createConstructionInputPresets,parseConstructionInputPresets,parseConstructionInput,parseConstructionDraft,parseCurveDraft,parseShapeDraft,parseAnnotationDraft,hasConstructionDraft,supportsConstructionInput,constructionInputMode,constructionParameterFields,exportConstructionParameters,restoreConstructionParameters} from '../adapters/constructionInputPresets.js';
 import * as splineControlGeometry from '../adapters/splineControlGeometry.js';
 import * as circleControlGeometry from '../adapters/circleControlGeometry.js';
 import * as geometry from './geometry.js';
@@ -97,6 +98,8 @@ window.VectorUtils = {
   parseCurveDraft,
   parseShapeDraft,
   parseAnnotationDraft,
+  cornerInputDraft,
+  hasConstructionDraft,
   supportsConstructionInput,
   constructionInputMode,
   exportConstructionParameters,

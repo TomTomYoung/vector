@@ -4113,6 +4113,71 @@ await check('Workbench Worker executes and restores the least-error strategy',as
   }finally{await page.close();}
 });
 
+for(const name of ['fillet','chamfer']){
+  await check(name+' resumes the first picked line after SVG reopen and finishes on the second click',async()=>{
+    const app=await preferenceEditor('{preferences:false}');
+    try{
+      app.w.DrawingDocument.open(parameterCornerSVG);
+      parameterPresetRecord(app,name);const tool=app.w.toolManager.tools[name];
+      parameterClick(app,180,100,app.d.getElementById('parameter-h'));
+      inputPresetAction(app,'record-draft');await tick();
+      const xml=app.w.DrawingDocument.serialize();
+      assert(!xml.includes('data-vector-highlight=')&&inputPresetState(app).entries[name].version===3,'saved reference, transient highlight omitted');
+      app.w.DrawingDocument.open(xml);app.d.getElementById(name+'-tool').click();
+      const h=app.d.getElementById('parameter-h'),v=app.d.getElementById('parameter-v');
+      assert(!tool.selectedLines.length,'opening alone does not resume');
+      parameterClick(app,100,180,v);const key=name==='fillet'?'radius':'distance2';tool[key]=9;
+      inputPresetAction(app,'restore');
+      assert(tool.selectedLines[0]===h&&!v.hasAttribute('data-vector-highlight')&&tool[key]===parameterPresetValues[name][key],'restored first pick and dimension');
+      assert(!app.d.querySelector('[data-vector-'+name+']'),'restore waits for second pick');
+      parameterClick(app,100,180,v);await tick();
+      const bridge=app.d.querySelector('[data-vector-'+name+']');
+      assert(bridge&&JSON.parse(bridge.getAttribute('data-vector-'+name)).input[key]===tool[key],'completed using restored dimension');
+      app.w.undo();assert(!app.d.querySelector('[data-vector-'+name+']')&&inputPresetState(app).entries[name].input.firstLine,'undo retains reusable record');
+      app.w.redo();assert(app.d.querySelector('[data-vector-'+name+']'),'redo completed corner');
+    }finally{app.element.remove();}
+  });
+}
+await check('Missing hidden or ambiguous corner references preserve the current pick, dimensions and construction set methods',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    app.w.DrawingDocument.open(parameterCornerSVG);app.d.getElementById('fillet-tool').click();
+    const tool=app.w.toolManager.tools.fillet,host=app.w.toolManager.host,h=app.d.getElementById('parameter-h'),v=app.d.getElementById('parameter-v');
+    parameterClick(app,180,100,h);tool.radius=22;namedName(app,'角');namedAction(app,'create-draft');
+    host.selectImplementation('spline','uniform');setName(app,'角セット');setAction(app,'create-draft');
+    draftKey(app,'Escape');parameterClick(app,100,180,v);tool.radius=9;host.selectImplementation('spline','chordal');
+    const canvas=app.d.getElementById('canvas');
+    for(const condition of ['hidden','duplicate','missing']){
+      let duplicate;
+      if(condition==='hidden')h.style.display='none';
+      if(condition==='duplicate'){duplicate=h.cloneNode(false);canvas.append(duplicate);}
+      if(condition==='missing')h.remove();
+      for(const action of [namedAction,setAction]){
+        action(app,'restore');
+        assert(tool.selectedLines[0]===v&&tool.radius===9&&v.getAttribute('data-vector-highlight')==='fillet','preserved current draft '+condition);
+        assert(host.describe('spline').id==='chordal'&&!v.hasAttribute('data-vector-corner-draft-id'),'restored methods and no reference on transient selection');
+      }
+      if(condition==='hidden')h.style.removeProperty('display');
+      duplicate?.remove();if(condition==='missing')canvas.append(h);
+    }
+    setAction(app,'restore');assert(tool.selectedLines[0]===h&&tool.radius===22&&host.describe('spline').id==='uniform','set usable again');
+  }finally{app.element.remove();}
+});
+await check('Copy and paste of a saved first line leaves its draft attached to the original',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    app.w.DrawingDocument.open(parameterCornerSVG);app.d.getElementById('chamfer-tool').click();
+    const h=app.d.getElementById('parameter-h');
+    parameterClick(app,180,100,h);inputPresetAction(app,'record-draft');
+    app.d.getElementById('select-tool').click();
+    const select=app.w.selectTool;select.selectObject(h);select.copySelectedObjects();select.pasteObjects();
+    const canvas=app.d.getElementById('canvas');
+    assert(canvas.querySelectorAll('[data-vector-corner-draft-id]').length===1&&app.w.selectedObject!==h,'copy has a separate identity');
+    app.d.getElementById('chamfer-tool').click();inputPresetAction(app,'restore');
+    assert(app.w.toolManager.tools.chamfer.selectedLines[0]===h,'only the original is restored');
+  }finally{app.element.remove();}
+});
+
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
 </script>
