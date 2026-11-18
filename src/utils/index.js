@@ -43,10 +43,10 @@ import {createNamedImplementationPresets,parseNamedImplementationPresets} from '
 import {filterPresets} from '../adapters/presetOrder.js';
 import {readPresetSVG,presetImportRecords,planPresetImport,commitPresetImport} from '../adapters/presetImport.js';
 import * as cornerInputDraft from '../adapters/cornerInputDraft.js';
-import {prepareDraftReference,resolveDraftReference} from '../adapters/draftReference.js';
+import {indexDraftReferences,prepareDraftReference,resolveDraftReference} from '../adapters/draftReference.js';
 import {createConstructionSets,parseConstructionSets} from '../adapters/constructionSets.js';
 import {createNamedConstructionInputs,parseNamedConstructionInputs} from '../adapters/namedConstructionInputs.js';
-import {offsetTargetLabels,createConstructionInputPresets,parseConstructionInputPresets,parseConstructionInput,parseConstructionDraft,parseCurveDraft,parseShapeDraft,parseAnnotationDraft,hasConstructionDraft,supportsConstructionInput,constructionInputMode,constructionParameterFields,exportConstructionParameters,restoreConstructionParameters} from '../adapters/constructionInputPresets.js';
+import {offsetTargetLabels,createConstructionInputPresets,parseConstructionInputPresets,parseConstructionInput,parseConstructionDraft,parseCurveDraft,parseShapeDraft,parseAnnotationDraft,canRecordConstructionInput,hasConstructionDraft,supportsConstructionInput,constructionInputMode,constructionParameterFields,exportConstructionParameters,restoreConstructionParameters} from '../adapters/constructionInputPresets.js';
 import * as splineControlGeometry from '../adapters/splineControlGeometry.js';
 import * as circleControlGeometry from '../adapters/circleControlGeometry.js';
 import * as geometry from './geometry.js';
@@ -100,9 +100,11 @@ window.VectorUtils = {
   parseShapeDraft,
   parseAnnotationDraft,
   cornerInputDraft,
+  indexDraftReferences,
   prepareDraftReference,
   resolveDraftReference,
   offsetTargetLabels,
+  canRecordConstructionInput,
   hasConstructionDraft,
   supportsConstructionInput,
   constructionInputMode,

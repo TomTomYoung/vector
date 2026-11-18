@@ -2909,14 +2909,16 @@ const namedChoose=(app,id)=>{const select=app.d.querySelector('[data-named-const
 const namedSelected=app=>app.d.querySelector('[data-named-construction-select]').value;
 function namedSVG(app,value){const root=app.w.DrawingDocument.capture(),meta=root.querySelector('metadata[data-vector-document]'),data=JSON.parse(meta.textContent);data.namedConstructionInputs=value;meta.textContent=JSON.stringify(data);return new app.w.XMLSerializer().serializeToString(root);}
 
-await check('All 25 supported controllers can save named inputs and restore them after a fresh SVG load without changing methods or legacy records',async()=>{
+const currentRecord=tool=>tool.prepareInputPreset?.().entry??tool.exportInputPreset();
+
+await check('All 27 supported controllers can save named inputs and restore them after a fresh SVG load without changing methods or legacy records',async()=>{
   const source=await preferenceEditor('{preferences:false}');let target;
   try{
-    const names=Object.keys(source.w.toolManager.tools).filter(n=>typeof source.w.toolManager.tools[n].exportInputPreset==='function');assert(names.length===25,'25 supported controllers');
+    const names=Object.keys(source.w.toolManager.tools).filter(n=>source.w.VectorUtils.canRecordConstructionInput(source.w.toolManager.tools[n]));assert(names.length===27,'27 supported controllers');
     for(const name of names){source.d.getElementById(name+'-tool').click();namedName(source,'保存 '+name);namedAction(source,'create');await tick();}
-    const saved=namedState(source);assert(saved.entries.length===25&&!inputPresetState(source),'named records separate from legacy');
+    const saved=namedState(source);assert(saved.entries.length===27&&!inputPresetState(source),'named records separate from legacy');
     target=await preferenceEditor('{preferences:false}');const host=target.w.toolManager.host,execute=host.execute;let calls=0;host.execute=(...args)=>{calls++;return execute(...args);};target.w.DrawingDocument.open(source.w.DrawingDocument.serialize());target.w.saveState();await tick();assert(calls===0,'load does not calculate');const methods=JSON.stringify(host.exportPreferences()),history=target.w.undoStack.length;
-    for(const name of names){target.d.getElementById(name+'-tool').click();const item=saved.entries.find(e=>e.tool===name);assert(namedSelected(target)===item.id,'stable ID '+name);namedAction(target,'restore');assert(JSON.stringify(target.w.toolManager.tools[name].exportInputPreset())===JSON.stringify(item.entry),'restored input '+name);}
+    for(const name of names){target.d.getElementById(name+'-tool').click();const item=saved.entries.find(e=>e.tool===name);assert(namedSelected(target)===item.id,'stable ID '+name);namedAction(target,'restore');assert(JSON.stringify(currentRecord(target.w.toolManager.tools[name]))===JSON.stringify(item.entry),'restored input '+name);}
     assert(JSON.stringify(namedState(target))===JSON.stringify(saved)&&JSON.stringify(host.exportPreferences())===methods&&target.w.undoStack.length===history&&!inputPresetState(target),'restoration preserves records, preferences and history');
   }finally{source.element.remove();target?.element.remove();}
 });
@@ -3124,14 +3126,14 @@ const setSelected=app=>app.d.querySelector('[data-construction-set-select]').val
 const setChoose=(app,id)=>{const select=app.d.querySelector('[data-construction-set-select]');select.value=id;select.dispatchEvent(new app.w.Event('change',{bubbles:true}));};
 function setSVG(app,value){const root=app.w.DrawingDocument.capture(),meta=root.querySelector('metadata[data-vector-document]'),data=JSON.parse(meta.textContent);data.constructionSets=value;meta.textContent=JSON.stringify(data);return new app.w.XMLSerializer().serializeToString(root);}
 
-await check('All 25 controllers record paired input and methods, survive a fresh SVG load and restore without history or legacy changes',async()=>{
+await check('All 27 controllers record paired input and methods, survive a fresh SVG load and restore without history or legacy changes',async()=>{
   const source=await preferenceEditor('{preferences:false}');let target;
   try{
-    const names=Object.keys(source.w.toolManager.tools).filter(n=>typeof source.w.toolManager.tools[n].exportInputPreset==='function');assert(names.length===25,'25 supported controllers');source.w.toolManager.host.selectImplementation('spline','centripetal');source.w.toolManager.host.selectRenderer('circle','cubic');
+    const names=Object.keys(source.w.toolManager.tools).filter(n=>source.w.VectorUtils.canRecordConstructionInput(source.w.toolManager.tools[n]));assert(names.length===27,'27 supported controllers');source.w.toolManager.host.selectImplementation('spline','centripetal');source.w.toolManager.host.selectRenderer('circle','cubic');
     for(const name of names){source.d.getElementById(name+'-tool').click();setName(source,'セット '+name);setAction(source,'create');await tick();}
-    const saved=setState(source);assert(saved.entries.length===25&&saved.entries.every(e=>Object.keys(e.methods.calculation).length===124),'each pair covers all operations');assert(!methodState(source)&&!namedState(source)&&!inputPresetState(source)&&!documentSettings(source),'new sets do not create legacy records');
+    const saved=setState(source);assert(saved.entries.length===27&&saved.entries.every(e=>Object.keys(e.methods.calculation).length===124),'each pair covers all operations');assert(!methodState(source)&&!namedState(source)&&!inputPresetState(source)&&!documentSettings(source),'new sets do not create legacy records');
     target=await preferenceEditor('{preferences:false}');const host=target.w.toolManager.host;host.selectImplementation('spline','chordal');target.w.DrawingDocument.open(source.w.DrawingDocument.serialize());target.w.saveState();await tick();const history=target.w.undoStack.length;assert(host.describe('spline').id==='chordal'&&host.describeRendering('circle').id==='default','load never applies');
-    for(const name of names){target.d.getElementById(name+'-tool').click();const item=saved.entries.find(e=>e.tool===name);assert(setSelected(target)===item.id,'stable set ID '+name);setAction(target,'restore');assert(JSON.stringify(target.w.toolManager.tools[name].exportInputPreset())===JSON.stringify(item.input),'restored input '+name);assert(host.describe('spline').id==='centripetal'&&host.describeRendering('circle').id==='cubic','restored method pair '+name);}
+    for(const name of names){target.d.getElementById(name+'-tool').click();const item=saved.entries.find(e=>e.tool===name);assert(setSelected(target)===item.id,'stable set ID '+name);setAction(target,'restore');assert(JSON.stringify(currentRecord(target.w.toolManager.tools[name]))===JSON.stringify(item.input),'restored input '+name);assert(host.describe('spline').id==='centripetal'&&host.describeRendering('circle').id==='cubic','restored method pair '+name);}
     assert(JSON.stringify(setState(target))===JSON.stringify(saved)&&target.w.undoStack.length===history&&!methodState(target)&&!namedState(target),'sets and other records stay independent');
   }finally{source.element.remove();target?.element.remove();}
 });
@@ -4245,6 +4247,77 @@ await check('Paste and split keep an offset draft bound solely to the original l
     assert(parts?.length===2&&canvas.querySelectorAll('[data-vector-offset-draft-id]').length===1,'copies and split pieces have distinct identities');
     app.d.getElementById('offset-tool').click();inputPresetAction(app,'restore');
     assert(app.w.toolManager.tools.offset.selectedElement===source&&source.x2.baseVal.value===180,'restore follows edited original');
+  }finally{app.element.remove();}
+});
+
+const boundarySvg = '<svg xmlns="http://www.w3.org/2000/svg"><g id="limits" transform="translate(10 0)" fill="none" stroke="black"><polyline id="left-limit" points="110,80 110,140"/><path id="right-limit" d="M190 80 v60"/></g><line id="work" x1="80" y1="100" x2="230" y2="100" stroke="black"/></svg>';
+for(const name of ['trim','extend']){
+  await check('SVG resumes both '+name+' phases and edits against both transformed boundaries only on click',async()=>{
+    const app=await preferenceEditor('{preferences:false}');
+    try{
+      app.w.DrawingDocument.open(boundarySvg);
+      const get=id=>app.d.getElementById(id);
+      const activate=()=>get(name+'-tool').click();
+      if(name==='extend'){get('work').setAttribute('x1',140);get('work').setAttribute('x2',160);}
+      activate();
+      parameterClick(app,120,100,get('left-limit'));parameterClick(app,200,100,get('right-limit'));
+      inputPresetAction(app,'record');
+      draftKey(app,'Enter');namedName(app,'加工待ち');namedAction(app,'create');setName(app,'方式と加工待ち');setAction(app,'create');
+      const xml=app.w.DrawingDocument.serialize();
+      app.w.DrawingDocument.open(xml);activate();
+      const tool=app.w.toolManager.tools[name],left=get('left-limit'),right=get('right-limit'),work=get('work');
+      assert(tool.mode==='select'&&!tool.boundaryEdges.length&&!right.hasAttribute('data-vector-highlight'),'inert on SVG load');
+      inputPresetAction(app,'restore');
+      assert(tool.mode==='select'&&tool.boundaryEdges[0]===left&&tool.boundaryEdges[1]===right,'ordered edges restored before Enter');
+      parameterClick(app,200,100,right);assert(tool.boundaryEdges.length===1,'can change selection');
+      namedAction(app,'restore');assert(tool.mode===name&&right.getAttribute('data-vector-highlight')===name,'saved ready phase');
+      draftKey(app,'Escape');setAction(app,'restore');assert(tool.mode===name&&tool.boundaryEdges.length===2,'paired ready phase');
+      get('limits').setAttribute('transform','translate(15 0)');
+      app.w.saveState();await tick();const history=app.w.undoStack.length;
+      right.style.display='none';const before=work.getAttribute('x2');
+      parameterClick(app,150,100,work);
+      assert(tool.implementationError&&work.getAttribute('x2')===before&&app.w.undoStack.length===history,'losing one edge blocks the entire edit');
+      right.style.removeProperty('display');parameterClick(app,150,100,work);await tick();
+      if(name==='trim')assert(work.x2.baseVal.value===125&&work.nextElementSibling?.x1.baseVal.value===205,'middle removed using current edges');
+      else assert(work.x1.baseVal.value===125&&work.x2.baseVal.value===205,'both endpoints extended');
+      assert(app.w.undoStack.length===history+1,'one undo step');app.w.undo();
+      assert(get('work').getAttribute('x2')===before,'undo restores original');
+      app.w.redo();assert(get('work').x2.baseVal.value===(name==='trim'?125:205),'redo restores edit');
+    }finally{app.element.remove();}
+  });
+}
+await check('An invalid saved boundary leaves the live draft and paired methods intact until retry',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    app.w.DrawingDocument.open(boundarySvg);app.d.getElementById('trim-tool').click();
+    const get=id=>app.d.getElementById(id),a=get('left-limit'),b=get('right-limit'),live=get('work');
+    const tool=app.w.toolManager.tools.trim,host=app.w.toolManager.host;
+    parameterClick(app,120,100,a);parameterClick(app,200,100,b);draftKey(app,'Enter');
+    host.selectRenderer('circle','cubic');setName(app,'境界線');setAction(app,'create');
+    draftKey(app,'Escape');parameterClick(app,100,100,live);host.selectRenderer('circle','default');
+    b.setAttribute('d','M190 80 Q180 100 190 140');setAction(app,'restore');
+    assert(tool.mode==='select'&&tool.boundaryEdges[0]===live&&live.getAttribute('data-vector-highlight')==='trim','current live draft preserved');
+    assert(!live.hasAttribute('data-vector-boundary-draft-id')&&host.describeRendering('circle').id==='default','method and live identity preserved');
+    b.setAttribute('d','M190 80 v60');setAction(app,'restore');
+    assert(tool.mode==='trim'&&tool.boundaryEdges[1]===b&&host.describeRendering('circle').id==='cubic','restores after geometry repair');
+  }finally{app.element.remove();}
+});
+await check('Copies and split pieces never impersonate the saved trim or extend boundary',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    app.w.DrawingDocument.open(boundarySvg);
+    const get=id=>app.d.getElementById(id),canvas=get('canvas'),original=get('work');
+    for(const name of ['trim','extend']){
+      get(name+'-tool').click();parameterClick(app,155,100,original);inputPresetAction(app,'record');
+    }
+    get('select-tool').click();const select=app.w.selectTool;
+    select.selectObject(original);select.copySelectedObjects();select.pasteObjects();
+    const parts=app.w.VectorUtils.linearEditing.split(original,canvas,{x:155,y:100});
+    assert(parts?.length===2&&canvas.querySelectorAll('[data-vector-boundary-draft-id]').length===1,'only original retains identity');
+    for(const name of ['trim','extend']){
+      get(name+'-tool').click();inputPresetAction(app,'restore');
+      assert(app.w.toolManager.tools[name].boundaryEdges[0]===original,'same original '+name);
+    }
   }finally{app.element.remove();}
 });
 

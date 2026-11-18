@@ -366,7 +366,7 @@ class ToolPropertiesPanel {
   createConstructionInputControls(section, name) {
     const presets=this.toolManager.inputPresets,tool=this.currentTool;
     if(!presets)return;
-    const stored=presets.snapshot(),saved=presets.entry(name),supported=typeof tool.exportInputPreset==='function'&&typeof tool.restoreInputPreset==='function';
+    const stored=presets.snapshot(),saved=presets.entry(name),supported=window.VectorUtils.canRecordConstructionInput(tool);
     const parameters=window.VectorUtils.constructionInputMode(tool,saved)==='parameters';
     const canRestore=window.VectorUtils.supportsConstructionInput(tool,saved);
     const dual=window.VectorUtils.hasConstructionDraft(tool);
@@ -405,6 +405,7 @@ class ToolPropertiesPanel {
       if(name==='text')text+=' / 文字数 '+saved.input.content.length+' / '+(saved.input.point?'配置位置 '+saved.input.point.x+', '+saved.input.point.y:'配置位置は未指定');
       if(Object.hasOwn(saved.input,'firstLine'))text+=' / 1本目の線分 '+(saved.input.firstLine?'選択済み':'未選択');
       if(name==='offset'&&Object.hasOwn(saved.input,'target'))text+=' / 対象図形 '+(saved.input.target?window.VectorUtils.offsetTargetLabels[saved.input.target.tag]:'未選択');
+      if(['trim','extend'].includes(name))text+=' / 境界線 '+saved.input.edges.length+'本 / '+(saved.input.mode==='select'?'境界線を選択中':'加工対象のクリック待ち');
       if(saved.input.pathMode)text+=' / 描画モード '+(saved.input.pathMode==='line'?'直線':'ベジェ');
       if(Object.hasOwn(window.VectorUtils.constructionParameterFields,name))for(const [key,label] of window.VectorUtils.constructionParameterFields[name])text+=' / '+label+' '+saved.input[key];
     }
@@ -415,7 +416,7 @@ class ToolPropertiesPanel {
   createNamedConstructionInputControls(section, name) {
     const presets=this.toolManager.namedInputPresets,tool=this.currentTool;
     if(!presets)return;
-    const supported=typeof tool.exportInputPreset==='function'&&typeof tool.restoreInputPreset==='function';
+    const supported=window.VectorUtils.canRecordConstructionInput(tool);
     const stored=presets.snapshot(),items=presets.list(name),saved=presets.entry(name),legacy=this.toolManager.inputPresets?.entry(name);
     if(!supported&&!stored)return;
     const dual=window.VectorUtils.hasConstructionDraft(tool),canRestore=window.VectorUtils.supportsConstructionInput(tool,saved?.entry);
@@ -461,7 +462,7 @@ class ToolPropertiesPanel {
   createConstructionSetControls(section,name) {
     const sets=this.toolManager.constructionSets,tool=this.currentTool;
     if(!sets)return;
-    const supported=typeof tool.exportInputPreset==='function'&&typeof tool.restoreInputPreset==='function',stored=sets.snapshot();
+    const supported=window.VectorUtils.canRecordConstructionInput(tool),stored=sets.snapshot();
     if(!supported&&!stored)return;
     const items=sets.list(name),saved=sets.entry(name),dual=window.VectorUtils.hasConstructionDraft(tool);
     const canRestore=supported&&sets.canRestore&&window.VectorUtils.supportsConstructionInput(tool,saved?.input);
