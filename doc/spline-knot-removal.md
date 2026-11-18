@@ -53,9 +53,9 @@ $$
 
 2026-11-17に、MITのPatrikalakis・Maekawa・Choによる [Algorithms for B-spline curves](https://web.mit.edu/hyperbook/Patrikalakis-Maekawa-Cho/node18.html) のBoehm挿入とTillerのノット削除解説を照合しました。挿入の逆算と許容差内での一致判定という考え方を参照し、本実装の両側逆算と共通基底での偏差検査を組み立てました。
 
-関連原論文は W. Tiller, *Knot-removal algorithms for NURBS curves and surfaces*, Computer-Aided Design 24(8), 445–453, 1992、[DOI: 10.1016/0010-4485(92)90012-Y](https://doi.org/10.1016/0010-4485(92)90012-Y) です。出版社の書誌・概要を確認しています。論文本文のC実装を転用したものではなく、全ノット一括削除や曲面への適用を実装したものでもありません。Boehm挿入の原論文と既存実装の対応は [algorithms.md](algorithms.md#r2) を参照してください。
+関連原論文は W. Tiller, *Knot-removal algorithms for NURBS curves and surfaces*, Computer-Aided Design 24(8), 445–453, 1992、[DOI: 10.1016/0010-4485(92)90012-Y](https://doi.org/10.1016/0010-4485(92)90012-Y) です。出版社の書誌・概要を確認しています。論文本文のC実装を転用したものではなく、この単一削除関数自体に曲線全体の走査や曲面への適用は含みません。Boehm挿入の原論文と既存実装の対応は [algorithms.md](algorithms.md#r2) を参照してください。
 
-周期曲線の内部ノット・継ぎ目の削除と、最後の継ぎ目の削除に伴うパラメータ区間変更は[実装済み](periodic-knot-removal.md)です。零・正負混在の重みでは、[Bernstein分母範囲と区間別偏差の検証](signed-knot-removal.md)を追加しました。極を含む曲線の枝ごとの削除、可除特異点の相殺、全ノット一括簡約、曲面、無限遠の同次制御点、厳密算術は未実装です。
+周期曲線の内部ノット・継ぎ目の削除と、最後の継ぎ目の削除に伴うパラメータ区間変更は[実装済み](periodic-knot-removal.md)です。零・正負混在の重みでは、[Bernstein分母範囲と区間別偏差の検証](signed-knot-removal.md)を追加しました。極を含む曲線の枝ごとの削除、可除特異点の相殺、曲面、無限遠の同次制御点、厳密算術は未実装です。
 
 [splineRemoval.test.mjs](../tests/splineRemoval.test.mjs) は次数1〜12、非一様・重複・端を固定しないノット、全重複位置、正負それぞれの共通重みスケール、許容差の採否と独立評価、非破壊性、不正入力・換装出力、SVG再構成を検証します。[editor.html](../tests/editor.html) は削除・プレビュー・適用・取消、Undo/Redo、保存、実装選択・偏差偽装の拒否、制御点ドラッグ、演算室Worker、119演算時点の保存データからの復元を確認します。
 
@@ -70,3 +70,5 @@ Bernstein分母検証を使った場合は、その方式・下限・除外幅�
 端点を固定した同次係数最小二乗による[許容差付き次数下げ](spline-degree-reduction.md)は実装済みです。区間ベジェ接続を返し、高次連続性や最少制御点は保証しません。
 
 元のノット列が定める[連続性を保つ次数下げ](spline-continuity-reduction.md)も選択できます。通常の接続点と周期継ぎ目は許容差内で移動し、単純周期継ぎ目が消える場合の[始端移動](periodic-degree-reduction.md)にも対応しています。
+
+全体許容差を共有する[ノット一括簡約](spline-knot-simplification.md)を追加しました。通常・周期曲線を昇順・降順で走査し、各削除と最終結果を独立検証します。

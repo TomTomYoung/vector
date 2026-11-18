@@ -80,7 +80,7 @@ test('the adapter isolates callback mutation, verifies every stage and stores on
   const restored=readSplineSource(JSON.stringify({version:1,model,path}),JSON.stringify({version:1,tool:'bSplineCurve',refinement}),path);assert.deepEqual(restored.refinement,refinement);assert.deepEqual(bSplineCurve(restored.input),model);
   assert.throws(()=>edit('bSplineCurve',base,3,.01),/目標次数/);assert.throws(()=>edit('circle',base,1,.01),/標準/);
 });
-test('the new operation exposes three scoped implementations and 123 catalog entries',()=>{
-  const host=createToolset();assert.equal(toolNames.length,123);assert.match(host.describe('reduceSplineToDegree').algorithm,/三角不等式/);assert.deepEqual(host.list('reduceSplineToDegree').map(x=>x.id),['default','bezier','continuity']);
+test('the new operation exposes three scoped implementations and 124 catalog entries',()=>{
+  const host=createToolset();assert.equal(toolNames.length,124);assert.match(host.describe('reduceSplineToDegree').algorithm,/三角不等式/);assert.deepEqual(host.list('reduceSplineToDegree').map(x=>x.id),['default','bezier','continuity']);
   compare(base,host('reduceSplineToDegree',base));const input={...raise(raise({degree:1,points:points(3)})),targetDegree:1,tolerance:1e-4};compare(input,host('reduceSplineToDegree',input,{implementation:'continuity'}));assert.equal(host.describe('reduceSplineToDegree').id,'default');
 });

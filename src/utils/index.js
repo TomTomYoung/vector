@@ -119,3 +119,5 @@ window.StyleUtils = style;
 window.BezierUtils = bezier;
 
 console.log('VectorUtils loaded:', Object.keys(window.VectorUtils));
+
+export {simplifyEditableSplineKnots} from '../adapters/splineSimplification.js';

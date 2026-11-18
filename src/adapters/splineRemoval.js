@@ -1,6 +1,6 @@
 import {bSplineCurve,nurbsCurve} from '../model/splineCurves.js';
 import {removeSplineKnot,prepareSplineKnotRemoval,validateSplineKnotRemoval} from '../model/splineKnotRemoval.js';
-import {removePeriodicSplineKnot} from './periodicSplineRemoval.js';
+import {removePeriodicSplineKnot,validatePeriodicSplineKnotRemoval} from './periodicSplineRemoval.js';
 
 export function removeEditableSplineKnot(method,input,t,tolerance=1e-7,remove=removeSplineKnot) {
   const create=method==='bSplineCurve'?bSplineCurve:method==='nurbsCurve'?nurbsCurve:null;
@@ -18,4 +18,12 @@ export function removeEditableSplineKnot(method,input,t,tolerance=1e-7,remove=re
   if(model.periodic)return removePeriodicSplineKnot(method,model,t,tolerance,create,removeChecked);
   const checked=removeChecked(model,t,tolerance);
   return {...checked,periodic:false};
+}
+
+export function validateEditableSplineKnotRemoval(method,input,t,tolerance,result) {
+  const create=method==='bSplineCurve'?bSplineCurve:method==='nurbsCurve'?nurbsCurve:null,model=create&&input&&create(input);
+  if(!model)return null;
+  if(model.periodic)return validatePeriodicSplineKnotRemoval(method,model,t,tolerance,create,result);
+  const checked=validateSplineKnotRemoval({...model,t,tolerance},result);
+  return checked?{...checked,periodic:false}:null;
 }

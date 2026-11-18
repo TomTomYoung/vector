@@ -65,3 +65,5 @@
 端点を固定した同次係数最小二乗による[許容差付き次数下げ](spline-degree-reduction.md)は実装済みです。区間ベジェ接続を返し、高次連続性や最少制御点は保証しません。
 
 元のノット列が定める[連続性を保つ次数下げ](spline-continuity-reduction.md)も選択できます。通常の接続点と周期継ぎ目は許容差内で移動し、単純周期継ぎ目が消える場合の[始端移動](periodic-degree-reduction.md)にも対応しています。
+
+全体許容差を共有する[ノット一括簡約](spline-knot-simplification.md)からも利用できます。`validatePeriodicSplineKnotRemoval` を独立した検証入口として公開し、任意の周期候補の個数・ノット列・有限値・重み・標準再挿入後の全周偏差を照合します。

@@ -1,3 +1,4 @@
+import {simplifySplineKnotsReverse} from '../adapters/splineSimplification.js';
 import {reduceSplineToDegreeBezier,reduceSplineToDegreeContinuity} from './splineReductionPlan.js';
 import {reduceSplineDegreeAdaptive} from './adaptiveSplineReduction.js';
 import {reduceSplineDegreeContinuity} from './compactSplineReduction.js';
@@ -10,6 +11,7 @@ import {delaunayTriangles} from './mesh.js';
 
 const alternative = (id, label, algorithm, run, source = 'src/model/alternatives.js') => ({id, label, algorithm, source, run});
 export const builtinImplementations = {
+  simplifySplineKnots: [alternative('reverse', '終端側からノットを一括簡約', '降順の反復走査・逆Boehm削除・周期再構成・独立した全区間検証・残予算と三角不等式による累積偏差上限', simplifySplineKnotsReverse, 'src/adapters/splineSimplification.js')],
   reduceSplineToDegree: [alternative('bezier', '固定区間で一括次数下げ', '端点固定の区間ベジェ接続・残予算の等分配・全段階検証・三角不等式による累積偏差上限', reduceSplineToDegreeBezier, 'src/model/splineReductionPlan.js'), alternative('continuity', '連続性を保つ一括次数下げ', '重複度−1の連続性保持・周期始端移動・残予算の等分配・全段階検証・三角不等式による累積偏差上限', reduceSplineToDegreeContinuity, 'src/model/splineReductionPlan.js')],
   reduceSplineDegree: [alternative('adaptive', '許容差に合わせて区間を自動分割', '極形式de Boorの区間再抽出・適応二分割・端点固定の同次Bernstein係数最小二乗・Givens QR・全区間偏差検証', reduceSplineDegreeAdaptive, 'src/model/adaptiveSplineReduction.js'), alternative('continuity', '元の連続性を保つ次数下げ', '元の重複度−1のノット列・単純周期継ぎ目の始端移動・同次Bernstein係数の全体最小二乗・Givens疎QR・全区間偏差検証', reduceSplineDegreeContinuity, 'src/model/compactSplineReduction.js')],
   elevateSplineDegree: [alternative('continuity', '元の連続性を保つ次数上げ', '区間ベジェ次数上げ・元の重複度+1のノット列へGivens回転による疎QR基底変換・全区間偏差検証', elevateSplineDegreeContinuity, 'src/model/compactSplineElevation.js')],

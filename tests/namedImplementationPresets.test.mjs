@@ -8,9 +8,9 @@ const empty=()=>({version:1,calculation:{},rendering:{}});
 const collection=(preset=empty())=>({version:1,entries:[{id:'a',name:'標準',preset}]});
 function store(host=createEditorHost()){let id=0;return createNamedImplementationPresets(host,{createId:()=> 'id-'+ ++id});}
 
-test('named method snapshots carry all 123 selections independently of callers, hosts and other editors',()=>{
+test('named method snapshots carry all 124 selections independently of callers, hosts and other editors',()=>{
   const host=createEditorHost(),presets=store(host);host.selectImplementation('spline','centripetal');host.selectRenderer('nurbsCurve','default',{sampleCount:130,maxNodes:32000});
-  assert.equal(presets.record('  精密  '),true);const saved=presets.entry();assert.equal(saved.name,'精密');assert.equal(Object.keys(saved.preset.calculation).length,123);assert.equal(Object.keys(saved.preset.rendering).length,123);
+  assert.equal(presets.record('  精密  '),true);const saved=presets.entry();assert.equal(saved.name,'精密');assert.equal(Object.keys(saved.preset.calculation).length,124);assert.equal(Object.keys(saved.preset.rendering).length,124);
   saved.preset.rendering.nurbsCurve.options.sampleCount=2;host.selectImplementation('spline','chordal');assert.equal(presets.entry().preset.calculation.spline,'centripetal');assert.equal(presets.entry().preset.rendering.nurbsCurve.options.sampleCount,130);
   const other=store();other.open(presets.snapshot());presets.remove(saved.id);assert.equal(presets.snapshot(),undefined);assert.equal(other.entry().preset.calculation.spline,'centripetal');
   const original=collection();other.open(original);original.entries[0].name='changed';assert.equal(other.entry().name,'標準');other.list()[0].name='changed';assert.equal(other.entry().name,'標準');
