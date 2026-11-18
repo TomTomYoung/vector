@@ -24,17 +24,17 @@ export function prepare(name,controller){
   const parameters=exportConstructionParameters(name,controller).input;
   if(controller.selectedLines.length>1)throw Error('1本目の線分を選んだ段階で記録してください。');
   const line=controller.selectedLines[0];
-  if(!line)return {entry:{version:2,input:{...parameters,firstLine:null}}};
+  if(!line)return {entry:{version:3,input:{...parameters,firstLine:null}}};
   requireEditableLine(controller,line);
   const existing=line.getAttribute(attribute),id=existing??crypto.randomUUID();
   const found=matches(controller.canvas,id);
   if(existing ? found.length!==1 || found[0]!==line : found.length!==0)throw Error('1本目の線分の参照IDが重複しています。');
-  const entry={version:2,input:{...parameters,firstLine:id}};
+  const entry={version:3,input:{...parameters,firstLine:id}};
   return {entry,commit:existing?undefined:()=>line.setAttribute(attribute,id)};
 }
 
 export function restore(name,controller,entry){
-  if(!controller.isActive||entry?.version!==2)throw Error('対応する角加工ツールを先に選択してください。');
+  if(!controller.isActive||entry?.version!==3)throw Error('対応する角加工ツールを先に選択してください。');
   const {firstLine,...parameters}=parseConstructionInputPresets({version:1,entries:{[name]:entry}}).entries[name].input;
   const lines=firstLine===null?[]:matches(controller.canvas,firstLine);
   if(firstLine!==null){

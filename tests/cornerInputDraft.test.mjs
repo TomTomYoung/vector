@@ -13,7 +13,7 @@ function line(){
 }
 function fixture(name='fillet'){
   const a=line(),b=line(),elements=[a,b];
-  const tool={radius:12,distance1:0,distance2:23,isActive:true,selectedLines:[a],inputPresetVersions:[1,2],
+  const tool={radius:12,distance1:0,distance2:23,isActive:true,selectedLines:[a],inputPresetVersions:[1,3],
     canvas:{contains:el=>elements.includes(el),querySelectorAll:()=>elements.filter(el=>el.getAttribute(attribute)!==null)},
     selectTool:{canSelect:el=>!el.locked},prepareInputDraftPreset:()=>prepare(name,tool),
     restoreInputPreset:entry=>restore(name,tool,entry),captureInputRollback:()=>captureRollback(name,tool)};
@@ -63,7 +63,7 @@ test('set rollback recovers a previous unsaved first line without assigning it a
   assert.equal(a.getAttribute('data-vector-highlight'),null);assert.equal(b.getAttribute(attribute),null);
 });
 test('corner draft schema accepts an empty selection and rejects invalid IDs, fields and dimensions',()=>{
-  const parse=input=>parseConstructionInputPresets({version:1,entries:{chamfer:{version:2,input}}});
+  const parse=input=>parseConstructionInputPresets({version:1,entries:{chamfer:{version:3,input}}});
   const empty={distance1:0,distance2:1,firstLine:null};assert.deepEqual(parse(empty).entries.chamfer.input,empty);
   for(const input of [{distance1:0,distance2:2},{...empty,firstLine:'line-1'},{...empty,firstLine:{}},{...empty,distance2:Infinity},{...empty,points:[]}])assert.throws(()=>parse(input));
 });

@@ -4122,7 +4122,7 @@ for(const name of ['fillet','chamfer']){
       parameterClick(app,180,100,app.d.getElementById('parameter-h'));
       inputPresetAction(app,'record-draft');await tick();
       const xml=app.w.DrawingDocument.serialize();
-      assert(!xml.includes('data-vector-highlight=')&&inputPresetState(app).entries[name].version===2,'saved reference, transient highlight omitted');
+      assert(!xml.includes('data-vector-highlight=')&&inputPresetState(app).entries[name].version===3,'saved reference, transient highlight omitted');
       app.w.DrawingDocument.open(xml);app.d.getElementById(name+'-tool').click();
       const h=app.d.getElementById('parameter-h'),v=app.d.getElementById('parameter-v');
       assert(!tool.selectedLines.length,'opening alone does not resume');

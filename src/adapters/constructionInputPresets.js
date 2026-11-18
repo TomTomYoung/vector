@@ -65,7 +65,8 @@ export function parseConstructionInputPresets(value) {
     }
     // Unknown tools/entry versions are retained, never interpreted by the built-in controllers.
     const periodicVersion = ['bSplineCurve','nurbsCurve'].includes(name) && entry.version===2;
-    const cornerDraft=['fillet','chamfer'].includes(name)&&entry.version===2;
+    // Version 2 was previously retained as an opaque corner record in saved drawings.
+    const cornerDraft=['fillet','chamfer'].includes(name)&&entry.version===3;
     if(entry.version!==1 && !periodicVersion && !cornerDraft)continue;
     if(constructionDraftTools.includes(name)){
       const input=entry.input;keys(input,['points',...(name==='nthBezier'?['degree']:[])]);
