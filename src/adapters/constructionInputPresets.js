@@ -19,6 +19,16 @@ const checkPoints = points => {
   for(const p of points){keys(p,['x','y']);if(!Number.isFinite(p.x)||!Number.isFinite(p.y))fail();}
 };
 
+function checkOutlineReferences(references,tags){
+  if(!Array.isArray(references))fail();
+  const ids=new Set();
+  for(const reference of references){
+    keys(reference,['id','tag']);
+    if(!validDraftReferenceId(reference.id)||ids.has(reference.id)||!tags.includes(reference.tag))fail();
+    ids.add(reference.id);
+  }
+}
+
 // Shared bounds for legacy and named input metadata, before JSON copying.
 export function validateConstructionInputData(value) {
   let count=0;
@@ -45,13 +55,13 @@ export function parseConstructionInputPresets(value) {
     if(['trim','extend'].includes(name)&&entry.version===2){
       const {mode,edges}=entry.input;
       keys(entry.input,['mode','edges']);
-      if(!['select',name].includes(mode)||!Array.isArray(edges)||(mode===name&&!edges.length))fail();
-      const ids=new Set();
-      for(const edge of edges){
-        keys(edge,['id','tag']);
-        if(!validDraftReferenceId(edge.id)||ids.has(edge.id)||!['line','polyline','path'].includes(edge.tag))fail();
-        ids.add(edge.id);
-      }
+      checkOutlineReferences(edges,['line','polyline','path']);
+      if(!['select',name].includes(mode)||(mode===name&&!edges.length))fail();
+      continue;
+    }
+    if(name==='join'&&entry.version===2){
+      keys(entry.input,['elements']);
+      checkOutlineReferences(entry.input.elements,['line','polyline']);
       continue;
     }
     if(name==='dimension'&&entry.version===1){

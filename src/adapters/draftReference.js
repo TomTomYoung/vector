@@ -25,3 +25,27 @@ export function resolveDraftReference(canvas,attribute,id,index=indexDraftRefere
   if(!element)throw Error('記録した図形が図面内に見つからないか、参照IDが重複しています。');
   return element;
 }
+
+// Keep the original on-disk attribute so the same outline can be used in all three tools.
+const outlineAttribute='data-vector-boundary-draft-id';
+
+export function prepareOutlineReferences(canvas,elements,canUse){
+  const index=indexDraftReferences(canvas,outlineAttribute),bindings=[];
+  const references=elements.map(element=>{
+    if(!canUse(element))throw Error('選んだ線に使用できない図形があります。表示・ロック・形状を確認してください。');
+    const {id,commit}=prepareDraftReference(canvas,outlineAttribute,element,index);
+    index.set(id,element);
+    if(commit)bindings.push(commit);
+    return {id,tag:element.localName};
+  });
+  return {references,commit:()=>bindings.forEach(bind=>bind())};
+}
+
+export function resolveOutlineReferences(canvas,references,canUse){
+  const index=indexDraftReferences(canvas,outlineAttribute);
+  return references.map(({id,tag})=>{
+    const element=resolveDraftReference(canvas,outlineAttribute,id,index);
+    if(element.localName!==tag||!canUse(element))throw Error('記録した線の種類・形状、表示状態、レイヤーのロックを確認してください。');
+    return element;
+  });
+}

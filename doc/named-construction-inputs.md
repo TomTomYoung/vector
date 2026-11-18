@@ -1,6 +1,6 @@
 # 名前付き作図入力の複数保存
 
-更新日: 2026-11-18（日本時間）。作図入力プリセットに対応する27ツールで、1ツールの入力を複数の名前でSVG図面へ保存できます。従来の1件記録も引き続き使用できます。
+更新日: 2026-11-18（日本時間）。作図入力プリセットに対応する28ツールで、1ツールの入力を複数の名前でSVG図面へ保存できます。従来の1件記録も引き続き使用できます。
 
 ## 操作
 
@@ -18,7 +18,7 @@
 
 スプラインは「現在の数値設定を名前付き保存」と「現在の下書きを名前付き保存」を使い分けます。数値設定だけの個別版1と、通過点を含む個別版2を、異なる名前で同時に保持できます。数値設定だけの復元は現在の点列を維持し、下書きの復元は点列も置き換えます。更新も数値設定・下書きのどちらで置き換えるかを明示します。
 
-フィレット・面取り・オフセットでは数値設定だけの記録と、選択した図形を含む下書きの記録を選べます。[トリムと延長の境界線](construction-input-presets.md#トリムと延長の境界線)は、複数の境界線と操作段階を一緒に保存します。各ツールの保存内容と継続操作は [construction-input-presets.md](construction-input-presets.md)、[drawing-parameter-presets.md](drawing-parameter-presets.md)、[linear-bezier-drafts.md](linear-bezier-drafts.md)、[path-spline-drafts.md](path-spline-drafts.md)、[shape-drafts.md](shape-drafts.md)、[annotation-drafts.md](annotation-drafts.md) にあります。
+フィレット・面取り・オフセットでは数値設定だけの記録と、選択した図形を含む下書きの記録を選べます。[トリムと延長の境界線](construction-input-presets.md#トリムと延長の境界線)は、複数の境界線と操作段階を一緒に保存します。[結合する線の選択](construction-input-presets.md#結合する線の選択)も名前を付けて選択順ごと保存できます。各ツールの保存内容と継続操作は [construction-input-presets.md](construction-input-presets.md)、[drawing-parameter-presets.md](drawing-parameter-presets.md)、[linear-bezier-drafts.md](linear-bezier-drafts.md)、[path-spline-drafts.md](path-spline-drafts.md)、[shape-drafts.md](shape-drafts.md)、[annotation-drafts.md](annotation-drafts.md) にあります。
 
 ## 従来の記録とSVG互換性
 
@@ -62,9 +62,9 @@
 
 ## 検証と残る範囲
 
-[namedConstructionInputs.test.mjs](../tests/namedConstructionInputs.test.mjs) は形式、コピー、名前とID、集合上限、失敗時の非更新、各操作の対象分離、スプラインの両版、未知版・外部コントローラー、従来記録との独立性を検証します。[editor.html](../tests/editor.html) は27ツールのSVG往復・復元、複数入力の独立性、各変更操作のUndo/Redo、選択と明示復元の分離、現在の描画方式での実作図、スプライン両モード、従来記録からの複製、不正SVG・将来版・名前不正、計算／描画失敗からの再試行、保存拒否と実SVGダウンロードを検証します。
+[namedConstructionInputs.test.mjs](../tests/namedConstructionInputs.test.mjs) は形式、コピー、名前とID、集合上限、失敗時の非更新、各操作の対象分離、スプラインの両版、未知版・外部コントローラー、従来記録との独立性を検証します。[editor.html](../tests/editor.html) は28ツールのSVG往復・復元、複数入力の独立性、各変更操作のUndo/Redo、選択と明示復元の分離、現在の描画方式での実作図、スプライン両モード、従来記録からの複製、不正SVG・将来版・名前不正、計算／描画失敗からの再試行、保存拒否と実SVGダウンロードを検証します。
 
-[名前付きの計算・描画方式プリセット](named-implementation-presets.md)は実装済みで、作図入力と独立して保存・適用できます。[入力と方式を組にした作図セット](construction-sets.md)は実装済みです。結合ツールで選択した線の保存、座標変換しての配置、クラウド同期、入力記録の自動更新、下書き編集自体のUndo/Redoは未導入です。
+[名前付きの計算・描画方式プリセット](named-implementation-presets.md)は実装済みで、作図入力と独立して保存・適用できます。[入力と方式を組にした作図セット](construction-sets.md)は実装済みです。座標変換しての配置、クラウド同期、入力記録の自動更新、下書き編集自体のUndo/Redoは未導入です。
 
 [別SVGからの選択取り込み](preset-import.md)は実装済みです。記録を新しいIDで追加し、同名には番号を付けます。複数種類の追加も1回でUndo/Redoできます。
 

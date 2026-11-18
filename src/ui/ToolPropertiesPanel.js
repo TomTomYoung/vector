@@ -405,6 +405,7 @@ class ToolPropertiesPanel {
       if(name==='text')text+=' / 文字数 '+saved.input.content.length+' / '+(saved.input.point?'配置位置 '+saved.input.point.x+', '+saved.input.point.y:'配置位置は未指定');
       if(Object.hasOwn(saved.input,'firstLine'))text+=' / 1本目の線分 '+(saved.input.firstLine?'選択済み':'未選択');
       if(name==='offset'&&Object.hasOwn(saved.input,'target'))text+=' / 対象図形 '+(saved.input.target?window.VectorUtils.offsetTargetLabels[saved.input.target.tag]:'未選択');
+      if(name==='join')text+=' / 結合する線 '+saved.input.elements.length+'本';
       if(['trim','extend'].includes(name))text+=' / 境界線 '+saved.input.edges.length+'本 / '+(saved.input.mode==='select'?'境界線を選択中':'加工対象のクリック待ち');
       if(saved.input.pathMode)text+=' / 描画モード '+(saved.input.pathMode==='line'?'直線':'ベジェ');
       if(Object.hasOwn(window.VectorUtils.constructionParameterFields,name))for(const [key,label] of window.VectorUtils.constructionParameterFields[name])text+=' / '+label+' '+saved.input[key];

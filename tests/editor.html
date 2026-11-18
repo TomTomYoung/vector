@@ -2911,12 +2911,12 @@ function namedSVG(app,value){const root=app.w.DrawingDocument.capture(),meta=roo
 
 const currentRecord=tool=>tool.prepareInputPreset?.().entry??tool.exportInputPreset();
 
-await check('All 27 supported controllers can save named inputs and restore them after a fresh SVG load without changing methods or legacy records',async()=>{
+await check('All 28 supported controllers can save named inputs and restore them after a fresh SVG load without changing methods or legacy records',async()=>{
   const source=await preferenceEditor('{preferences:false}');let target;
   try{
-    const names=Object.keys(source.w.toolManager.tools).filter(n=>source.w.VectorUtils.canRecordConstructionInput(source.w.toolManager.tools[n]));assert(names.length===27,'27 supported controllers');
+    const names=Object.keys(source.w.toolManager.tools).filter(n=>source.w.VectorUtils.canRecordConstructionInput(source.w.toolManager.tools[n]));assert(names.length===28,'28 supported controllers');
     for(const name of names){source.d.getElementById(name+'-tool').click();namedName(source,'保存 '+name);namedAction(source,'create');await tick();}
-    const saved=namedState(source);assert(saved.entries.length===27&&!inputPresetState(source),'named records separate from legacy');
+    const saved=namedState(source);assert(saved.entries.length===28&&!inputPresetState(source),'named records separate from legacy');
     target=await preferenceEditor('{preferences:false}');const host=target.w.toolManager.host,execute=host.execute;let calls=0;host.execute=(...args)=>{calls++;return execute(...args);};target.w.DrawingDocument.open(source.w.DrawingDocument.serialize());target.w.saveState();await tick();assert(calls===0,'load does not calculate');const methods=JSON.stringify(host.exportPreferences()),history=target.w.undoStack.length;
     for(const name of names){target.d.getElementById(name+'-tool').click();const item=saved.entries.find(e=>e.tool===name);assert(namedSelected(target)===item.id,'stable ID '+name);namedAction(target,'restore');assert(JSON.stringify(currentRecord(target.w.toolManager.tools[name]))===JSON.stringify(item.entry),'restored input '+name);}
     assert(JSON.stringify(namedState(target))===JSON.stringify(saved)&&JSON.stringify(host.exportPreferences())===methods&&target.w.undoStack.length===history&&!inputPresetState(target),'restoration preserves records, preferences and history');
@@ -3126,12 +3126,12 @@ const setSelected=app=>app.d.querySelector('[data-construction-set-select]').val
 const setChoose=(app,id)=>{const select=app.d.querySelector('[data-construction-set-select]');select.value=id;select.dispatchEvent(new app.w.Event('change',{bubbles:true}));};
 function setSVG(app,value){const root=app.w.DrawingDocument.capture(),meta=root.querySelector('metadata[data-vector-document]'),data=JSON.parse(meta.textContent);data.constructionSets=value;meta.textContent=JSON.stringify(data);return new app.w.XMLSerializer().serializeToString(root);}
 
-await check('All 27 controllers record paired input and methods, survive a fresh SVG load and restore without history or legacy changes',async()=>{
+await check('All 28 controllers record paired input and methods, survive a fresh SVG load and restore without history or legacy changes',async()=>{
   const source=await preferenceEditor('{preferences:false}');let target;
   try{
-    const names=Object.keys(source.w.toolManager.tools).filter(n=>source.w.VectorUtils.canRecordConstructionInput(source.w.toolManager.tools[n]));assert(names.length===27,'27 supported controllers');source.w.toolManager.host.selectImplementation('spline','centripetal');source.w.toolManager.host.selectRenderer('circle','cubic');
+    const names=Object.keys(source.w.toolManager.tools).filter(n=>source.w.VectorUtils.canRecordConstructionInput(source.w.toolManager.tools[n]));assert(names.length===28,'28 supported controllers');source.w.toolManager.host.selectImplementation('spline','centripetal');source.w.toolManager.host.selectRenderer('circle','cubic');
     for(const name of names){source.d.getElementById(name+'-tool').click();setName(source,'セット '+name);setAction(source,'create');await tick();}
-    const saved=setState(source);assert(saved.entries.length===27&&saved.entries.every(e=>Object.keys(e.methods.calculation).length===124),'each pair covers all operations');assert(!methodState(source)&&!namedState(source)&&!inputPresetState(source)&&!documentSettings(source),'new sets do not create legacy records');
+    const saved=setState(source);assert(saved.entries.length===28&&saved.entries.every(e=>Object.keys(e.methods.calculation).length===124),'each pair covers all operations');assert(!methodState(source)&&!namedState(source)&&!inputPresetState(source)&&!documentSettings(source),'new sets do not create legacy records');
     target=await preferenceEditor('{preferences:false}');const host=target.w.toolManager.host;host.selectImplementation('spline','chordal');target.w.DrawingDocument.open(source.w.DrawingDocument.serialize());target.w.saveState();await tick();const history=target.w.undoStack.length;assert(host.describe('spline').id==='chordal'&&host.describeRendering('circle').id==='default','load never applies');
     for(const name of names){target.d.getElementById(name+'-tool').click();const item=saved.entries.find(e=>e.tool===name);assert(setSelected(target)===item.id,'stable set ID '+name);setAction(target,'restore');assert(JSON.stringify(currentRecord(target.w.toolManager.tools[name]))===JSON.stringify(item.input),'restored input '+name);assert(host.describe('spline').id==='centripetal'&&host.describeRendering('circle').id==='cubic','restored method pair '+name);}
     assert(JSON.stringify(setState(target))===JSON.stringify(saved)&&target.w.undoStack.length===history&&!methodState(target)&&!namedState(target),'sets and other records stay independent');
@@ -4318,6 +4318,90 @@ await check('Copies and split pieces never impersonate the saved trim or extend 
       get(name+'-tool').click();inputPresetAction(app,'restore');
       assert(app.w.toolManager.tools[name].boundaryEdges[0]===original,'same original '+name);
     }
+  }finally{app.element.remove();}
+});
+
+const joinDraftSVG='<svg xmlns="http://www.w3.org/2000/svg"><g id="join-frame" transform="translate(20 10)"><line id="join-a" x1="80" y1="90" x2="120" y2="90" stroke="#654321"/><polyline id="join-b" points="120,90 160,90 160,120" stroke="#123456" stroke-width="5" data-layer="1"/></g><line id="join-c" x1="180" y1="130" x2="220" y2="130" stroke="black"/></svg>';
+
+await check('A join draft resumes ordered source picks after SVG reopen, joins their current transformed points once, and recovers with Undo',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    const get=id=>app.d.getElementById(id);
+    app.w.DrawingDocument.open(joinDraftSVG);get('join-tool').click();
+    parameterClick(app,155,100,get('join-b'));inputPresetAction(app,'record');
+    parameterClick(app,125,100,get('join-a'));namedName(app,'2本');namedAction(app,'create');
+    parameterClick(app,200,130,get('join-c'));setName(app,'3本');setAction(app,'create');
+    const xml=app.w.DrawingDocument.serialize();app.w.DrawingDocument.open(xml);get('join-tool').click();
+    const tool=app.w.toolManager.tools.join,ids=()=>tool.selectedElements.map(el=>el.id).join(',');
+    assert(!ids()&&!get('join-b').hasAttribute('data-vector-highlight'),'opening does not select sources');
+    inputPresetAction(app,'restore');assert(ids()==='join-b','single partial selection');
+    parameterClick(app,200,130,get('join-c'));assert(ids()==='join-b,join-c','continue a partial selection');
+    namedAction(app,'restore');assert(ids()==='join-b,join-a','named order and first style');
+    setAction(app,'restore');assert(ids()==='join-b,join-a,join-c'&&get('join-a')&&get('join-b')&&get('join-c'),'set waits for Enter');
+    get('join-frame').setAttribute('transform','translate(30 10)');get('join-c').setAttribute('x1','190');
+    app.w.saveState();await tick();const history=app.w.undoStack.length;
+    draftKey(app,'Enter');await tick();
+    const output=get('canvas').querySelector('polyline');
+    assert(!get('join-a')&&!get('join-b')&&!get('join-c')&&!ids(),'replaced all three sources');
+    assert([...output.points].map(p=>[p.x,p.y].join(',')).join(' ')==='110,100 150,100 190,100 190,130 220,130','current transformed geometry');
+    assert(output.getAttribute('stroke')==='#123456'&&output.getAttribute('stroke-width')==='5'&&output.getAttribute('data-layer')==='1','style from first pick');
+    assert(!output.hasAttribute('data-vector-boundary-draft-id')&&app.w.undoStack.length===history+1,'one geometry change with a new identity');
+    setAction(app,'restore');assert(!ids()&&get('canvas').contains(output),'consumed sources cannot be rebound to result');
+    app.w.undo();get('join-tool').click();setAction(app,'restore');assert(ids()==='join-b,join-a,join-c','undo restores reusable source IDs');app.w.redo();
+    assert(!get('join-b')&&get('canvas').querySelector('polyline'),'redo reapplies the join');
+  }finally{app.element.remove();}
+});
+
+await check('Join draft restore is atomic for hidden, locked and duplicate sources, and retries the selected method set',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    const get=id=>app.d.getElementById(id);app.w.DrawingDocument.open(joinDraftSVG);get('join-tool').click();
+    const [a,b,live]=['join-a','join-b','join-c'].map(get),tool=app.w.toolManager.tools.join,host=app.w.toolManager.host;
+    parameterClick(app,125,100,a);parameterClick(app,155,100,b);host.selectRenderer('circle','cubic');
+    setName(app,'復元用');setAction(app,'create');draftKey(app,'Escape');parameterClick(app,200,130,live);host.selectRenderer('circle','default');
+    for(const problem of ['hidden','locked','duplicate']){
+      let clone;const layer=app.w.layers.find(item=>item.id===1);
+      if(problem==='hidden')get('join-frame').style.display='none';
+      if(problem==='locked')layer.locked=true;
+      if(problem==='duplicate'){clone=b.cloneNode(false);get('canvas').append(clone);}
+      setAction(app,'restore');
+      assert(tool.selectedElements.length===1&&tool.selectedElements[0]===live&&live.getAttribute('data-vector-highlight')==='join','live draft '+problem);
+      assert(host.describeRendering('circle').id==='default'&&!live.hasAttribute('data-vector-boundary-draft-id'),'method rollback '+problem);
+      if(problem==='hidden')get('join-frame').style.removeProperty('display');
+      if(problem==='locked')layer.locked=false;
+      clone?.remove();
+    }
+    setAction(app,'restore');assert(tool.selectedElements[0]===a&&tool.selectedElements[1]===b&&host.describeRendering('circle').id==='cubic','repaired set');
+  }finally{app.element.remove();}
+});
+
+await check('A disconnected or newly unusable join source blocks Enter without dropping sources or adding history',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    const get=id=>app.d.getElementById(id);app.w.DrawingDocument.open(joinDraftSVG);get('join-tool').click();
+    const a=get('join-a'),b=get('join-b'),tool=app.w.toolManager.tools.join;
+    parameterClick(app,125,100,a);parameterClick(app,155,100,b);inputPresetAction(app,'record');draftKey(app,'Escape');inputPresetAction(app,'restore');await tick();
+    const history=app.w.undoStack.length;
+    b.setAttribute('transform','scale(0)');draftKey(app,'Enter');await tick();
+    assert(a.isConnected&&b.isConnected&&tool.selectedElements.length===2&&tool.implementationError.includes('使用できない')&&app.w.undoStack.length===history,'singular transform blocks');
+    b.setAttribute('transform','translate(200 0)');draftKey(app,'Enter');await tick();
+    assert(a.isConnected&&b.isConnected&&tool.implementationError.includes('端点')&&app.w.undoStack.length===history,'disconnected set keeps sources');
+    b.removeAttribute('transform');draftKey(app,'Enter');await tick();
+    assert(!a.isConnected&&!b.isConnected&&app.w.undoStack.length===history+1,'retry succeeds');
+  }finally{app.element.remove();}
+});
+
+await check('Join selection tracks only the original pieces after paste and split',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    const get=id=>app.d.getElementById(id);app.w.DrawingDocument.open(joinDraftSVG);
+    const original=get('join-c'),canvas=get('canvas');get('join-tool').click();
+    parameterClick(app,200,130,original);inputPresetAction(app,'record');get('select-tool').click();
+    const select=app.w.selectTool;select.selectObject(original);select.copySelectedObjects();select.pasteObjects();
+    const parts=app.w.VectorUtils.linearEditing.split(original,canvas,{x:200,y:130});
+    assert(parts?.length===2&&canvas.querySelectorAll('[data-vector-boundary-draft-id]').length===1,'one identity after both operations');
+    get('join-tool').click();inputPresetAction(app,'restore');const tool=app.w.toolManager.tools.join;
+    assert(tool.selectedElements.length===1&&tool.selectedElements[0]===original&&original.x2.baseVal.value===200,'restored shortened original');
   }finally{app.element.remove();}
 });
 
