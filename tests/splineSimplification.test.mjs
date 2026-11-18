@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {simplifySplineKnots as simplify,simplifySplineKnotsReverse as reverse,validateSplineSimplification as validate,simplifyEditableSplineKnots as edit} from '../src/adapters/splineSimplification.js';
+import {simplifySplineKnots as simplify,simplifySplineKnotsReverse as reverse,simplifySplineKnotsLeastError as leastError,validateSplineSimplification as validate,simplifyEditableSplineKnots as edit} from '../src/adapters/splineSimplification.js';
 import {insertEditableSplineKnot as insert} from '../src/adapters/splineRefinement.js';
 import {removeEditableSplineKnot as remove,validateEditableSplineKnotRemoval as verifyRemoval} from '../src/adapters/splineRemoval.js';
 import {addReductionErrorBounds as sum} from '../src/model/splineReductionPlan.js';
@@ -20,11 +20,11 @@ function compare(input,out){
   let error=0;for(let i=0;i<=300;i++){const t=start+(end-start)*i/300,u=t>hi?t-period:t<lo?t+period:t,p=at({...a,t:u}),q=at({...b,t});assert.ok(p&&q);error=Math.max(error,Math.hypot(p.x-q.x,p.y-q.y));}
   assert.ok(error<=out.simplification.errorBound+1e-9,`${error} <= ${out.simplification.errorBound}`);assert.ok(out.simplification.errorBound<=(input.tolerance??1e-7));assert.ok(validate(input,out));return out;
 }
-test('whole-curve simplification removes repeated and distinct inserted knots through degree twelve in both directions',()=>{
+test('all simplification strategies remove repeated and distinct inserted knots through degree twelve',()=>{
   for(let degree=1;degree<=12;degree++)for(const periodic of [false,true])for(const rational of [false,true]){
     const count=degree+3,base={degree,periodic,points:points(count),...(rational?{weights:Array.from({length:count},(_,i)=>1+i%3)}:{})};
     const values=periodic?[.25,.75,1.5,...(degree>1?[.25,0]:[])]:[.25,.75,...(degree>1?[.25]:[])],input=added(base,values),before=structuredClone(input);
-    for(const fn of [simplify,reverse]){const out=compare(input,fn(input));assert.equal(out.points.length,count);assert.equal(out.simplification.removedKnots,values.length);assert.equal(out.stages.length,values.length);}
+    for(const fn of [simplify,reverse,leastError]){const out=compare(input,fn(input));assert.equal(out.points.length,count);assert.equal(out.simplification.removedKnots,values.length);assert.equal(out.stages.length,values.length);}
     assert.deepEqual(input,before);
   }
 });
@@ -59,7 +59,7 @@ test('zero and signed weights and extreme common scales use verified denominator
   let signedChecks=0;
   for(const periodic of [false,true])for(const weight of [0,-.125])for(const scale of [1,1e-250,-1e250]){
     const base={degree:3,periodic,points:points(6),weights:[1,weight,1,1,1,1].map(v=>v*scale)},input=added(base,periodic?[.5,2.5]:[.3,.7]);
-    for(const fn of [simplify,reverse]){const out=compare(input,fn(input));assert.ok(out.simplification.removedKnots>=2);signedChecks+=out.simplification.steps.filter(s=>s.denominator).length;}
+    for(const fn of [simplify,reverse,leastError]){const out=compare(input,fn(input));assert.ok(out.simplification.removedKnots>=2);signedChecks+=out.simplification.steps.filter(s=>s.denominator).length;}
   }
   assert.ok(signedChecks>0);
 });
@@ -103,8 +103,39 @@ test('the adapter isolates solver mutations and SVG records retain independently
   const restored=readSplineSource(JSON.stringify({version:1,model,path}),JSON.stringify({version:1,tool:'bSplineCurve',refinement}),path);assert.deepEqual(restored.refinement,refinement);assert.deepEqual(bSplineCurve(restored.input),model);
   assert.throws(()=>edit('circle',input),/標準/);assert.throws(()=>edit('bSplineCurve',input,-1),/全体許容差/);
 });
-test('the catalog exposes 124 operations and two independently scoped simplification sweep orders',()=>{
+test('the catalog exposes 124 operations and three independently scoped simplification strategies',()=>{
   const host=createToolset(),input=added({degree:2,points:points(4)},[.25,.75]);assert.equal(toolNames.length,124);assert.match(host.describe('simplifySplineKnots').algorithm,/三角不等式/);
-  assert.deepEqual(host.list('simplifySplineKnots').map(v=>v.id),['default','reverse']);assert.equal(compare(input,host('simplifySplineKnots',input)).stages[0].t,.25);
+  assert.deepEqual(host.list('simplifySplineKnots').map(v=>v.id),['default','reverse','least-error']);assert.equal(compare(input,host('simplifySplineKnots',input)).stages[0].t,.25);
   assert.equal(compare(input,host('simplifySplineKnots',input,{implementation:'reverse'})).stages[0].t,.75);assert.equal(host.describe('simplifySplineKnots').id,'default');
+});
+
+const rankedInput={
+  degree:1,points:[-1,-5,0,-3,-5,-4,0].map((y,x)=>({x:x*10,y})),
+  knots:[0,0,1,2,3,4,5,6,6],tolerance:7
+};
+test('least-error ranks the current curve again after each accepted deletion',()=>{
+  const out=compare(rankedInput,leastError(rankedInput));
+  assert.deepEqual(out.stages.map(stage=>stage.t),[3,5,1]);
+  assert.deepEqual(out.simplification.steps.map(step=>step.errorBound),[.5,1.5,4.5]);
+  assert.equal(out.simplification.errorBound,sum(sum(.5,1.5),4.5));
+  assert.equal(simplify(rankedInput).simplification.removedKnots,2);
+  assert.equal(reverse(rankedInput).simplification.removedKnots,2);
+});
+test('equal positive bounds favor the smaller knot and zero can end a search immediately',()=>{
+  const tied={degree:1,points:[0,1,1,0].map((y,x)=>({x,y})),knots:[0,0,1,2,3,3],tolerance:.5};
+  assert.deepEqual(compare(tied,leastError(tied)).stages.map(stage=>stage.t),[1]);
+  const exact={degree:1,points:Array.from({length:5},()=>({x:2,y:3})),knots:[0,0,1,2,3,4,4],tolerance:0,maxAttempts:3};
+  assert.deepEqual(compare(exact,leastError(exact)).stages.map(stage=>stage.t),[1,2,3]);
+});
+test('an incomplete ranking or final scan discards every staged change',()=>{
+  const before=structuredClone(rankedInput);
+  for(const maxAttempts of [1,4,5,12,13])assert.equal(leastError({...rankedInput,maxAttempts}),null);
+  assert.equal(leastError({...rankedInput,maxAttempts:14}).simplification.removedKnots,3);
+  assert.deepEqual(rankedInput,before);
+});
+test('a repeated right endpoint costs only one attempt for its periodic seam',()=>{
+  const input={periodic:true,degree:2,periodicKnots:[0,1,2,3,4,4],
+    points:[{x:0,y:0},{x:1,y:2},{x:3,y:1},{x:0,y:-3},{x:-4,y:5}],tolerance:0};
+  assert.equal(leastError({...input,maxAttempts:3}),null);
+  assert.deepEqual(compare(input,leastError({...input,maxAttempts:4})).stages,[]);
 });

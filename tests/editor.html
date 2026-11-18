@@ -4073,6 +4073,46 @@ await check('Workbench Worker simplifies open and periodic curves and restores m
   }finally{await page.close();}
 });
 
+function leastErrorExample(){
+  return {degree:1,points:[-1,-5,0,-3,-5,-4,0].map((y,i)=>({x:100+10*i,y:100+y})),
+    knots:[0,0,1,2,3,4,5,6,6],tolerance:7};
+}
+await check('Least-error simplification previews the winning knots and restores the saved choice and shape',async()=>{
+  fixture();await tick();
+  const curve=addEditableSpline('bSplineCurve',leastErrorExample());
+  w.saveState();await tick();w.undoStack.length=0;
+  const original=curve.getAttribute('data-vector-spline');
+  activate('select');w.selectTool.selectObject(curve);splineAction('begin');
+  splineField('ノット一括簡約の全体許容差','7');
+  splineField('ノット一括簡約の実装','least-error','change');
+  splineAction('simplify-knots');
+  const editor=w.toolPropertiesPanel.splineEditor;
+  assert(editor.preview&&draftPoints().length===4&&curve.getAttribute('data-vector-spline')===original,'preview before apply');
+  assert(editor.draft.refinement.steps.map(step=>step.t).join(',')==='3,5,1','winning knots after rescoring');
+  splineAction('apply');await tick();
+  const savedSvg=w.DrawingDocument.serialize();
+  assert(w.undoStack.length===1,'single undo transaction');
+  w.undo();assert(doc.getElementById('editable-spline').getAttribute('data-vector-spline')===original,'undo all deletions');
+  w.redo();w.DrawingDocument.open(savedSvg);
+  const reopened=doc.getElementById('editable-spline');
+  activate('select');w.selectTool.selectObject(reopened);splineAction('begin');
+  const record=w.toolPropertiesPanel.splineEditor.draft.refinement;
+  assert(record.id==='least-error'&&record.errorBound<=7&&draftPoints().length===4,'reopened model and algorithm');
+  splineAction('cancel');
+});
+await check('Workbench Worker executes and restores the least-error strategy',async()=>{
+  const page=await createWorkbench();
+  try{
+    page.choose('tool','simplifySplineKnots');page.choose('implementation','least-error');
+    page.edit(JSON.stringify(leastErrorExample()));
+    const run=async()=>JSON.parse(await page.run()).stages.map(stage=>stage.t).join(',');
+    assert(await run()==='3,5,1'&&page.w.__workbenchWorkerCount===1,'Worker ranks candidates');
+    const saved=await page.exportText();
+    page.choose('implementation','reverse');await page.importText(saved);
+    assert(page.get('implementation').value==='least-error'&&await run()==='3,5,1','restored method and input');
+  }finally{await page.close();}
+});
+
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
 </script>
