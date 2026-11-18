@@ -91,3 +91,5 @@ B-spline・NURBSの形状を保つ `elevateSplineDegree` は非周期・周期�
 `reduceSplineDegree` の `continuity` は元の重複度−1の低次基底への全体最小二乗です。元の連続性を保持し、非周期の両端・不連続点の片側端点以外の接続点は許容差内で動かせます。[対応範囲・全区間検証・換装・参照論文](../../doc/spline-continuity-reduction.md)を参照してください。
 
 `reduceSplineDegree` の `adaptive` は許容差を満たさない区間を自動で二分割します。全区間を元の曲線と再検証し、最終1000制御点までの端点固定の接続表現を返します。[分割・誤差・上限・換装契約](../../doc/adaptive-degree-reduction.md)を参照してください。
+
+`reduceSplineToDegree` は目標次数と全体許容差を指定する一括操作です。各段階の中間曲線を独立検証し、三角不等式で累積偏差を管理します。計算123機能です。[入出力・実装3種類・予算・換装・制約](../../doc/spline-reduction-budget.md)を参照してください。

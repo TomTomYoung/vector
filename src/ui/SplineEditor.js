@@ -17,6 +17,7 @@ class SplineEditor {
       this.originalPath=this.element.getAttribute('d');this.originalSource=this.element.getAttribute('data-vector-spline');
       const {input,options}=source;
       this.draft={...source,insertKnotText:'',knotImplementation:this.manager.host.describe('insertSplineKnot').id,
+        planTargetText:String(Math.max(1,input.degree-2)),planToleranceText:'0.001',planImplementation:this.manager.host.describe('reduceSplineToDegree').id,
         reductionToleranceText:'0.0000001',reduceImplementation:this.manager.host.describe('reduceSplineDegree').id,
         elevationToleranceText:'0.0000001',elevateImplementation:this.manager.host.describe('elevateSplineDegree').id,
         removeKnotText:'',removalToleranceText:'0.0000001',removeImplementation:this.manager.host.describe('removeSplineKnot').id,
@@ -132,6 +133,21 @@ class SplineEditor {
         `推定偏差上限 ${next.reduction.errorBound}、許容差 ${next.reduction.tolerance}。「適用」で図形へ反映します。 `+this.message;
     }catch(error){this.message=error.message;}
     this.refresh();
+  }
+  reduceToDegree() {
+    try {
+      this.assertTarget();const d=this.draft,host=this.manager.host;
+      if(d.implementation!=='default'||host.implementations(d.method).find(v=>v.id==='default')?.source!=='src/model/splineCurves.js')throw Error('一括次数下げは標準の曲線計算を選択してください。');
+      if(!d.planTargetText.trim()||!d.planToleranceText.trim())throw Error('目標次数と全体許容差を入力してください。');
+      const info=host.implementations('reduceSplineToDegree').find(v=>v.id===d.planImplementation);if(!info)throw Error('選択した一括次数下げ実装がありません。');
+      const next=window.VectorUtils.reduceEditableSplineToDegree(d.method,this.input(),Number(d.planTargetText),Number(d.planToleranceText),input=>host.execute('reduceSplineToDegree',input,{implementation:d.planImplementation}));
+      d.refinement={tool:'reduceSplineToDegree',id:info.id,label:info.label,algorithm:info.algorithm,source:info.source??null,...next.reductionPlan};
+      d.degree=next.degree;d.pointsText=next.points.map(p=>p.x+', '+p.y).join('\n');
+      if(next.periodic)d.periodicKnotsText=next.periodicKnots.join(', ');else d.knotsText=next.knots.join(', ');
+      if(next.weights)d.weightsText=next.weights.join(', ');
+      this.changed();this.showPreview(false);
+      this.message=`次数 ${next.reductionPlan.fromDegree} → ${next.degree}、${next.reductionPlan.stepCount}段階。処理時の累積偏差上限 ${next.reductionPlan.errorBound}、全体許容差 ${next.reductionPlan.tolerance}、残予算 ${next.reductionPlan.remainingBudget}。「適用」で図形へ反映します。 `+this.message;
+    }catch(error){this.message=error.message;}this.refresh();
   }
   build() {
     this.assertTarget();
@@ -282,6 +298,15 @@ class SplineEditor {
       choice('次数下げの実装','reduceImplementation',this.manager.host.implementations('reduceSplineDegree'));
       button('許容差内で次数を1下げる',()=>this.reduceDegree(),'reduce-degree');
     }
+
+    const planInfo=document.createElement('p');planInfo.dataset.splineReductionPlanInfo='';planInfo.style.fontSize='12px';
+    planInfo.textContent='一括次数下げは、この実行直前の曲線から目標次数までの累積偏差を制限します。残予算を残段階へ分配し、各段階の全区間偏差上限を加算します。全段階が成功した場合だけ下書きへ反映します。過去や後続の別操作の誤差は含みません。適応分割は接線以上の連続性を保証せず、制御点数が増える場合があります。';container.append(planInfo);
+    for(const [label,key] of [['一括次数下げの目標次数','planTargetText'],['一括次数下げの全体許容差','planToleranceText']]){
+      const wrapper=document.createElement('label');wrapper.textContent=label;wrapper.style.cssText='display:block;font-size:12px;margin:10px 0';
+      const value=document.createElement('input');value.type='text';value.value=d[key];value.setAttribute('aria-label',label);value.style.width='100%';value.addEventListener('input',()=>{d[key]=value.value;});wrapper.append(value);container.append(wrapper);
+    }
+    choice('一括次数下げの実装','planImplementation',this.manager.host.implementations('reduceSplineToDegree'));
+    button('全体許容差内で目標次数まで下げる',()=>this.reduceToDegree(),'reduce-to-degree');
 
     container.append(message);
     button('プレビュー',()=>this.showPreview(),'preview');button('適用',()=>this.apply(),'apply');button('取消',()=>this.cancel(),'cancel');
