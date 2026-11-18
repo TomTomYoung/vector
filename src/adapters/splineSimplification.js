@@ -1,3 +1,4 @@
+import {listSimplificationBranches,branchContains} from './splineSimplificationBranches.js';
 import {bSplineCurve,nurbsCurve} from '../model/splineCurves.js';
 import {boundedSplineDeviation} from '../model/splineDeviation.js';
 import {addReductionErrorBounds} from '../model/splineReductionPlan.js';
@@ -16,30 +17,38 @@ function prepare(input){
     !Array.from(model.points).every(p=>p&&Number.isFinite(p.x)&&Number.isFinite(p.y))||!Array.from(model.knots).every(Number.isFinite)||
     rational&&!Array.from(model.weights).every(Number.isFinite))return null;
   // Even a no-op must not claim a whole-curve bound across an unverified pole.
-  if(rational){
+  let branch;
+  if(input.branchIndex!==undefined){
+    if(!rational||!Number.isSafeInteger(input.branchIndex)||input.branchIndex<1)return null;
+    branch=listSimplificationBranches(input)[input.branchIndex-1];
+    if(!branch)return null;
+  }else if(rational){
     const scale=Math.max(...model.weights.map(Math.abs)),sign=Math.sign(model.weights.find(w=>w!==0)),origin=model.points[0];
     const weights=model.weights.map(w=>sign*(w/scale));
     if(weights.some((w,i)=>model.weights[i]!==0&&w===0))return null;
     const h=model.points.map((p,i)=>({x:(p.x-origin.x)*weights[i],y:(p.y-origin.y)*weights[i],w:weights[i]}));
     if(!boundedSplineDeviation(h,h,0,true,model.degree,model.knots))return null;
   }
-  return {create,method:rational?'nurbsCurve':'bSplineCurve',input:editable(model),budget,maxAttempts};
+  return {create,method:rational?'nurbsCurve':'bSplineCurve',input:editable(model),budget,maxAttempts,branch};
 }
-function candidates(input){
+function candidates(input,branch){
   if(input.points.length<=input.degree+1)return [];
-  if(input.periodic)return [...new Set(input.periodicKnots.slice(0,-1))];
-  const lo=input.knots[input.degree],hi=input.knots[input.points.length];
-  return [...new Set(input.knots.filter(t=>t>lo&&t<hi))];
+  const knots=input.periodic?input.periodicKnots.slice(0,-1):
+    input.knots.filter(t=>t>input.knots[input.degree]&&t<input.knots[input.points.length]);
+  const values=[...new Set(knots)];
+  return branch?values.filter(t=>branchContains(branch,t,t)):values;
 }
 function step(c,current,t,candidate,total){
-  const checked=validateEditableSplineKnotRemoval(c.method,current,t,c.budget-total,candidate);if(!checked)return null;
+  if(c.branch&&!branchContains(c.branch,t,t))return null;
+  const checked=validateEditableSplineKnotRemoval(c.method,current,t,c.budget-total,candidate,c.branch?'branch':'whole');
+  if(!checked||c.branch&&!checked.removal.branch.ranges.every(([from,to])=>branchContains(c.branch,from,to)))return null;
   const nextTotal=addReductionErrorBounds(total,checked.removal.errorBound);if(nextTotal===null||nextTotal>c.budget)return null;
   return {curve:editable(c.create(checked)),total:nextTotal,record:{...checked.removal,cumulativeErrorBound:nextTotal}};
 }
 function tryRemoval(context,current,t,total){
   let candidate;
   try {
-    candidate=removeEditableSplineKnot(context.method,current,t,context.budget-total);
+    candidate=removeEditableSplineKnot(context.method,current,t,context.budget-total,undefined,context.branch?'branch':'whole');
   } catch {
     return null;
   }
@@ -48,7 +57,8 @@ function tryRemoval(context,current,t,total){
 function finish(c,current,stages,steps,total){
   return {...current,stages,simplification:{originalControlCount:c.input.points.length,controlCount:current.points.length,
     removedKnots:steps.length,tolerance:c.budget,errorBound:total,remainingBudget:Math.max(0,c.budget-total),steps,
-    verification:{algorithm:'削除ごとの独立した再挿入・全区間検証・三角不等式・上向き加算',source:'src/adapters/splineSimplification.js'}}};
+    ...(c.branch?{branch:c.branch}:{}),
+    verification:{algorithm:c.branch?'開始時の枝に限定した各段階の影響区間・局所基底検証・三角不等式・上向き加算':'削除ごとの独立した再挿入・全区間検証・三角不等式・上向き加算',source:'src/adapters/splineSimplification.js'}}};
 }
 export function validateSplineSimplification(input,result){
   const c=prepare(input);if(!c||!result||!Array.isArray(result.stages)||result.stages.length>Math.min(c.maxAttempts,c.input.points.length-c.input.degree-1))return null;
@@ -68,9 +78,9 @@ function run(input,reverse){
   // Retry a full ordered sweep after changes: a later removal can make an
   // earlier rejected knot removable. The finite attempt budget is atomic.
   while(true){
-    const knots=candidates(current);if(reverse)knots.reverse();let changed=false;
+    const knots=candidates(current,c.branch);if(reverse)knots.reverse();let changed=false;
     for(const t of knots){
-      while(candidates(current).includes(t)){
+      while(candidates(current,c.branch).includes(t)){
         if(++attempts>c.maxAttempts)return null;
         const checked=tryRemoval(c,current,t,total);if(!checked)break;
         current=checked.curve;total=checked.total;stages.push({t,curve:current});steps.push(checked.record);changed=true;
@@ -89,7 +99,7 @@ export function simplifySplineKnotsLeastError(input){
   let current=context.input,total=0,attempts=0;
   while(true){
     let best=null;
-    for(const t of candidates(current)){
+    for(const t of candidates(current,context.branch)){
       // A repeated right endpoint represents the same periodic seam as the left.
       if(current.periodic && t===current.periodicKnots.at(-1))continue;
       if(++attempts>context.maxAttempts)return null;

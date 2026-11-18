@@ -4523,6 +4523,64 @@ await check('Workbench Worker computes a branch-specific proof for a NURBS with 
   }finally{await page.close();}
 });
 
+function branchSimplificationInput(periodic=false){
+  const points=Array.from({length:14},(_,i)=>({x:45+10*i,y:75+7*(i%3)}));
+  let input={degree:2,points,weights:points.map((_,i)=>i===7?-4:1),periodic,
+    ...(periodic?{}:{knots:[0,0,0,1,2,3,4,5,6,7,8,9,10,11,12,12,12]})};
+  for(const t of [.5,1.5,9.5,10.5])input=w.VectorUtils.insertEditableSplineKnot('nurbsCurve',input,t);
+  return input;
+}
+function selectSimplificationBranch(index){
+  const select=doc.querySelector('[aria-label="ノット一括簡約の対象"]');
+  select.focus();assert(select.options[index]?.text.startsWith('枝 '+index+'（'),'branch option');
+  splineField('ノット一括簡約の対象',select.options[index].value,'change');
+}
+await check('Branch batch simplification preserves the other removable knots and records a single undoable SVG edit',async()=>{
+  fixture();await tick();let curve=addEditableSpline('nurbsCurve',branchSimplificationInput());
+  w.saveState();await tick();w.undoStack.length=0;
+  const original=curve.getAttribute('data-vector-spline'),begin=()=>{activate('select');w.selectTool.selectObject(curve);splineAction('begin');};
+  begin();const editor=w.toolPropertiesPanel.splineEditor;
+  assert(doc.querySelector('[aria-label="ノット一括簡約の対象"]').options.length===4,'whole plus three branches');
+  selectSimplificationBranch(3);splineField('ノット一括簡約の実装','reverse','change');splineAction('simplify-knots');
+  assert(editor.preview&&editor.message.includes('枝 3 のノットを2個削除')&&editor.input().knots.includes(.5)&&!editor.input().knots.includes(9.5),'selected branch only');
+  assert(curve.getAttribute('data-vector-spline')===original&&!w.undoStack.length,'staged preview');
+  splineAction('apply');await tick();const saved=curve.getAttribute('data-vector-spline'),proof=JSON.parse(curve.getAttribute('data-vector-implementation')).refinement;
+  assert(proof.branch.index===3&&proof.steps.length===2&&proof.steps.every(s=>s.branch)&&w.undoStack.length===1,'one transaction');
+  assert(doc.querySelector('[data-recorded-implementation]').textContent.includes('対象の枝 3'),'saved branch visible');
+  w.undo();assert(doc.getElementById('editable-spline').getAttribute('data-vector-spline')===original,'undo both deletions');
+  w.redo();assert(doc.getElementById('editable-spline').getAttribute('data-vector-spline')===saved,'redo');
+  w.DrawingDocument.open(w.DrawingDocument.serialize());curve=doc.getElementById('editable-spline');begin();
+  assert(editor.draft.refinement.branch.index===3&&editor.input().knots.includes(1.5),'branch record survives reopen');
+});
+await check('Stale branch selection and a branch with no removable knots preserve the draft and previous drawing',async()=>{
+  fixture();await tick();const curve=addEditableSpline('nurbsCurve',branchSimplificationInput());
+  activate('select');w.selectTool.selectObject(curve);splineAction('begin');const editor=w.toolPropertiesPanel.splineEditor,original=curve.getAttribute('data-vector-spline');
+  selectSimplificationBranch(2);splineAction('preview');const preview=editor.preview;splineAction('simplify-knots');
+  assert(editor.message.includes('削除できるノットがありません')&&editor.preview===preview,'no-op keeps preview');
+  splineField('編集する重み（空欄で全て1）',draftPoints().map(()=>1).join(' '));
+  splineAction('simplify-knots');assert(editor.message.includes('枝を選び直し')&&!editor.draft.refinement,'stale selection requires reselection');
+  selectSimplificationBranch(1);splineAction('simplify-knots');assert(editor.draft.refinement?.removedKnots>=4,'new branch works');
+  splineAction('cancel');assert(curve.getAttribute('data-vector-spline')===original,'cancel preserves original');
+});
+await check('Periodic batch selection joins the two visible ends and leaves the pole gaps open',async()=>{
+  fixture();await tick();const curve=addEditableSpline('nurbsCurve',branchSimplificationInput(true));
+  activate('select');w.selectTool.selectObject(curve);splineAction('begin');selectSimplificationBranch(1);
+  splineField('ノット一括簡約の実装','least-error','change');splineAction('simplify-knots');
+  const proof=w.toolPropertiesPanel.splineEditor.draft.refinement;
+  assert(proof.branch.ranges.length===2&&proof.steps.length===4&&proof.steps.some(s=>s.t<2)&&proof.steps.some(s=>s.t>9),'one wraparound branch');
+  splineAction('apply');await tick();const path=curve.getAttribute('d');assert(!path.endsWith('Z')&&(path.match(/M/g)||[]).length>1,'pole gaps open');
+});
+await check('Workbench Worker replays only the selected branch in all three batch search modes',async()=>{
+  const page=await createWorkbench();
+  try{
+    page.choose('tool','simplifySplineKnots');const req={...branchSimplificationInput(),branchIndex:1};
+    for(const id of ['default','reverse','least-error']){
+      page.choose('implementation',id);page.edit(JSON.stringify(req));const out=JSON.parse(await page.run());
+      assert(out.simplification.branch.index===1&&out.stages.map(s=>s.t).sort((a,b)=>a-b).join(',')==='0.5,1.5'&&out.knots.includes(10.5),'verified Worker '+id);
+    }
+  }finally{await page.close();}
+});
+
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
 </script>

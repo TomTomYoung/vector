@@ -12,8 +12,8 @@ import {delaunayTriangles} from './mesh.js';
 const alternative = (id, label, algorithm, run, source = 'src/model/alternatives.js') => ({id, label, algorithm, source, run});
 export const builtinImplementations = {
   simplifySplineKnots: [
-    alternative('reverse', '終端側からノットを一括簡約', '降順の反復走査・逆Boehm削除・周期再構成・独立した全区間検証・残予算と三角不等式による累積偏差上限', simplifySplineKnotsReverse, 'src/adapters/splineSimplification.js'),
-    alternative('least-error', '削除誤差が小さい順にノットを一括簡約', '全区間の偏差上限が最も小さい候補を1個削除し、残った候補を再評価。上限が同じ場合は小さいノット値を優先', simplifySplineKnotsLeastError, 'src/adapters/splineSimplification.js'),
+    alternative('reverse', '終端側からノットを一括簡約', '降順の反復走査・逆Boehm削除・周期再構成・対象範囲の検証・残予算と三角不等式による累積偏差上限', simplifySplineKnotsReverse, 'src/adapters/splineSimplification.js'),
+    alternative('least-error', '削除誤差が小さい順にノットを一括簡約', '対象範囲で偏差上限が最も小さい候補を1個削除し、残った候補を再評価。上限が同じ場合は小さいノット値を優先', simplifySplineKnotsLeastError, 'src/adapters/splineSimplification.js'),
   ],
   reduceSplineToDegree: [alternative('bezier', '固定区間で一括次数下げ', '端点固定の区間ベジェ接続・残予算の等分配・全段階検証・三角不等式による累積偏差上限', reduceSplineToDegreeBezier, 'src/model/splineReductionPlan.js'), alternative('continuity', '連続性を保つ一括次数下げ', '重複度−1の連続性保持・周期始端移動・残予算の等分配・全段階検証・三角不等式による累積偏差上限', reduceSplineToDegreeContinuity, 'src/model/splineReductionPlan.js')],
   reduceSplineDegree: [alternative('adaptive', '許容差に合わせて区間を自動分割', '極形式de Boorの区間再抽出・適応二分割・端点固定の同次Bernstein係数最小二乗・Givens QR・全区間偏差検証', reduceSplineDegreeAdaptive, 'src/model/adaptiveSplineReduction.js'), alternative('continuity', '元の連続性を保つ次数下げ', '元の重複度−1のノット列・単純周期継ぎ目の始端移動・同次Bernstein係数の全体最小二乗・Givens疎QR・全区間偏差検証', reduceSplineDegreeContinuity, 'src/model/compactSplineReduction.js')],

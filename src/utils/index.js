@@ -27,6 +27,7 @@ import {prepareSplineReferenceBudget} from '../model/splineReferenceBudget.js';
 import {readSplineSource} from '../adapters/splineSource.js';
 import {insertEditableSplineKnot} from '../adapters/splineRefinement.js';
 import {reduceEditableSplineToDegree} from '../adapters/splineReductionPlan.js';
+import {listSimplificationBranches} from '../adapters/splineSimplificationBranches.js';
 import {simplifyEditableSplineKnots} from '../adapters/splineSimplification.js';
 import {reduceEditableSplineDegree} from '../adapters/splineReduction.js';
 import {elevateEditableSplineDegree} from '../adapters/splineElevation.js';
@@ -72,6 +73,7 @@ window.VectorUtils = {
   reduceEditableSplineDegree,
   reduceEditableSplineToDegree,
   simplifyEditableSplineKnots,
+  listSimplificationBranches,
   circleSource,
   arcSource,
   pointSetSource,
