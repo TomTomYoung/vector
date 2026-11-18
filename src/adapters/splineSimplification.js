@@ -36,6 +36,15 @@ function step(c,current,t,candidate,total){
   const nextTotal=addReductionErrorBounds(total,checked.removal.errorBound);if(nextTotal===null||nextTotal>c.budget)return null;
   return {curve:editable(c.create(checked)),total:nextTotal,record:{...checked.removal,cumulativeErrorBound:nextTotal}};
 }
+function tryRemoval(context,current,t,total){
+  let candidate;
+  try {
+    candidate=removeEditableSplineKnot(context.method,current,t,context.budget-total);
+  } catch {
+    return null;
+  }
+  return step(context,current,t,candidate,total);
+}
 function finish(c,current,stages,steps,total){
   return {...current,stages,simplification:{originalControlCount:c.input.points.length,controlCount:current.points.length,
     removedKnots:steps.length,tolerance:c.budget,errorBound:total,remainingBudget:Math.max(0,c.budget-total),steps,
@@ -63,8 +72,7 @@ function run(input,reverse){
     for(const t of knots){
       while(candidates(current).includes(t)){
         if(++attempts>c.maxAttempts)return null;
-        let candidate;try{candidate=removeEditableSplineKnot(c.method,current,t,c.budget-total);}catch{break;}
-        const checked=step(c,current,t,candidate,total);if(!checked)break;
+        const checked=tryRemoval(c,current,t,total);if(!checked)break;
         current=checked.curve;total=checked.total;stages.push({t,curve:current});steps.push(checked.record);changed=true;
       }
     }
@@ -73,6 +81,33 @@ function run(input,reverse){
 }
 export const simplifySplineKnots=input=>run(input,false);
 export const simplifySplineKnotsReverse=input=>run(input,true);
+
+export function simplifySplineKnotsLeastError(input){
+  const context=prepare(input);
+  if(!context)return null;
+  const stages=[],steps=[];
+  let current=context.input,total=0,attempts=0;
+  while(true){
+    let best=null;
+    for(const t of candidates(current)){
+      // A repeated right endpoint represents the same periodic seam as the left.
+      if(current.periodic && t===current.periodicKnots.at(-1))continue;
+      if(++attempts>context.maxAttempts)return null;
+      const candidate=tryRemoval(context,current,t,total);
+      if(candidate && (!best || candidate.record.errorBound<best.record.errorBound)){
+        best=candidate;
+        // Knots are in ascending order. No later candidate can beat zero,
+        // including under the smaller-knot tie break.
+        if(best.record.errorBound===0)break;
+      }
+    }
+    if(!best)return finish(context,current,stages,steps,total);
+    current=best.curve;
+    total=best.total;
+    stages.push({t:best.record.t,curve:current});
+    steps.push(best.record);
+  }
+}
 
 export function simplifyEditableSplineKnots(method,input,tolerance=1e-7,simplify=simplifySplineKnots){
   if(!['bSplineCurve','nurbsCurve'].includes(method)||!input)throw Error('ノット一括簡約は標準B-spline・NURBSに対応しています。');
