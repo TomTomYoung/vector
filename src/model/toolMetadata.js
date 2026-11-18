@@ -545,6 +545,11 @@ export const toolMetadata = Object.freeze({
     "algorithm": "曲線形状を保つ単一ノット挿入（Boehm系）。有理曲線は重みつきで補間",
     "source": "src/model/splines.js"
   },
+  "reduceSplineToDegree": {
+    "label": "適応分割で一括次数下げ",
+    "algorithm": "適応二分割・同次係数最小二乗・Givens QR・残予算の等分配・全段階検証・三角不等式による累積偏差上限",
+    "source": "src/model/splineReductionPlan.js"
+  },
   "reduceSplineDegree": {
     "label": "標準",
     "algorithm": "同次Bernstein係数の端点固定最小二乗・Givens QR・再次数上げによる全区間偏差検証",

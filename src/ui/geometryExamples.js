@@ -114,6 +114,7 @@ const groups = {
     bezierLengthBounds: ["曲線長の上下限", {points, tolerance: 0.01}], arcToCubics: ["円弧を3次ベジェで近似", {arc}],
     clampedKnots: ["両端固定のノット列", {count: 4, degree: 2}], bSplinePoint: ["Bスプラインの評価", spline],
     nurbsPoint: ["NURBSの評価", {...spline, weights: [1, 2, 2, 1]}], insertSplineKnot: ["ノット挿入", spline],
+    reduceSplineToDegree: ["全体誤差予算内で目標次数まで下げる", {points:[p(0,0),p(1,2),p(2,-1),p(3,0)],degree:3,targetDegree:1,tolerance:0.01}],
     reduceSplineDegree: ["許容差内で次数を1下げる", {points:[p(0,0),p(1,2),p(2,2),p(3,0)],degree:3,tolerance:1e-7}],
     elevateSplineDegree: ["形状を保って次数を1上げる", {points:[p(0,0),p(1,2),p(3,1),p(4,0)],degree:2,tolerance:1e-7}],
     removeSplineKnot: ["許容差内でノットを1個削除", {points:[p(0,0),p(0.75,1),p(2.25,1),p(3,0)],degree:2,knots:[0,0,0,0.5,1,1,1],t:0.5,tolerance:1e-7}],
