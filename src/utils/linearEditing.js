@@ -94,7 +94,7 @@ export function edit(name, el, canvas, edges, point, execute, save) {
   const edited = [el];
   for (const points of parts.slice(1)) {
     const next = el.cloneNode(false);
-    for (const attr of ["id", "data-line-id", "data-vector-corner-draft-id", "data-polyline-id", "data-path-id", "data-vector-selected", "data-vector-indice"]) next.removeAttribute(attr);
+    for (const attr of ["id", "data-line-id", "data-vector-corner-draft-id", "data-vector-offset-draft-id", "data-polyline-id", "data-path-id", "data-vector-selected", "data-vector-indice"]) next.removeAttribute(attr);
     writePoints(next, points, shape.inverse);
     previous.after(next);
     previous = next;

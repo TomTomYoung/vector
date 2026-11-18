@@ -1,3 +1,6 @@
+import {validDraftReferenceId} from './draftReference.js';
+
+export const offsetTargetLabels=Object.freeze({line:'線分',polyline:'ポリライン',rect:'矩形',circle:'円'});
 export const constructionInputTools = ['bSplineCurve','nurbsCurve','convexHull','triangulatePolygon','delaunayTriangles','voronoiCells','fitLine','fitCircle','minimumEnclosingCircle'];
 export const constructionDraftTools = ['line','polyline','quadraticBezier','cubicBezier','nthBezier'];
 export const constructionShapeTools = ['rectangle','circle','arc','polygon'];
@@ -67,7 +70,8 @@ export function parseConstructionInputPresets(value) {
     const periodicVersion = ['bSplineCurve','nurbsCurve'].includes(name) && entry.version===2;
     // Version 2 was previously retained as an opaque corner record in saved drawings.
     const cornerDraft=['fillet','chamfer'].includes(name)&&entry.version===3;
-    if(entry.version!==1 && !periodicVersion && !cornerDraft)continue;
+    const offsetDraft=name==='offset'&&entry.version===3;
+    if(entry.version!==1 && !periodicVersion && !cornerDraft && !offsetDraft)continue;
     if(constructionDraftTools.includes(name)){
       const input=entry.input;keys(input,['points',...(name==='nthBezier'?['degree']:[])]);
       if(name==='nthBezier'&&(!Number.isInteger(input.degree)||input.degree<2||input.degree>12))fail();
@@ -81,7 +85,15 @@ export function parseConstructionInputPresets(value) {
       if(cornerDraft){
         expected.push('firstLine');
         const id=entry.input.firstLine;
-        if(id!==null && !(typeof id==='string' && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)))fail();
+        if(id!==null&&!validDraftReferenceId(id))fail();
+      }
+      if(offsetDraft){
+        expected.push('target');
+        const target=entry.input.target;
+        if(target!==null){
+          keys(target,['id','tag']);
+          if(!validDraftReferenceId(target.id)||typeof target.tag!=='string'||!Object.hasOwn(offsetTargetLabels,target.tag))fail();
+        }
       }
       keys(entry.input,expected);
       for(const [key,label,min,max] of fields){const v=entry.input[key];if(!Number.isFinite(v)||v<min||v>max)throw RangeError(label+'は'+min+'〜'+max+'の有限数で指定してください。');}

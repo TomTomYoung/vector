@@ -4178,6 +4178,76 @@ await check('Copy and paste of a saved first line leaves its draft attached to t
   }finally{app.element.remove();}
 });
 
+const offsetDraftCases=[
+  {tag:'line',attrs:'x1="100" y1="100" x2="180" y2="100"',side:[140,125],check:copy=>copy.y1.baseVal.value===115&&copy.y2.baseVal.value===115},
+  {tag:'polyline',attrs:'points="100,100 180,100 180,180"',side:[140,125],check:copy=>copy.points.numberOfItems===3&&copy.points.getItem(0).y===115},
+  {tag:'rect',attrs:'x="100" y="100" width="100" height="80"',side:[140,130],check:copy=>copy.x.baseVal.value===115&&copy.width.baseVal.value===70},
+  {tag:'circle',attrs:'cx="140" cy="140" r="30"',side:[200,140],check:copy=>copy.r.baseVal.value===45},
+];
+for(const {tag,attrs,side,check:checkGeometry} of offsetDraftCases){
+  await check('Saved offset '+tag+' target resumes in its group and commits only after a side click',async()=>{
+    const app=await preferenceEditor('{preferences:false}');
+    try{
+      app.w.DrawingDocument.open('<svg xmlns="http://www.w3.org/2000/svg"><g id="offset-frame" transform="translate(20 10)"><'+tag+' id="offset-source" '+attrs+' stroke="black" fill="none"/></g></svg>');
+      app.d.getElementById('offset-tool').click();
+      preferenceNumber(app,'オフセット距離',15);preferenceNumber(app,'Miter実装の上限比',3);
+      let source=app.d.getElementById('offset-source');parameterClick(app,135,115,source);
+      inputPresetAction(app,'record-draft');await tick();
+      assert(inputPresetState(app).entries.offset.input.target.tag===tag,'typed target stored');
+      const xml=app.w.DrawingDocument.serialize();
+      app.w.DrawingDocument.open(xml);app.d.getElementById('offset-tool').click();
+      source=app.d.getElementById('offset-source');const tool=app.w.toolManager.tools.offset;
+      const group=app.d.getElementById('offset-frame');
+      assert(tool.selectedElement===null&&!source.hasAttribute('data-vector-highlight'),'no automatic selection');
+      tool.offsetDistance=2;tool.miterLimit=9;inputPresetAction(app,'restore');
+      assert(tool.selectedElement===source&&tool.offsetDistance===15&&tool.miterLimit===3&&group.children.length===1,'restore waits for side');
+      app.w.saveState();await tick();const history=app.w.undoStack.length;
+      parameterClick(app,side[0]+20,side[1]+10);await tick();const copy=source.nextElementSibling;
+      assert(copy?.localName===tag&&checkGeometry(copy)&&!copy.hasAttribute('data-vector-offset-draft-id'),'direction and local geometry');
+      assert(!source.hasAttribute('data-vector-highlight')&&app.w.undoStack.length===history+1,'one completed edit');
+      app.w.undo();assert(app.d.getElementById('offset-frame').children.length===1&&inputPresetState(app).entries.offset.input.target.tag===tag,'undo keeps saved target');
+      app.w.redo();assert(app.d.getElementById('offset-frame').children.length===2,'redo copy');
+    }finally{app.element.remove();}
+  });
+}
+await check('Named offset targets and sets preserve live picks and methods on failed restore and permit retry',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    app.w.DrawingDocument.open(parameterCornerSVG);app.d.getElementById('offset-tool').click();
+    const tool=app.w.toolManager.tools.offset,host=app.w.toolManager.host,a=app.d.getElementById('parameter-h'),b=app.d.getElementById('parameter-v');
+    parameterClick(app,150,100,a);tool.offsetDistance=25;tool.miterLimit=4;
+    namedName(app,'対象');namedAction(app,'create-draft');
+    host.selectImplementation('offset','miter');setName(app,'対象と方式');setAction(app,'create-draft');
+    draftKey(app,'Escape');assert(!a.hasAttribute('data-vector-highlight'),'Esc removes highlight');
+    parameterClick(app,100,160,b);tool.offsetDistance=7;tool.miterLimit=2;host.selectImplementation('offset','default');
+    a.style.display='none';
+    for(const action of [namedAction,setAction]){
+      action(app,'restore');assert(tool.selectedElement===b&&tool.offsetDistance===7&&tool.miterLimit===2,'current target and dimensions preserved');
+      assert(host.describe('offset').id==='default'&&!b.hasAttribute('data-vector-offset-draft-id'),'method and unrecorded target preserved');
+    }
+    a.style.removeProperty('display');setAction(app,'restore');
+    assert(tool.selectedElement===a&&host.describe('offset').id==='miter'&&tool.offsetDistance===25,'retry');
+    a.remove();const count=app.d.querySelectorAll('#canvas line').length;parameterClick(app,130,135);
+    assert(tool.selectedElement===null&&app.d.querySelectorAll('#canvas line').length===count&&tool.implementationError.includes('削除'),'deleted between restore and direction');
+    parameterClick(app,100,160,b);app.d.getElementById('select-tool').click();
+    assert(!b.hasAttribute('data-vector-highlight'),'tool switch releases current highlight');
+  }finally{app.element.remove();}
+});
+await check('Paste and split keep an offset draft bound solely to the original line',async()=>{
+  const app=await preferenceEditor('{preferences:false}');
+  try{
+    app.w.DrawingDocument.open(parameterCornerSVG);app.d.getElementById('offset-tool').click();
+    const canvas=app.d.getElementById('canvas'),source=app.d.getElementById('parameter-h');
+    parameterClick(app,150,100,source);inputPresetAction(app,'record-draft');
+    app.d.getElementById('select-tool').click();
+    const select=app.w.selectTool;select.selectObject(source);select.copySelectedObjects();select.pasteObjects();
+    const parts=app.w.VectorUtils.linearEditing.split(source,canvas,{x:180,y:100});
+    assert(parts?.length===2&&canvas.querySelectorAll('[data-vector-offset-draft-id]').length===1,'copies and split pieces have distinct identities');
+    app.d.getElementById('offset-tool').click();inputPresetAction(app,'restore');
+    assert(app.w.toolManager.tools.offset.selectedElement===source&&source.x2.baseVal.value===180,'restore follows edited original');
+  }finally{app.element.remove();}
+});
+
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
 </script>

@@ -1,4 +1,5 @@
 import {exportConstructionParameters,parseConstructionInputPresets} from './constructionInputPresets.js';
+import {prepareDraftReference,resolveDraftReference} from './draftReference.js';
 
 const attribute='data-vector-corner-draft-id';
 
@@ -7,10 +8,6 @@ function requireEditableLine(controller,line){
     !controller.canvas.contains(line)||!controller.selectTool.canSelect(line)){
     throw Error('1本目には図面内の表示中でロックされていない線分が必要です。');
   }
-}
-
-function matches(canvas,id){
-  return Array.from(canvas.querySelectorAll('['+attribute+']')).filter(el=>el.getAttribute(attribute)===id);
 }
 
 function setSelection(name,controller,lines){
@@ -26,21 +23,16 @@ export function prepare(name,controller){
   const line=controller.selectedLines[0];
   if(!line)return {entry:{version:3,input:{...parameters,firstLine:null}}};
   requireEditableLine(controller,line);
-  const existing=line.getAttribute(attribute),id=existing??crypto.randomUUID();
-  const found=matches(controller.canvas,id);
-  if(existing ? found.length!==1 || found[0]!==line : found.length!==0)throw Error('1本目の線分の参照IDが重複しています。');
+  const {id,commit}=prepareDraftReference(controller.canvas,attribute,line);
   const entry={version:3,input:{...parameters,firstLine:id}};
-  return {entry,commit:existing?undefined:()=>line.setAttribute(attribute,id)};
+  return {entry,commit};
 }
 
 export function restore(name,controller,entry){
   if(!controller.isActive||entry?.version!==3)throw Error('対応する角加工ツールを先に選択してください。');
   const {firstLine,...parameters}=parseConstructionInputPresets({version:1,entries:{[name]:entry}}).entries[name].input;
-  const lines=firstLine===null?[]:matches(controller.canvas,firstLine);
-  if(firstLine!==null){
-    if(lines.length!==1)throw Error('記録した1本目の線分が図面内に見つからないか、参照IDが重複しています。');
-    requireEditableLine(controller,lines[0]);
-  }
+  const lines=firstLine===null?[]:[resolveDraftReference(controller.canvas,attribute,firstLine)];
+  if(lines.length)requireEditableLine(controller,lines[0]);
   Object.assign(controller,parameters);
   setSelection(name,controller,lines);
   controller.implementationError='';
