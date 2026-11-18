@@ -324,7 +324,7 @@ await check("Workbench selects real examples, reports invalid JSON and runs the 
   try {
     const d = other.contentDocument, get = id => d.getElementById(id);
     const select = get("tool"), input = get("input"), status = get("status");
-    assert(select.options.length === 122, "public examples loaded");
+    assert(select.options.length === 123, "public examples loaded");
     select.value = "polygonBoolean";
     select.dispatchEvent(new Event("change"));
     const example = JSON.parse(input.value);
