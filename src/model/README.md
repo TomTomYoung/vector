@@ -78,7 +78,7 @@ window.vectorEditorOptions = {
 
 ## ノット削除
 
-[splineKnotRemoval.js](splineKnotRemoval.js) の `removeSplineKnot({points,degree,knots?,weights?,t,tolerance?})` は、非周期B-spline・全区間の分母を検証できるNURBSから既存の内部ノットを1個削除します。結果は制御点・次数・ノット・任意の重みと `removal: {t,tolerance,errorBound,denominator?}`、削除不能では `null` です。許容差の既定値は1e-7。再挿入した制御点から偏差上限を推定し、許容差内の候補だけ返します。[計算・API・換装・参照資料・制約](../../doc/spline-knot-removal.md)を参照してください。
+[splineKnotRemoval.js](splineKnotRemoval.js) の `removeSplineKnot({points,degree,knots?,weights?,t,tolerance?})` は、非周期B-spline・全区間の分母を検証できるNURBSから既存の内部ノットを1個削除します。極から離れたNURBSのノットを削除するには [枝単位の検査](../../doc/spline-branch-removal.md) を指定できます。結果は制御点・次数・ノット・任意の重みと `removal: {t,tolerance,errorBound,denominator?}`、削除不能では `null` です。許容差の既定値は1e-7。再挿入した制御点から偏差上限を推定し、許容差内の候補だけ返します。[計算・API・換装・参照資料・制約](../../doc/spline-knot-removal.md)を参照してください。
 
 低水準のノット削除は、周期展開した非周期評価用配列に対応するため制御点3012個まで受け付けます。作図・再編集の元制御点は1000個までです。周期曲線への接続、単一削除の2回または3回の呼出しと最終偏差検証は [periodic-knot-removal.md](../../doc/periodic-knot-removal.md) に記載しています。
 

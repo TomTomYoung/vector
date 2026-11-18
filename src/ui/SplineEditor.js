@@ -21,7 +21,7 @@ class SplineEditor {
         planTargetText:String(Math.max(1,input.degree-2)),planToleranceText:'0.001',planImplementation:this.manager.host.describe('reduceSplineToDegree').id,
         reductionToleranceText:'0.0000001',reduceImplementation:this.manager.host.describe('reduceSplineDegree').id,
         elevationToleranceText:'0.0000001',elevateImplementation:this.manager.host.describe('elevateSplineDegree').id,
-        removeKnotText:'',removalToleranceText:'0.0000001',removeImplementation:this.manager.host.describe('removeSplineKnot').id,
+        branchRemoval:false,removeKnotText:'',removalToleranceText:'0.0000001',removeImplementation:this.manager.host.describe('removeSplineKnot').id,
         pointsText:input.points.map(p=>p.x+', '+p.y).join('\n'),degree:input.degree,periodic:!!input.periodic,
         knotsText:input.knots?.join(', ') ?? '',periodicKnotsText:input.periodicKnots?.join(', ') ?? '',weightsText:input.weights?.join(', ') ?? '',options:{...options}};
       this.message='座標は図形のローカル座標です。移動・回転・色・線幅・レイヤーは保持します。';
@@ -106,17 +106,17 @@ class SplineEditor {
       const info=host.implementations('removeSplineKnot').find(v=>v.id===d.removeImplementation);
       if(!info)throw Error('選択したノット削除実装がありません。');
       const next=window.VectorUtils.removeEditableSplineKnot(d.method,this.input(),Number(d.removeKnotText),Number(d.removalToleranceText),
-        input=>host.execute('removeSplineKnot',input,{implementation:d.removeImplementation}));
+        input=>host.execute('removeSplineKnot',input,{implementation:d.removeImplementation}),d.branchRemoval?'branch':'whole');
       this.checkReference(next);
       d.refinement={tool:'removeSplineKnot',id:info.id,label:info.label,algorithm:info.algorithm,source:info.source??null,...next.removal,
-        verification:next.removal.denominator?{algorithm:(next.periodic?'周期再構成・標準再挿入後の':'')+'Bernstein分母範囲と区間別偏差上限を検証',source:'src/model/splineDeviation.js'}:next.periodic?{algorithm:'周期再構成・標準再挿入後の1周期全体の偏差上限を推定',source:'src/adapters/periodicSplineRemoval.js'}:
+        verification:next.removal.branch?{algorithm:'影響区間の分母・偏差と影響外の局所基底・元制御点・重みを照合',source:'src/model/splineBranchRemoval.js'}:next.removal.denominator?{algorithm:(next.periodic?'周期再構成・標準再挿入後の':'')+'Bernstein分母範囲と区間別偏差上限を検証',source:'src/model/splineDeviation.js'}:next.periodic?{algorithm:'周期再構成・標準再挿入後の1周期全体の偏差上限を推定',source:'src/adapters/periodicSplineRemoval.js'}:
           {algorithm:'共通ノット列の制御点から偏差上限を推定',source:'src/model/splineKnotRemoval.js'}};
       d.pointsText=next.points.map(p=>p.x+', '+p.y).join('\n');
       if(next.periodic)d.periodicKnotsText=next.periodicKnots.join(', ');else d.knotsText=next.knots.join(', ');
       if(next.weights)d.weightsText=next.weights.join(', ');
       this.changed();this.showPreview(false);
       const moved=next.removal.periodic?.domainShift;
-      this.message=`ノットを下書きから1個削除しました。${moved?`パラメータ区間 ${moved.from.join('〜')} → ${moved.to.join('〜')}（周期 ${moved.period}）。`:''}推定偏差上限 ${next.removal.errorBound}、許容差 ${next.removal.tolerance}。「適用」で反映します。 `+this.message;
+      this.message=`ノットを下書きから1個削除しました。${moved?`パラメータ区間 ${moved.from.join('〜')} → ${moved.to.join('〜')}（周期 ${moved.period}）。`:''}${next.removal.branch?'枝の検査範囲 '+next.removal.branch.ranges.map(r=>r.join('〜')).join('、')+'。':''}推定偏差上限 ${next.removal.errorBound}、許容差 ${next.removal.tolerance}。「適用」で反映します。 `+this.message;
     }catch(error){this.message=error.message;}
     this.refresh();
   }
@@ -347,12 +347,21 @@ class SplineEditor {
     }
 
     const removalInfo=document.createElement('p');removalInfo.dataset.splineRemovalInfo='';removalInfo.style.fontSize='12px';
-    removalInfo.textContent=(d.periodic?'3周期展開・1周期抽出・再挿入照合でノットを削除します。両端は同じ継ぎ目として扱います。継ぎ目の最後のノットを削除すると、周期を保ってパラメータ区間の始端を次のノットへ移します。':'内部ノットを1個削除し、制御点から推定した偏差上限が許容差以下の場合に下書きを更新します。')+'零・正負混在のNURBS重みも、全区間の分母を零から分離して検証できる場合に対応します。極や未検証区間を含む曲線は削除しません。許容差は図形のローカル座標で指定し、各削除の直前の曲線と比較します。';container.append(removalInfo);
+    removalInfo.textContent=(d.periodic?'3周期展開・1周期抽出・再挿入照合でノットを削除します。両端は同じ継ぎ目として扱います。継ぎ目の最後のノットを削除すると、周期を保ってパラメータ区間の始端を次のノットへ移します。':'内部ノットを1個削除し、制御点から推定した偏差上限が許容差以下の場合に下書きを更新します。')+'零・正負混在のNURBS重みも、全区間の分母を零から分離して検証できる場合に対応します。許容差は図形のローカル座標で指定し、各削除の直前の曲線と比較します。';container.append(removalInfo);
     {
       for(const [labelText,key] of [['削除するノット値','removeKnotText'],['ノット削除の許容差','removalToleranceText']]){
         const label=document.createElement('label');label.textContent=labelText;label.style.cssText='display:block;font-size:12px;margin:10px 0';
         const value=document.createElement('input');value.type='text';value.value=d[key];value.setAttribute('aria-label',labelText);value.style.width='100%';
         value.addEventListener('input',()=>{d[key]=value.value;});label.append(value);container.append(label);
+      }
+      if(d.method==='nurbsCurve'){
+        const label=document.createElement('label'),checkbox=document.createElement('input');
+        checkbox.type='checkbox';checkbox.checked=d.branchRemoval;checkbox.setAttribute('aria-label','指定ノットがある枝だけを編集');
+        checkbox.addEventListener('change',()=>{d.branchRemoval=checkbox.checked;});
+        label.append(checkbox,'指定ノットがある枝だけを編集');container.append(label);
+        const hint=document.createElement('p');
+        hint.textContent='別の場所に極がある場合に選びます。指定ノットが影響する範囲で分母と許容差を検査し、それ以外の区間では元の曲線と一致することを確かめます。';
+        container.append(hint);
       }
       choice('ノット削除の実装','removeImplementation',this.manager.host.implementations('removeSplineKnot'));
       button('許容差内でノットを削除',()=>this.removeKnot(),'remove-knot');

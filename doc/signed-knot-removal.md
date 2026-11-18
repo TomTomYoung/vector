@@ -1,6 +1,6 @@
 # 零・正負混在の重みを持つNURBSのノット削除
 
-2026-11-17に、零や正負が混在する重みのNURBSをノット削除の対象に追加しました。非周期曲線と周期曲線の内部ノット・重複した継ぎ目・最後の継ぎ目の区間移動に対応します。削除前後の全有効区間で分母を零から分離でき、推定偏差が許容差内になる候補だけを採用します。極を含む曲線の枝ごとの削除は未導入です。計算120機能・GUI31ツールは変わりません。
+2026-11-17に、零や正負が混在する重みのNURBSをノット削除の対象に追加しました。非周期曲線と周期曲線の内部ノット・重複した継ぎ目・最後の継ぎ目の区間移動に対応します。削除前後の全有効区間で分母を零から分離でき、推定偏差が許容差内になる候補だけを採用します。極から離れた[枝に限定するノット削除](spline-branch-removal.md)にも対応しました。計算120機能・GUI31ツールは変わりません。
 
 ## 操作と対象
 
@@ -48,7 +48,7 @@ Bernstein検証を使った成功結果には `removal.denominator` を追加し
 
 2026-11-17に、MITのPatrikalakis・Maekawa・Choによる [Bézier曲線の定義と性質](https://web.mit.edu/hyperbook/Patrikalakis-Maekawa-Cho/node12.html)、[de Casteljau分割](https://web.mit.edu/hyperbook/Patrikalakis-Maekawa-Cho/node13.html)、[Boehm挿入・Tillerのノット削除](https://web.mit.edu/hyperbook/Patrikalakis-Maekawa-Cho/node18.html)、Sheneの [同次座標でのde Boor評価](https://pages.mtu.edu/~shene/COURSES/cs3621/NOTES/spline/de-Boor.html) を照合しました。係数範囲による分母検査と上記の偏差式を本リポジトリの検証として組み合わせたもので、新しい名前付き論文の実装を移植したものではありません。既存の極形式実装の参照資料は [spline-branches.md](spline-branches.md#実装時に参照した一次資料)、Tiller原論文の確認範囲は [spline-knot-removal.md](spline-knot-removal.md#参照した資料と未導入部分)です。
 
-全計算はbinary64による推定であり、外向き丸めによる厳密な区間保証ではありません。分母が実際には零でなくても、係数範囲・除外幅・処理上限で確認できない入力は拒否する場合があります。極を含む曲線の枝ごとの削除、可除特異点の相殺、厳密な根分離、無限遠の同次制御点の編集、全ノット一括簡約、曲面は未導入です。
+全計算はbinary64による推定であり、外向き丸めによる厳密な区間保証ではありません。分母が実際には零でなくても、係数範囲・除外幅・処理上限で確認できない入力は拒否する場合があります。極から離れた[枝に限定するノット削除](spline-branch-removal.md)にも対応しました。可除特異点の相殺、厳密な根分離、無限遠の同次制御点の編集、全ノット一括簡約、曲面は未導入です。
 
 [signedSplineRemoval.test.mjs](../tests/signedSplineRemoval.test.mjs) は次数1〜12、零・混在重み、正負の共通スケール、独立したde Boor評価、近似の偏差、分母の零・重根・近接根・未検証区間、分割上限、符号の異なる不連続区間、周期の内部・継ぎ目・区間移動、1000制御点、換装の途中失敗・偽装、保存往復を検証します。[editor.html](../tests/editor.html) は方式表示・保存・Undo/Redo、周期の閉じ方、零重み制御点、ドラッグ、極・不正結果の拒否、取消、演算室Workerを確認します。
 

@@ -36,7 +36,7 @@
 
 [splineRefinement.test.mjs](../tests/splineRefinement.test.mjs)は次数1〜12、非一様ノット、重複挿入、零・正・負の重み、形状の数値一致、非破壊性、境界・上限・非有限結果、換装実装の出力検査、SVG元モデルの往復を検証します。[editor.html](../tests/editor.html)は複数回挿入、適用前の保持、Undo/Redo、保存と再編集、実装選択・記録、失敗・取消、新制御点のドラッグを確認します。
 
-非周期B-spline・NURBSの[許容差付きノット削除](spline-knot-removal.md)は実装済みです。周期曲線の[内部ノット・継ぎ目の削除と区間移動](periodic-knot-removal.md)も実装済みです。極を含むNURBSの枝ごとの削除、無限遠の同次制御点の編集、厳密算術は残る範囲です。
+非周期B-spline・NURBSの[許容差付きノット削除](spline-knot-removal.md)は実装済みです。周期曲線の[内部ノット・継ぎ目の削除と区間移動](periodic-knot-removal.md)も実装済みです。極から離れた[枝に限定するノット削除](spline-branch-removal.md)にも対応しました。無限遠の同次制御点の編集、厳密算術は残る範囲です。
 
 零・正負混在の重みの削除は[全区間の分母を検証できる範囲](signed-knot-removal.md)で対応済みです。
 
