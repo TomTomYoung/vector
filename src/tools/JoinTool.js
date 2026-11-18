@@ -1,22 +1,42 @@
-// JoinTool.js
-// 結合ツール（複数の線を1つのポリラインに結合）
-//
-// 【依存関係】
-// - SvgUtils (window.SvgUtils): SVG要素作成
-// - GeometryUtils (window.GeometryUtils): 幾何計算
-//
-// 【使用する外部関数】
-// - SvgUtils.createElement(): SVG要素作成
-// - GeometryUtils.distance(): 2点間距離
-
 class JoinTool extends BaseTool {
   constructor(canvas, toolManager) {
     super(canvas, toolManager);
     this.selectedElements = [];
+    this.inputPresetVersion = 2;
+    this.inputPresetInstructions = '線分・ポリラインをクリックして選択を追加・解除できます。端点がつながる線を2本以上選び、Enterで結合してください。';
+    this.implementationError = '';
   }
 
   getTitle() {
     return "結合";
+  }
+
+  joinOutline(element) {
+    if (!['line', 'polyline'].includes(element?.localName)) return null;
+    return window.VectorUtils.linearEditing.editableOutline(element, this.canvas, this.selectTool);
+  }
+
+  prepareInputPreset() {
+    if (!this.isActive) throw Error('記録する結合ツールを先に選択してください。');
+    const {references, commit} = window.VectorUtils.prepareOutlineReferences(
+      this.canvas, this.selectedElements, element => this.joinOutline(element)
+    );
+    return {entry: {version: 2, input: {elements: references}}, commit};
+  }
+
+  restoreInputPreset(entry) {
+    if (!this.isActive || entry?.version !== this.inputPresetVersion) throw Error('このツール・版では結合する線を復元できません。');
+    const utils = window.VectorUtils;
+    const checked = utils.parseConstructionInputPresets({version: 1, entries: {join: entry}});
+    const elements = utils.resolveOutlineReferences(
+      this.canvas, checked.entries.join.input.elements, element => this.joinOutline(element)
+    );
+    this.replaceSelection(elements);
+  }
+
+  captureInputRollback() {
+    const elements = this.selectedElements.slice(), message = this.implementationError;
+    return () => this.replaceSelection(elements, message);
   }
 
   getInstructions() {
@@ -53,7 +73,6 @@ class JoinTool extends BaseTool {
     super.deactivate();
     this.removeJoinControls();
     this.clearSelection();
-    this.updatePanel();
   }
 
   createJoinControls() {
@@ -90,9 +109,8 @@ class JoinTool extends BaseTool {
   }
 
   handleMouseDown(event) {
+    if (!this.isActive || event.button !== 0 || event.target === this.canvas) return;
     super.handleMouseDown(event);
-
-    if (event.target === this.canvas) return;
 
     if (event.target.tagName === "line" || event.target.tagName === "polyline") {
       this.toggleSelection(event.target);
@@ -108,6 +126,8 @@ class JoinTool extends BaseTool {
   }
 
   selectElement(element) {
+    if (this.selectedElements.includes(element) || !this.joinOutline(element)) return;
+    this.implementationError = '';
     this.selectedElements.push(element);
     element.setAttribute("data-vector-highlight", "join");
 
@@ -118,6 +138,7 @@ class JoinTool extends BaseTool {
   deselectElement(element) {
     const index = this.selectedElements.indexOf(element);
     if (index > -1) {
+      this.implementationError = '';
       this.selectedElements.splice(index, 1);
       element.removeAttribute("data-vector-highlight");
     }
@@ -126,14 +147,16 @@ class JoinTool extends BaseTool {
     this.updatePanel();
   }
 
-  clearSelection() {
-    this.selectedElements.forEach((element) => {
-      element.removeAttribute("data-vector-highlight");
-    });
-    this.selectedElements = [];
+  replaceSelection(elements, message = '') {
+    this.selectedElements.forEach(element => element.removeAttribute('data-vector-highlight'));
+    this.selectedElements = elements;
+    this.implementationError = message;
+    elements.forEach(element => element.setAttribute('data-vector-highlight', 'join'));
     this.updateInfo();
-    this.updatePanel();
+    if (this.isActive) this.updatePanel();
   }
+
+  clearSelection() { this.replaceSelection([]); }
 
   updateInfo() {
     const info = document.querySelector("#join-controls .control-info");
@@ -144,35 +167,40 @@ class JoinTool extends BaseTool {
 
   joinElements() {
     if (this.selectedElements.length < 2) {
-      console.log("少なくとも2つの線を選択してください");
+      this.implementationError = '端点がつながる線を2本以上選んでください。';
+      this.updatePanel();
       return;
     }
 
-    // 全ての要素を点の配列に変換
-    const segments = this.selectedElements.map(el => window.VectorUtils.linearEditing.outline(el, this.canvas)?.points ?? []);
-
-    // 連結された線を見つけて順序付け
-    const orderedPoints = this.run("join", {segments});
-    const dependencies = this.toolManager.host.execute.trace?.();
-
-    if (orderedPoints.length === 0) {
-      console.log("選択した線は連結されていません");
+    const segments = this.selectedElements.map(element => this.joinOutline(element)?.points);
+    if (segments.some(points => !points)) {
+      this.implementationError = '使用できない線があります。表示・ロック・形状を確認するか、Escで選び直してください。';
+      this.updatePanel();
       return;
     }
-
-    const first = this.selectedElements[0];
-    const polyline = this.draw("polyline", {points: orderedPoints});
-    this.toolManager.host.annotate?.(polyline, 'join', {dependencies});
-    window.SvgUtils.setAttributes(polyline, {
-      stroke: first.getAttribute("stroke"), "stroke-width": first.getAttribute("stroke-width"),
-      fill: "none", "data-layer": first.getAttribute("data-layer"),
-    });
-
-    this.saveState();
+    try {
+      const points = this.run("join", {segments});
+      const dependencies = this.toolManager.host.execute.trace?.();
+      if (!points.length) throw Error('選択した線の端点がつながっていません。選択または線の位置を確認してください。');
+      if (points.length < 2 || !points.every(p => Number.isFinite(p.x) && Number.isFinite(p.y))) {
+        throw Error('結合後の点列が不正です。');
+      }
+      const first = this.selectedElements[0];
+      const polyline = this.draw("polyline", {points});
+      this.toolManager.host.annotate?.(polyline, 'join', {dependencies});
+      window.SvgUtils.setAttributes(polyline, {
+        stroke: first.getAttribute("stroke"), "stroke-width": first.getAttribute("stroke-width"),
+        fill: "none", "data-layer": first.getAttribute("data-layer"),
+      });
+      this.canvas.appendChild(polyline);
+    } catch (error) {
+      this.implementationError = '結合できません。' + error.message;
+      this.updatePanel();
+      return;
+    }
     this.selectedElements.forEach(el => el.remove());
-    this.canvas.appendChild(polyline);
+    this.saveState();
     this.clearSelection();
-    this.updatePanel();
   }
 
   handleKeyDown(event) {
@@ -182,7 +210,6 @@ class JoinTool extends BaseTool {
 
     if (event.key === "Escape") {
       this.clearSelection();
-      this.updatePanel();
     }
   }
 }

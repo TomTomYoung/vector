@@ -58,6 +58,15 @@ export function outline(el, canvas) {
   return {points, inverse};
 }
 
+// Picking, recording and executing an edit must agree about which geometry is usable.
+export function editableOutline(el, canvas, selectTool) {
+  if (el?.namespaceURI !== canvas.namespaceURI || !canvas.contains(el) || !selectTool.canSelect(el)) return null;
+  const shape = outline(el, canvas);
+  if (!shape || !shape.points.every(p => Number.isFinite(p.x) && Number.isFinite(p.y))) return null;
+  const first = shape.points[0];
+  return shape.points.some(p => p.x !== first.x || p.y !== first.y) ? shape : null;
+}
+
 export function writePoints(el, points, inverse) {
   // The generated spline model no longer describes an edited sampled outline.
   el.removeAttribute('data-vector-spline');

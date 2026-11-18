@@ -1,7 +1,5 @@
 // Shared selection and SVG draft for editing outlines against one or more boundaries.
 class BoundaryEditTool extends BaseTool {
-  static draftAttribute = 'data-vector-boundary-draft-id';
-
   constructor(canvas, toolManager, operation) {
     super(canvas, toolManager);
     this.operation = operation;
@@ -12,39 +10,23 @@ class BoundaryEditTool extends BaseTool {
   }
 
   canUseEdge(element) {
-    if (element?.namespaceURI !== this.svgNS || !this.canvas.contains(element) ||
-        !['line', 'polyline', 'path'].includes(element.localName) || !this.selectTool.canSelect(element)) return false;
-    const points = window.VectorUtils.linearEditing.outline(element, this.canvas)?.points;
-    return !!points && points.every(p => Number.isFinite(p.x) && Number.isFinite(p.y)) &&
-      points.some(p => p.x !== points[0].x || p.y !== points[0].y);
+    return !!window.VectorUtils.linearEditing.editableOutline(element, this.canvas, this.selectTool);
   }
 
   prepareInputPreset() {
     if (!this.isActive) throw Error('記録するツールを先に選択してください。');
-    const utils = window.VectorUtils, attr = BoundaryEditTool.draftAttribute;
-    const index = utils.indexDraftReferences(this.canvas, attr);
-    const pending = [], edges = [];
-    for (const edge of this.boundaryEdges) {
-      if (!this.canUseEdge(edge)) throw Error('記録する境界線に加工できない図形があります。');
-      const {id, commit} = utils.prepareDraftReference(this.canvas, attr, edge, index);
-      index.set(id, edge);
-      edges.push({id, tag: edge.localName});
-      if (commit) pending.push(commit);
-    }
-    return {entry: {version: 2, input: {mode: this.mode, edges}}, commit: () => pending.forEach(bind => bind())};
+    const {references, commit} = window.VectorUtils.prepareOutlineReferences(
+      this.canvas, this.boundaryEdges, edge => this.canUseEdge(edge)
+    );
+    return {entry: {version: 2, input: {mode: this.mode, edges: references}}, commit};
   }
 
   restoreInputPreset(entry) {
     if (!this.isActive || entry?.version !== this.inputPresetVersion) throw Error('このツール・版では境界線を復元できません。');
-    const utils = window.VectorUtils, attr = BoundaryEditTool.draftAttribute;
+    const utils = window.VectorUtils;
     const checked = utils.parseConstructionInputPresets({version: 1, entries: {[this.operation]: entry}});
     const {mode, edges} = checked.entries[this.operation].input;
-    const index = utils.indexDraftReferences(this.canvas, attr);
-    const resolved = edges.map(({id, tag}) => {
-      const edge = utils.resolveDraftReference(this.canvas, attr, id, index);
-      if (edge.localName !== tag || !this.canUseEdge(edge)) throw Error('記録した境界線の種類・形状、表示状態、レイヤーのロックを確認してください。');
-      return edge;
-    });
+    const resolved = utils.resolveOutlineReferences(this.canvas, edges, edge => this.canUseEdge(edge));
     this.replaceBoundaries(resolved, mode);
   }
 

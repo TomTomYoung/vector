@@ -43,7 +43,7 @@ import {createNamedImplementationPresets,parseNamedImplementationPresets} from '
 import {filterPresets} from '../adapters/presetOrder.js';
 import {readPresetSVG,presetImportRecords,planPresetImport,commitPresetImport} from '../adapters/presetImport.js';
 import * as cornerInputDraft from '../adapters/cornerInputDraft.js';
-import {indexDraftReferences,prepareDraftReference,resolveDraftReference} from '../adapters/draftReference.js';
+import {indexDraftReferences,prepareDraftReference,resolveDraftReference,prepareOutlineReferences,resolveOutlineReferences} from '../adapters/draftReference.js';
 import {createConstructionSets,parseConstructionSets} from '../adapters/constructionSets.js';
 import {createNamedConstructionInputs,parseNamedConstructionInputs} from '../adapters/namedConstructionInputs.js';
 import {offsetTargetLabels,createConstructionInputPresets,parseConstructionInputPresets,parseConstructionInput,parseConstructionDraft,parseCurveDraft,parseShapeDraft,parseAnnotationDraft,canRecordConstructionInput,hasConstructionDraft,supportsConstructionInput,constructionInputMode,constructionParameterFields,exportConstructionParameters,restoreConstructionParameters} from '../adapters/constructionInputPresets.js';
@@ -103,6 +103,8 @@ window.VectorUtils = {
   indexDraftReferences,
   prepareDraftReference,
   resolveDraftReference,
+  prepareOutlineReferences,
+  resolveOutlineReferences,
   offsetTargetLabels,
   canRecordConstructionInput,
   hasConstructionDraft,
