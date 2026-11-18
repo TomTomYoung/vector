@@ -54,8 +54,10 @@ try {
   const {sessionId} = await send("Target.attachToTarget", {targetId, flatten: true});
   await send("Runtime.enable", {}, sessionId);
   await send("Page.enable", {}, sessionId);
-  await send("Page.navigate", {url: process.env.VECTOR_TEST_URL ?? "http://127.0.0.1:8765/tests/editor.html"}, sessionId);
-  const deadline = Date.now() + 60000;
+  const url = "https://tomtomyoung.github.io/vector/tests/editor.html?revision=45c54e0";
+  console.log("Public Pages verification", url);
+  await send("Page.navigate", {url}, sessionId);
+  const deadline = Date.now() + 150000;
   let result;
   do {
     const response = await send("Runtime.evaluate", {expression: `(() => {
@@ -67,6 +69,10 @@ try {
     await delay(100);
   } while (Date.now() < deadline && !errors.length);
   console.log(result?.report ?? "The test page did not report a result.");
+  const passing = result?.report?.split("\n").filter(line => line.startsWith("PASS ")) ?? [];
+  if (passing.length !== 318 || !passing.some(line => line.includes("Workbench Worker computes a branch-specific proof"))) {
+    throw new Error("Expected the 318 checks deployed with PR #105");
+  }
   if (errors.length) throw new Error(errors.join("\n"));
   if (result?.status !== "passed") throw new Error("Browser test status: " + (result?.status ?? "missing"));
 } catch (error) {
