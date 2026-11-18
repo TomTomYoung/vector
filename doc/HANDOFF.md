@@ -88,6 +88,8 @@ PR #102のマージ後は [master CI](https://github.com/TomTomYoung/vector/acti
 
 結合ツールでクリックした線分とポリラインを1件記録・名前付き入力・作図セットへ保存できます。復元後は元の位置から移動した線も現在の座標で扱い、Enterで一度だけ結合します。元の線を使えない場合や端点が離れている場合は図面を保ち、理由をプロパティに表示します。入力を記録できるツールは28種類です。[操作と結合後の記録の扱い](construction-input-presets.md#結合する線の選択)
 
+[PR #103](https://github.com/TomTomYoung/vector/pull/103) の実装コミット `bbab581` に対する [CI 44280593788](https://github.com/TomTomYoung/vector/actions/runs/44280593788) でNode 414件・実Chrome 310件が全件成功しました。追加したNode 3件・実Chrome 4件で、保存失敗時の図形ID、復元失敗時の選択・方式の保持、グループ移動後の結合、選択順と線色・線幅・レイヤー、Undo/Redo、コピー・分割後の参照を検証しました。
+
 ## 現在の到達点
 
 リポジトリは [TomTomYoung/vector](https://github.com/TomTomYoung/vector)、開発・公開の基準ブランチは `master` です。[エディタ](https://tomtomyoung.github.io/vector/)と[演算室](https://tomtomyoung.github.io/vector/geometry.html)を GitHub Pages で公開しています。
