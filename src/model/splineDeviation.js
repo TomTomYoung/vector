@@ -18,27 +18,31 @@ export function homogeneousSplineDeviation(original,candidate,radius,rational) {
 
 // Signed weights require bounds on the denominator functions, not on individual
 // weights. Complete subdivision is mandatory: no omitted interval is accepted.
-export function rationalSplineDeviation(original,candidate,degree,knots,{maxDepth=18,maxNodes=32768}={}) {
+export function rationalSplineDeviation(original,candidate,degree,knots,options) {
   if(original.length!==candidate.length||!Number.isInteger(degree)||degree<1||degree>12||original.length<=degree||
     knots.length!==original.length+degree+1||!knots.every((k,i)=>Number.isFinite(k)&&(!i||k>=knots[i-1]))||
-    !Number.isInteger(maxDepth)||maxDepth<0||maxDepth>24||!Number.isInteger(maxNodes)||maxNodes<1||maxNodes>200000||
     ![...original,...candidate].every(h=>h&&[h.x,h.y,h.w].every(Number.isFinite)))return null;
   const scaleA=Math.max(...original.map(h=>Math.abs(h.w))),scaleB=Math.max(...candidate.map(h=>Math.abs(h.w)));
-  if(!scaleA||!scaleB)return null;
+  const a=homogeneousSplineBezierSpans({controls:original,degree,knots}),b=homogeneousSplineBezierSpans({controls:candidate,degree,knots});
+  return rationalBezierDeviation(a.map((span,i)=>({from:span.from,to:span.to,a:span.controls,b:b[i].controls})),scaleA,scaleB,options);
+}
+
+// Each pair covers the same parameter interval on both native curves.
+export function rationalBezierDeviation(pairs,scaleA,scaleB,{maxDepth=18,maxNodes=32768}={}) {
+  if(!Number.isInteger(maxDepth)||maxDepth<0||maxDepth>24||!Number.isInteger(maxNodes)||maxNodes<1||maxNodes>200000||!scaleA||!scaleB)return null;
   const relativeFloor=1e-12,floorA=scaleA*relativeFloor,floorB=scaleB*relativeFloor;
   if(!floorA||!floorB)return null;
-  const a=homogeneousSplineBezierSpans({controls:original,degree,knots}),b=homogeneousSplineBezierSpans({controls:candidate,degree,knots});
   let errorBound=0,nodes=0,minimumOriginal=Infinity,minimumCandidate=Infinity;
   const finite=row=>row.every(h=>[h.x,h.y,h.w].every(Number.isFinite));
   const lower=row=>{const w=row.map(h=>h.w),lo=Math.min(...w),hi=Math.max(...w);return lo>0?lo:hi<0?-hi:0;};
-  for(let i=0;i<a.length;i++) {
-    const pending=[{a:a[i].controls,b:b[i].controls,from:a[i].from,to:a[i].to,depth:0}];
+  for(const pair of pairs) {
+    const pending=[{...pair,depth:0}];
     while(pending.length) {
       const part=pending.pop();if(++nodes>maxNodes||!finite(part.a)||!finite(part.b))return null;
       const wa=lower(part.a),wb=lower(part.b);
       if(wa>floorA&&wb>floorB) {
         let deltaH=0,deltaW=0,radius=0;
-        for(let j=0;j<=degree;j++) {
+        for(let j=0;j<part.a.length;j++) {
           const h=part.a[j],g=part.b[j];deltaH=Math.max(deltaH,Math.hypot(h.x-g.x,h.y-g.y));
           deltaW=Math.max(deltaW,Math.abs(h.w-g.w));radius=Math.max(radius,Math.hypot(g.x,g.y)/wb);
         }

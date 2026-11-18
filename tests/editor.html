@@ -4466,6 +4466,63 @@ await check('Spline control dragging and pole checks cannot bypass the reference
   splineField('編集する重み（空欄で全て1）','1 1 1');splineAction('apply');await tick();assert(!editor.draft&&JSON.parse(curve.getAttribute('data-vector-spline')).referenceBudget,'retry succeeds');
 });
 
+function finiteBranchExample(periodic=false,t=7.5){
+  const points=Array.from({length:12},(_,i)=>({x:40+10*i,y:70+7*(i%3)}));
+  const input={degree:2,points,periodic,weights:points.map((_,i)=>i===(periodic?6:3)?-4:1),
+    ...(periodic?{}:{knots:[0,0,0,1,2,3,4,5,6,7,8,9,10,10,10]})};
+  return w.VectorUtils.insertEditableSplineKnot('nurbsCurve',input,t);
+}
+await check('A finite branch on a NURBS with poles can be reduced, saved, reopened and undone',async()=>{
+  fixture();await tick();let curve=addEditableSpline('nurbsCurve',finiteBranchExample());
+  w.saveState();await tick();w.undoStack.length=0;
+  const original=curve.getAttribute('data-vector-spline'),begin=()=>{activate('select');w.selectTool.selectObject(curve);splineAction('begin');};
+  begin();const editor=w.toolPropertiesPanel.splineEditor;
+  splineField('削除するノット値','7.5');splineAction('remove-knot');
+  assert(editor.message.includes('分母')&&draftPoints().length===13,'whole curve is the default');
+  splineField('指定ノットがある枝だけを編集',true,'change');splineAction('remove-knot');
+  assert(editor.preview&&editor.message.includes('枝の検査範囲 6〜9')&&draftPoints().length===12,'finite support preview');
+  assert(curve.getAttribute('data-vector-spline')===original&&!w.undoStack.length,'original intact until apply');
+  splineAction('apply');await tick();const after=curve.getAttribute('data-vector-spline');
+  const proof=JSON.parse(curve.getAttribute('data-vector-implementation')).refinement;
+  assert(proof.branch.protectedSpans===7&&proof.denominator.minimumCandidate>0&&doc.querySelector('[data-recorded-implementation]').textContent.includes('影響外の一致 7区間'),'saved proof');
+  assert((curve.getAttribute('d').match(/M/g)||[]).length>1&&w.undoStack.length===1,'branches remain disconnected');
+  w.undo();assert(doc.getElementById('editable-spline').getAttribute('data-vector-spline')===original,'undo');
+  w.redo();assert(doc.getElementById('editable-spline').getAttribute('data-vector-spline')===after,'redo');
+  w.DrawingDocument.open(w.DrawingDocument.serialize());curve=doc.getElementById('editable-spline');begin();
+  assert(editor.draft.refinement.branch.ranges[0].join(',')==='6,9'&&draftPoints().length===12,'editable SVG round trip');
+});
+await check('An unsafe branch or a replacement changing a remote pole cannot replace the preview or original',async()=>{
+  fixture();await tick();const curve=addEditableSpline('nurbsCurve',finiteBranchExample()),host=w.toolManager.host;
+  w.saveState();await tick();w.undoStack.length=0;const raw=curve.getAttribute('data-vector-spline');
+  host.registerImplementation('removeSplineKnot',{id:'branch-test-remote',label:'Remote mutation test',algorithm:'Delegated removal',run:(req,ops,execute)=>{
+    const value=execute('removeSplineKnot',req,{implementation:'default'});value.weights[3]=-20;value.removal.errorBound=0;return value;
+  }});
+  activate('select');w.selectTool.selectObject(curve);splineAction('begin');
+  splineField('ノット削除の実装','branch-test-remote','change');splineField('指定ノットがある枝だけを編集',true,'change');
+  const editor=w.toolPropertiesPanel.splineEditor;splineAction('preview');const preview=editor.preview;
+  splineField('削除するノット値','3');splineAction('remove-knot');
+  assert(preview&&editor.preview===preview&&editor.message.includes('枝')&&draftPoints().length===13,'pole-adjacent edit rejected');
+  splineField('削除するノット値','7.5');splineAction('remove-knot');
+  assert(editor.preview===preview&&editor.message.includes('削除できません')&&draftPoints().length===13,'misreported solver rejected');
+  splineAction('cancel');assert(curve.getAttribute('data-vector-spline')===raw&&!w.undoStack.length,'cancel keeps saved drawing');
+});
+await check('Periodic branch removal records both sides of the seam while the SVG keeps the pole gaps open',async()=>{
+  fixture();await tick();const curve=addEditableSpline('nurbsCurve',finiteBranchExample(true,0));
+  activate('select');w.selectTool.selectObject(curve);splineAction('begin');
+  splineField('削除するノット値','12');splineField('指定ノットがある枝だけを編集',true,'change');splineAction('remove-knot');
+  const ref=w.toolPropertiesPanel.splineEditor.draft.refinement;
+  assert(ref.branch.ranges.map(r=>r.join(',')).join('/')==='0,2/10,12'&&ref.periodic.copies===2,'both wrapped portions checked');
+  splineAction('apply');await tick();const path=curve.getAttribute('d');assert(!path.endsWith('Z')&&(path.match(/M/g)||[]).length>1,'open pole gaps');
+});
+await check('Workbench Worker computes a branch-specific proof for a NURBS with poles',async()=>{
+  const page=await createWorkbench();
+  try{
+    page.choose('tool','removeSplineKnot');const input={...finiteBranchExample(),t:7.5,scope:'branch'};
+    page.edit(JSON.stringify(input));const result=JSON.parse(await page.run());
+    assert(result.points.length===12&&result.removal.branch.protectedSpans===7&&result.removal.denominator.nodes>=4&&page.w.__workbenchWorkerCount===1,'Worker result');
+  }finally{await page.close();}
+});
+
 result.textContent = reports.join("\n");
 result.dataset.status = reports.some(r => r.startsWith("FAIL")) ? "failed" : "passed";
 </script>

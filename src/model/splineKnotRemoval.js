@@ -1,4 +1,5 @@
 import {nonperiodicSplineEvaluation} from './splineCurves.js';
+import {branchRemovalDeviation} from './splineBranchRemoval.js';
 import {boundedSplineDeviation} from './splineDeviation.js';
 
 // Reverse the local Boehm equations from both sides, then reinsert on the
@@ -6,7 +7,8 @@ import {boundedSplineDeviation} from './splineDeviation.js';
 export function prepareSplineKnotRemoval(input) {
   if(!input||input.periodic||input.periodicKnots!==undefined)return null;
   const rational=input.weights!==undefined,create=nonperiodicSplineEvaluation,model=create(input);
-  if(!model)return null;
+  const scope=input.scope===undefined?'whole':input.scope;
+  if(!model||(scope!=='whole'&&scope!=='branch')||(scope==='branch'&&!rational))return null;
   if(!Array.from(model.points).every(p=>p&&Number.isFinite(p.x)&&Number.isFinite(p.y))||
     !Array.from(model.knots).every(Number.isFinite)||(rational&&!Array.from(model.weights).every(Number.isFinite)))return null;
   const {degree:p,points,knots}=model,{t,tolerance=1e-7}=input,n=points.length;
@@ -21,8 +23,10 @@ export function prepareSplineKnotRemoval(input) {
   if(!weights.every((w,i)=>Number.isFinite(w)&&(!rational||model.weights[i]===0||w!==0)))return null;
   const homogeneous=points.map((point,i)=>({x:(point.x-origin.x)*weights[i],y:(point.y-origin.y)*weights[i],w:weights[i]}));
   if(!homogeneous.every(finite))return null;
-  if(rational&&!weights.every(w=>w>0)&&!boundedSplineDeviation(homogeneous,homogeneous,0,true,p,knots))return null;
-  return {model,create,rational,t,tolerance,reduced,k,left:k-p,right:k-s,origin,sign,scale,homogeneous};
+  if(scope==='branch'){
+    if(!branchRemovalDeviation(model,model,t))return null;
+  }else if(rational&&!weights.every(w=>w>0)&&!boundedSplineDeviation(homogeneous,homogeneous,0,true,p,knots))return null;
+  return {model,create,rational,scope,t,tolerance,reduced,k,left:k-p,right:k-s,origin,sign,scale,homogeneous};
 }
 const finite=h=>h&&Number.isFinite(h.x)&&Number.isFinite(h.y)&&Number.isFinite(h.w);
 const alpha=(c,i)=>(c.t-c.reduced[i])/(c.reduced[i+c.model.degree]-c.reduced[i]);
@@ -37,6 +41,11 @@ function inspect(c,result) {
   if(rational&&(!Array.isArray(result.weights)||result.weights.length!==result.points.length||
     !Array.from(result.weights).every(w=>Number.isFinite(w)&&(w===0||w/scale!==0))))return null;
   const candidate=create(result);if(!candidate)return null;
+  if(c.scope==='branch'){
+    const deviation=branchRemovalDeviation(model,candidate,t);
+    if(!deviation||deviation.errorBound>tolerance)return null;
+    return {degree:model.degree,knots:[...reduced],points:candidate.points,weights:candidate.weights,removal:{t,tolerance,...deviation}};
+  }
   const controls=candidate.points.map((p,i)=>{
     const w=rational?sign*(candidate.weights[i]/scale):1;
     return {x:(p.x-origin.x)*w,y:(p.y-origin.y)*w,w};
@@ -96,6 +105,16 @@ export function removeSplineKnot(input) {
   if(!controls.every(h=>finite(h)&&(h.w!==0||(h.x===0&&h.y===0))))return null;
   const points=controls.map(h=>h.w===0?{...(h.point??origin)}:{x:origin.x+h.x/h.w,y:origin.y+h.y/h.w});
   const weights=rational?controls.map(h=>sign*h.w*scale):undefined;
+  if(c.scope==='branch'){
+    // Keep unchanged Euclidean data verbatim, including zero-weight points.
+    // Undoing the local origin or weight normalization can change a last bit.
+    for(let i=0;i<n;i++){
+      if(!controls[i].point)continue;
+      const source=i<=left?i:i+1;
+      points[i]={...model.points[source]};
+      weights[i]=model.weights[source];
+    }
+  }
   if(weights?.some((w,i)=>controls[i].w!==0&&w===0))return null;
   return inspect(c,{degree:model.degree,knots:c.reduced,points,...(rational?{weights}:{})});
 }

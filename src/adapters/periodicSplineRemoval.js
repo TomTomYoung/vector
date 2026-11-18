@@ -1,4 +1,5 @@
 import {expandPeriodicSpline} from '../model/periodicSplineExpansion.js';
+import {branchRemovalDeviation} from '../model/splineBranchRemoval.js';
 import {boundedSplineDeviation} from '../model/splineDeviation.js';
 import {insertSplineKnot} from '../model/splines.js';
 import {insertEditableSplineKnot} from './splineRefinement.js';
@@ -72,7 +73,7 @@ function context(model,requested,tolerance,create) {
   return {model,requested,tolerance,p,n,t,b,nextKnots,expansion,comparison,domainShift,copies};
 }
 
-function inspect(method,c,candidate,create) {
+function inspect(method,c,candidate,create,scope) {
   const {model,requested,tolerance,p,n,t,b,nextKnots,comparison,domainShift,copies}=c;
   const rationalInput=!!model.weights;
   if(!candidate||candidate.periodic!==true||candidate.knots!==undefined||candidate.degree!==p||
@@ -82,6 +83,20 @@ function inspect(method,c,candidate,create) {
     throw Error('周期ノット削除の出力形式が不正です。');
   const numericError=()=>Error('周期削除後のノット列または再挿入照合を有限精度で保持できません。');
   const candidateModel=create(candidate);if(!candidateModel)throw numericError();
+  let deviation;
+  if(scope==='branch'){
+    deviation=branchRemovalDeviation(canonical(comparison,create),canonical(candidateModel,create),domainShift?b:t);
+  }else if(scope==='whole'){
+    deviation=reinsertedDeviation(method,c,candidate,create);
+  }
+  if(!deviation||deviation.errorBound>tolerance)throw Error('周期再構成後の偏差が許容差を超えるか分母を検証できないため、ノットを削除できません。');
+  return {degree:p,periodic:true,periodicKnots:[...nextKnots],points:candidateModel.points.slice(0,n-1).map(v=>({x:v.x,y:v.y})),...(rationalInput?{weights:candidateModel.weights.slice(0,n-1)}:{}),removal:{t:requested,tolerance,...deviation,periodic:{
+    algorithm:scope==='branch'?'3周期展開・同値ノット削除・1周期の枝検証と影響外照合':domainShift?'3周期展開・同値ノット削除・継ぎ目移動・1周期抽出・再挿入照合':'3周期展開・同値ノット削除・中央周期抽出・再挿入照合',
+    source:'src/adapters/periodicSplineRemoval.js',t,copies:copies.length,...(domainShift?{domainShift}:{})}}};
+}
+
+function reinsertedDeviation(method,{comparison,domainShift,b,t,p},candidate,create){
+  const numericError=()=>Error('周期再構成後の再挿入照合を有限精度で保持できません。');
   // This fixed verifier is independent of the user's chosen insertion implementation.
   const rebuilt=create(insertEditableSplineKnot(method,candidate,domainShift?b:t,normalizedInsertion));
   const before=canonical(comparison,create),after=rebuilt&&canonical(rebuilt,create);
@@ -95,20 +110,16 @@ function inspect(method,c,candidate,create) {
   });
   if(rational&&[before,after].some(shape=>shape.weights.some(w=>w!==0&&w/scale===0)))throw numericError();
   const radius=rational?Math.max(...after.points.map(point=>Math.hypot(point.x-origin.x,point.y-origin.y))):0;
-  const deviation=boundedSplineDeviation(controls(before),controls(after),radius,rational,p,before.knots);
-  if(!deviation||deviation.errorBound>tolerance)throw Error('周期再構成後の偏差が許容差を超えるか分母を検証できないため、ノットを削除できません。');
-  return {degree:p,periodic:true,periodicKnots:[...nextKnots],points:candidateModel.points.slice(0,n-1).map(v=>({x:v.x,y:v.y})),...(rationalInput?{weights:candidateModel.weights.slice(0,n-1)}:{}),removal:{t:requested,tolerance,...deviation,periodic:{
-    algorithm:domainShift?'3周期展開・同値ノット削除・継ぎ目移動・1周期抽出・再挿入照合':'3周期展開・同値ノット削除・中央周期抽出・再挿入照合',
-    source:'src/adapters/periodicSplineRemoval.js',t,copies:copies.length,...(domainShift?{domainShift}:{})}}};
+  return boundedSplineDeviation(controls(before),controls(after),radius,rational,p,before.knots);
 }
 
 // Validate an arbitrary final periodic candidate independently of its solver.
-export function validatePeriodicSplineKnotRemoval(method,model,t,tolerance,create,candidate) {
-  try {return inspect(method,context(model,t,tolerance,create),candidate,create);}catch{return null;}
+export function validatePeriodicSplineKnotRemoval(method,model,t,tolerance,create,candidate,scope='whole') {
+  try {return inspect(method,context(model,t,tolerance,create),candidate,create,scope);}catch{return null;}
 }
 
 // Each expanded removal and the actual wrapped result are checked separately.
-export function removePeriodicSplineKnot(method,model,requested,tolerance,create,removeChecked) {
+export function removePeriodicSplineKnot(method,model,requested,tolerance,create,removeChecked,scope='whole') {
   const c=context(model,requested,tolerance,create),{p,n,nextKnots,expansion,copies}=c;
   const {originalPoints,originalWeights,expanded:initial}=expansion;let expanded=initial;
   for(const value of copies)expanded=removeChecked(expanded,value,tolerance);
@@ -120,5 +131,5 @@ export function removePeriodicSplineKnot(method,model,requested,tolerance,create
   if(offset<0||probe.knots.some((k,i)=>k!==expanded.knots[offset+i]))throw numericError();
   const candidate={degree:p,periodic:true,periodicKnots:nextKnots,points:expanded.points.slice(offset,offset+count),
     ...(expanded.weights?{weights:expanded.weights.slice(offset,offset+count)}:{})};
-  return inspect(method,c,candidate,create);
+  return inspect(method,c,candidate,create,scope);
 }
