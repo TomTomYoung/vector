@@ -65,7 +65,8 @@ export function parseConstructionInputPresets(value) {
     }
     // Unknown tools/entry versions are retained, never interpreted by the built-in controllers.
     const periodicVersion = ['bSplineCurve','nurbsCurve'].includes(name) && entry.version===2;
-    if(entry.version!==1 && !periodicVersion)continue;
+    const cornerDraft=['fillet','chamfer'].includes(name)&&entry.version===2;
+    if(entry.version!==1 && !periodicVersion && !cornerDraft)continue;
     if(constructionDraftTools.includes(name)){
       const input=entry.input;keys(input,['points',...(name==='nthBezier'?['degree']:[])]);
       if(name==='nthBezier'&&(!Number.isInteger(input.degree)||input.degree<2||input.degree>12))fail();
@@ -75,7 +76,13 @@ export function parseConstructionInputPresets(value) {
       continue;
     }
     if(Object.hasOwn(constructionParameterFields,name)){
-      const fields=constructionParameterFields[name];keys(entry.input,fields.map(([key])=>key));
+      const fields=constructionParameterFields[name],expected=fields.map(([key])=>key);
+      if(cornerDraft){
+        expected.push('firstLine');
+        const id=entry.input.firstLine;
+        if(id!==null && !(typeof id==='string' && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)))fail();
+      }
+      keys(entry.input,expected);
       for(const [key,label,min,max] of fields){const v=entry.input[key];if(!Number.isFinite(v)||v<min||v>max)throw RangeError(label+'は'+min+'〜'+max+'の有限数で指定してください。');}
       continue;
     }
@@ -130,6 +137,23 @@ export function constructionInputMode(controller, entry) {
   return controller.inputPresetModeForEntry?.(entry)??controller.inputPresetMode;
 }
 
+export function hasConstructionDraft(controller){
+  return typeof controller?.prepareInputDraftPreset==='function'||typeof controller?.exportInputDraftPreset==='function';
+}
+
+// Bind a new reference to its SVG element only after the entire record is accepted.
+export function saveConstructionInput(controller,draft,save){
+  if(draft&&controller?.prepareInputDraftPreset){
+    const prepared=controller.prepareInputDraftPreset();
+    if(!save(prepared.entry))return false;
+    prepared.commit?.();
+    return true;
+  }
+  const fn=draft?controller?.exportInputDraftPreset:controller?.exportInputPreset;
+  if(typeof fn!=='function')throw Error('このツールは指定した入力の記録に対応していません。');
+  return save(fn.call(controller));
+}
+
 export function exportConstructionParameters(name, controller) {
   if(!Object.hasOwn(constructionParameterFields,name))throw Error('このツールの作図設定には対応していません。');
   const input=Object.fromEntries(constructionParameterFields[name].map(([key])=>[key,controller[key]]));
@@ -153,11 +177,11 @@ export function createConstructionInputPresets() {
     open(value){const next=parseConstructionInputPresets(value);data=next;status(next?'図面の作図入力を読み込みました。各ツールで明示的に復元できます。':'この図面に作図入力の記録はありません。');},
     record(name,controller,{draft=false}={}){
       try{
-        const exporter=draft?controller?.exportInputDraftPreset:controller?.exportInputPreset;
-        if(!validName(name)||typeof exporter!=='function')throw Error('このツールは作図入力の記録に対応していません。');
-        const entry=exporter.call(controller);
-        const next=parseConstructionInputPresets({version:1,entries:{...data?.entries,[name]:entry}});
-        data=next;status(name+'の作図入力を図面に記録しました。SVG保存で持ち出せます。');return true;
+        if(!validName(name))throw Error('作図ツール名が不正です。');
+        return saveConstructionInput(controller,draft,entry=>{
+          data=parseConstructionInputPresets({version:1,entries:{...data?.entries,[name]:entry}});
+          status(name+'の作図入力を図面に記録しました。SVG保存で持ち出せます。');return true;
+        });
       }catch(error){status('作図入力を記録できません。'+error.message,true);return false;}
     },
     restore(name,controller){

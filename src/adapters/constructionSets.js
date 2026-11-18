@@ -1,7 +1,7 @@
 import {movePreset,sortPresets} from './presetOrder.js';
 import {parseNamedConstructionInputs} from './namedConstructionInputs.js';
 import {parseImplementationPreferences} from './implementationPreferences.js';
-import {parseConstructionInputPresets,supportsConstructionInput,constructionInputMode} from './constructionInputPresets.js';
+import {parseConstructionInputPresets,supportsConstructionInput,constructionInputMode,saveConstructionInput} from './constructionInputPresets.js';
 
 function keys(value,expected){
   if(!value||typeof value!=='object'||Array.isArray(value))throw TypeError('作図セットの形式が不正です。');
@@ -51,30 +51,35 @@ export function createConstructionSets(host,{createId=()=> 'set-'+crypto.randomU
       if(ok){chosen.set(tool,id);names.set(tool,this.entry(tool,id).name);}return ok;
     },
     record(tool,name,controller,{draft=false}={}){
-      try{return this.add(tool,name,exportInput(controller,draft),host.exportPreferences());}
+      try{return saveConstructionInput(controller,draft,input=>this.add(tool,name,input,host.exportPreferences()));}
       catch(error){status('作図セットを保存できません。'+error.message,true);return false;}
     },
     update(tool,id,controller,{draft=false}={}){
-      return mutate(next=>{const item=find(next,tool,id);item.input=exportInput(controller,draft);item.methods=host.exportPreferences();},'選択セットを現在の入力と全ツールの方式で更新しました。');
+      try{return saveConstructionInput(controller,draft,input=>mutate(next=>{const item=find(next,tool,id);item.input=input;item.methods=host.exportPreferences();},'選択セットを現在の入力と全ツールの方式で更新しました。'));}
+      catch(error){status('作図セットを保存できません。'+error.message,true);return false;}
     },
     rename(tool,id,name){const ok=mutate(next=>{find(next,tool,id).name=typeof name==='string'?name.trim():name;},'作図セットの名前を変更しました。');if(ok)names.set(tool,this.entry(tool,id).name);return ok;},
     duplicate(tool,id,name){const item=this.entry(tool,id);if(!item){status('複製する作図セットが見つかりません。',true);return false;}return this.add(tool,name,item.input,item.methods);},
     remove(tool,id){const ok=mutate(next=>{find(next,tool,id);next.entries=next.entries.filter(e=>e.id!==id);},'作図セットを削除しました。現在の入力と方式は維持します。');if(ok){if(chosen.get(tool)===id)chosen.delete(tool);names.delete(tool);}return ok;},
     restore(tool,id,controller){
-      let before,inputStarted=false;
+      let restoreBefore,inputStarted=false;
       try{
         const item=this.entry(tool,id);if(!item)throw Error('作図セットが見つかりません。');
         if(!this.canRestore)throw Error('このホストは入力と方式の一括復元に対応していません。');
         if(!supportsConstructionInput(controller,item.input))throw Error('このツール・入力版は復元に未対応です。記録は保持しています。');
         if(controller.isActive===false)throw Error('復元する作図ツールを先に選択してください。');
         // Capture the complete draft for dual-mode controllers, including spline points.
-        before=parseConstructionInputPresets({version:1,entries:{[tool]:exportInput(controller,typeof controller.exportInputDraftPreset==='function')}}).entries[tool];
+        if(controller.captureInputRollback)restoreBefore=controller.captureInputRollback();
+        else {
+          const before=parseConstructionInputPresets({version:1,entries:{[tool]:exportInput(controller,typeof controller.exportInputDraftPreset==='function')}}).entries[tool];
+          restoreBefore=()=>controller.restoreInputPreset(before);
+        }
         const result=host.restorePreferencesAtomically(item.methods,()=>{inputStarted=true;controller.restoreInputPreset(item.input);});
         if(result.skipped.length){status('作図セットは復元していません。利用できない方式: '+result.skipped.map(s=>s.name+'/'+s.id+'（'+s.reason+'）').join('、')+'。現在の入力と方式は維持しています。',true);return false;}
         const mode=constructionInputMode(controller,item.input);
         status(item.name+'の入力と方式を復元しました。'+(mode==='parameters'?'入力点と対象の選択は維持します。':controller.inputPresetInstructions??'通常の確定操作で作図できます。')+(controller.implementationError?' '+controller.implementationError:''),!!controller.implementationError);return true;
       }catch(error){
-        let rollback='';if(inputStarted)try{controller.restoreInputPreset(before);}catch(failure){rollback=' 入力の巻戻しにも失敗しました: '+failure.message;}
+        let rollback='';if(inputStarted)try{restoreBefore();}catch(failure){rollback=' 入力の巻戻しにも失敗しました: '+failure.message;}
         status('作図セットを復元できません。'+error.message+rollback,true);return false;
       }
     },

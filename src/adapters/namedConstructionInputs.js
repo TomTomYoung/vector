@@ -1,5 +1,5 @@
 import {movePreset,sortPresets} from './presetOrder.js';
-import {parseConstructionInputPresets,validateConstructionInputData,supportsConstructionInput,constructionInputMode} from './constructionInputPresets.js';
+import {parseConstructionInputPresets,validateConstructionInputData,supportsConstructionInput,constructionInputMode,saveConstructionInput} from './constructionInputPresets.js';
 
 const object = v => v!==null && typeof v==='object' && !Array.isArray(v);
 const key = v => typeof v==='string' && /^[a-zA-Z0-9_-]{1,100}$/.test(v) && !['__proto__','constructor','prototype'].includes(v);
@@ -34,10 +34,6 @@ export function createNamedConstructionInputs({createId=()=> 'preset-'+crypto.ra
   const state={message:'複数の作図入力を名前付きで図面に記録できます。',warning:false};
   const status=(message,warning=false)=>Object.assign(state,{message,warning});
   const find=(next,tool,id)=>{const item=next.entries.find(e=>e.tool===tool&&e.id===id);if(!item)throw Error('選択した記録が見つかりません。');return item;};
-  const exporter=(controller,draft)=>{
-    const fn=draft?controller?.exportInputDraftPreset:controller?.exportInputPreset;
-    if(typeof fn!=='function')throw Error('このツールは指定した入力の記録に対応していません。');return fn.call(controller);
-  };
   const mutate=(action,message)=>{
     try{
       const next=parseNamedConstructionInputs(data)??{version:1,entries:[]};action(next);
@@ -62,11 +58,12 @@ export function createNamedConstructionInputs({createId=()=> 'preset-'+crypto.ra
       if(ok){chosen.set(tool,id);nameDrafts.set(tool,this.entry(tool,id).name);}return ok;
     },
     record(tool,name,controller,{draft=false}={}){
-      try{return this.add(tool,name,exporter(controller,draft));}
+      try{return saveConstructionInput(controller,draft,entry=>this.add(tool,name,entry));}
       catch(error){status('入力を記録できません。'+error.message,true);return false;}
     },
     update(tool,id,controller,{draft=false}={}){
-      return mutate(next=>{find(next,tool,id).entry=exporter(controller,draft);},'選択した記録を現在の入力で更新しました。');
+      try{return saveConstructionInput(controller,draft,entry=>mutate(next=>{find(next,tool,id).entry=entry;},'選択した記録を現在の入力で更新しました。'));}
+      catch(error){status('入力を記録できません。'+error.message,true);return false;}
     },
     rename(tool,id,name){
       const ok=mutate(next=>{find(next,tool,id).name=typeof name==='string'?name.trim():name;},'選択した記録の名前を変更しました。');

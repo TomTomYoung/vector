@@ -259,7 +259,7 @@ class SelectTool extends BaseTool {
       const clone = obj.cloneNode(true);
       for (const node of [clone, ...clone.querySelectorAll("*")]) {
         for (const attr of ["data-vector-selected", "data-vector-highlight", "data-vector-indice", "data-rectangle-id",
-          "data-line-id", "data-circle-id", "data-path-id", "data-polyline-id", "data-polygon-id"]) node.removeAttribute(attr);
+          "data-line-id", "data-circle-id", "data-vector-corner-draft-id", "data-path-id", "data-polyline-id", "data-polygon-id"]) node.removeAttribute(attr);
       }
 
       // 少しずらして配置（10px右下）

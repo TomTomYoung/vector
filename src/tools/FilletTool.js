@@ -16,7 +16,10 @@ class FilletTool extends BaseTool {
     super(canvas, toolManager);
     this.selectedLines = [];
     this.radius = 10;
-    this.inputPresetVersion = 1; this.inputPresetMode = 'parameters';
+    this.inputPresetVersion = 1; this.inputPresetVersions = [1,2]; this.inputPresetMode = 'parameters';
+    this.inputDraftLabel = '1本目の線分と数値設定を下書きとして記録';
+    this.inputDraftNote = '数値だけを保存するか、選択した1本目の線分も一緒に保存するかを選べます。';
+    this.inputPresetInstructions = '1本目が未選択なら1本目から、選択済みなら2本目をクリックして加工します。';
     this.implementationError = "";
   }
 
@@ -25,7 +28,11 @@ class FilletTool extends BaseTool {
   }
 
   exportInputPreset() {return window.VectorUtils.exportConstructionParameters('fillet',this);}
+  inputPresetModeForEntry(entry) {return entry?.version===2?'draft':'parameters';}
+  prepareInputDraftPreset() {return window.VectorUtils.cornerInputDraft.prepare('fillet',this);}
+  captureInputRollback() {return window.VectorUtils.cornerInputDraft.captureRollback('fillet',this);}
   restoreInputPreset(entry) {
+    if(entry?.version===2)return window.VectorUtils.cornerInputDraft.restore('fillet',this,entry);
     window.VectorUtils.restoreConstructionParameters('fillet',entry,this);
     this.implementationError = '';
   }
