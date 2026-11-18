@@ -404,6 +404,7 @@ class ToolPropertiesPanel {
       if(saved.input.dimensionType)text+=' / 寸法種別 '+(saved.input.dimensionType==='linear'?'長さ':'角度');
       if(name==='text')text+=' / 文字数 '+saved.input.content.length+' / '+(saved.input.point?'配置位置 '+saved.input.point.x+', '+saved.input.point.y:'配置位置は未指定');
       if(Object.hasOwn(saved.input,'firstLine'))text+=' / 1本目の線分 '+(saved.input.firstLine?'選択済み':'未選択');
+      if(name==='offset'&&Object.hasOwn(saved.input,'target'))text+=' / 対象図形 '+(saved.input.target?window.VectorUtils.offsetTargetLabels[saved.input.target.tag]:'未選択');
       if(saved.input.pathMode)text+=' / 描画モード '+(saved.input.pathMode==='line'?'直線':'ベジェ');
       if(Object.hasOwn(window.VectorUtils.constructionParameterFields,name))for(const [key,label] of window.VectorUtils.constructionParameterFields[name])text+=' / '+label+' '+saved.input[key];
     }

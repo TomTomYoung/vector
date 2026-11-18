@@ -11,12 +11,19 @@
 // - GeometryUtils.distance(): 2点間距離
 
 class OffsetTool extends BaseTool {
+  static draftAttribute = 'data-vector-offset-draft-id';
+
   constructor(canvas, toolManager) {
     super(canvas, toolManager);
     this.selectedElement = null;
     this.offsetDistance = 10;
     this.miterLimit = 10;
     this.inputPresetVersion = 1; this.inputPresetMode = 'parameters';
+    this.inputPresetVersions = [1,3];
+    this.inputDraftLabel = '対象図形と数値設定を下書きとして記録';
+    this.inputDraftNote = '距離とMiter上限比を保存できます。下書きには選択した対象図形も記録されます。';
+    this.inputPresetInstructions = '対象が選択済みなら、平行な図形を作る側をクリックしてください。未選択の場合は対象図形から選びます。';
+    this.implementationError = '';
   }
 
   getTitle() {
@@ -24,8 +31,48 @@ class OffsetTool extends BaseTool {
   }
 
   exportInputPreset() {return window.VectorUtils.exportConstructionParameters('offset',this);}
+  inputPresetModeForEntry(entry) {return entry?.version===3?'draft':'parameters';}
+
+  canUseTarget(element) {
+    return element?.namespaceURI===this.svgNS && Object.hasOwn(window.VectorUtils.offsetTargetLabels,element.localName) &&
+      this.canvas.contains(element) && this.selectTool.canSelect(element);
+  }
+
+  setTarget(element) {
+    this.selectedElement?.removeAttribute('data-vector-highlight');
+    this.selectedElement=element;
+    element?.setAttribute('data-vector-highlight','offset');
+  }
+
+  prepareInputDraftPreset() {
+    if(!this.isActive)throw Error('記録するオフセットツールを先に選択してください。');
+    const input=this.exportInputPreset().input,source=this.selectedElement;
+    if(!source)return {entry:{version:3,input:{...input,target:null}}};
+    if(!this.canUseTarget(source))throw Error('記録する対象図形が削除されたか、非表示・ロック中です。');
+    const {id,commit}=window.VectorUtils.prepareDraftReference(this.canvas,OffsetTool.draftAttribute,source);
+    return {entry:{version:3,input:{...input,target:{id,tag:source.localName}}},commit};
+  }
+
+  captureInputRollback() {
+    const {offsetDistance,miterLimit,selectedElement,implementationError}=this;
+    return ()=>{
+      Object.assign(this,{offsetDistance,miterLimit,implementationError});
+      this.setTarget(selectedElement);
+    };
+  }
+
   restoreInputPreset(entry) {
-    window.VectorUtils.restoreConstructionParameters('offset',entry,this);
+    if(entry?.version===3){
+      if(!this.isActive)throw Error('復元するオフセットツールを先に選択してください。');
+      const utils=window.VectorUtils;
+      const {target,offsetDistance,miterLimit}=utils.parseConstructionInputPresets({version:1,entries:{offset:entry}}).entries.offset.input;
+      const source=target?utils.resolveDraftReference(this.canvas,OffsetTool.draftAttribute,target.id):null;
+      if(target&&(source.localName!==target.tag||!this.canUseTarget(source))){
+        throw Error('記録した対象の種類が変わったか、対象が非表示・ロック中です。');
+      }
+      Object.assign(this,{offsetDistance,miterLimit});
+      this.setTarget(source);
+    }else window.VectorUtils.restoreConstructionParameters('offset',entry,this);
     this.implementationError = '';
   }
 
@@ -70,7 +117,8 @@ class OffsetTool extends BaseTool {
 
   deactivate() {
     super.deactivate();
-    this.selectedElement = null;
+    this.setTarget(null);
+    this.implementationError='';
   }
 
   handleMouseDown(event) {
@@ -78,33 +126,23 @@ class OffsetTool extends BaseTool {
 
     // The second click is normally on empty canvas, on the desired side.
     if (!this.selectedElement) {
-      if (!["line", "polyline", "rect", "circle"].includes(event.target.tagName) ||
-          event.target.closest(DrawingDocument.helpers)) return;
-      this.selectedElement = event.target;
-      this.highlightElement(this.selectedElement);
-      this.updatePanel();
+      if (!this.canUseTarget(event.target)) return;
+      this.setTarget(event.target);
+      this.implementationError='';
     } else {
-      // 2回目のクリック: オフセット方向を決定
-      const point = this.getMousePosition(event);
-      this.createOffset(point);
-      this.unhighlightElement(this.selectedElement);
-      this.selectedElement = null;
-      this.updatePanel();
+      try {
+        if(!this.canUseTarget(this.selectedElement))throw Error('対象図形が削除されたか、非表示・ロック中です。');
+        this.createOffset(this.getMousePosition(event));
+      } catch(error){this.implementationError=error.message;}
+      this.setTarget(null);
     }
+    this.updatePanel();
   }
 
   updatePanel() {
     if (window.toolPropertiesPanel) {
       window.toolPropertiesPanel.updatePanel();
     }
-  }
-
-  highlightElement(element) {
-    element.setAttribute("data-vector-highlight", "offset");
-  }
-
-  unhighlightElement(element) {
-    element.removeAttribute("data-vector-highlight");
   }
 
   createOffset(point) {
@@ -126,11 +164,10 @@ class OffsetTool extends BaseTool {
   }
 
   handleKeyDown(event) {
-    if (event.key === "Escape") {
-      if (this.selectedElement) {
-        this.unhighlightElement(this.selectedElement);
-        this.selectedElement = null;
-      }
+    if (event.key === "Escape" && this.selectedElement) {
+      this.setTarget(null);
+      this.implementationError='';
+      this.updatePanel();
     }
   }
 }
