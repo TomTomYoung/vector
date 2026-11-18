@@ -4058,10 +4058,10 @@ await check('No-op simplification preserves preview and prior provenance and inv
 });
 await check('Replacement simplification cannot forge intermediate curves or total error and late search limits retain the preview',async()=>{
   for(const periodic of [false,true]){
-    fixture();await tick();const curve=addEditableSpline('bSplineCurve',simplificationInput('bSplineCurve',periodic)),host=w.toolManager.host;let mode='throw';host.registerImplementation('simplifySplineKnots',{id:'simplify-test',label:'Simplify test',algorithm:'Delegated checked simplification',run:(value,ops,execute)=>{
+    fixture();await tick();const curve=addEditableSpline('bSplineCurve',simplificationInput('bSplineCurve',periodic)),host=w.toolManager.host;let mode='throw';host.registerImplementation('simplifySplineKnots',{id:'simplify-test-'+periodic,label:'Simplify test',algorithm:'Delegated checked simplification',run:(value,ops,execute)=>{
       if(mode==='throw'){value.points[0].x=999;throw Error('simplify failure');}if(mode==='limit')return execute('simplifySplineKnots',{...value,maxAttempts:1},{implementation:'default'});
       const out=execute('simplifySplineKnots',value,{implementation:'default'});if(mode==='stage')out.stages[0].curve.points[1].x+=100;else if(mode==='final')out.points[2].y+=100;else if(mode==='omit')out.stages.pop();out.simplification={removedKnots:999,errorBound:999};return out;
-    }});activate('select');w.selectTool.selectObject(curve);splineAction('begin');splineField('ノット一括簡約の実装','simplify-test','change');splineAction('preview');const editor=w.toolPropertiesPanel.splineEditor,before=JSON.stringify(editor.input()),preview=editor.preview;
+    }});activate('select');w.selectTool.selectObject(curve);splineAction('begin');splineField('ノット一括簡約の実装','simplify-test-'+periodic,'change');splineAction('preview');const editor=w.toolPropertiesPanel.splineEditor,before=JSON.stringify(editor.input()),preview=editor.preview;
     for(mode of ['throw','stage','final','omit','limit']){splineAction('simplify-knots');assert(JSON.stringify(editor.input())===before&&editor.preview===preview&&!editor.draft.refinement,'invalid plan atomic '+mode);}mode='valid';splineAction('simplify-knots');assert(editor.draft.refinement.removedKnots===(periodic?5:3)&&editor.draft.refinement.errorBound<=1e-7,'metadata recomputed');splineAction('apply');assert(doc.querySelector('[data-recorded-implementation]').textContent.includes('Delegated checked simplification'),'executed method recorded');
   }
 });
