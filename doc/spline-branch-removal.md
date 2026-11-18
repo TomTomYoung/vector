@@ -20,6 +20,6 @@ NURBSの分母が零になると、描かれる曲線が複数の枝に分かれ
 
 SVGの方式記録には `refinement.branch` として検査範囲 `ranges`、検査区間数 `checkedSpans`、影響外で一致した区間数 `protectedSpans` を保存します。`denominator` の下限とノード数は影響区間の集計です。SVGを開き直すと、結果の曲線と検査範囲を確認できます。Undo・Redoで図形と方式記録が一緒に戻ります。
 
-この指定はノット1個の削除に適用します。固定基準との比較と一括簡約は全区間に対する検査を引き続き使います。ノットが影響する範囲そのものに極がある場合や、極を含む曲線に対して固定基準を設定する場合は、今回の枝検査の対象外です。
+この指定はノット1個の削除に適用します。複数のノットには[枝を選ぶ一括簡約](spline-knot-simplification.md#極を含むnurbsの枝を選ぶ)を使えます。固定基準との比較は全区間を検査します。ノットが影響する範囲そのものに極がある場合や、極を含む曲線に対して固定基準を設定する場合は、今回の枝検査の対象外です。
 
 実装は [枝の検証](../src/model/splineBranchRemoval.js)、[両側からの削除](../src/model/splineKnotRemoval.js)、[周期モデル](../src/adapters/periodicSplineRemoval.js) です。局所支持は [Shene, B-spline Basis Functions: Important Properties](https://pages.mtu.edu/~shene/COURSES/cs3621/NOTES/spline/bspline-property.html)、de Boor評価とノットの挿入・削除は [MIT Hyperbook §1.4.3](https://web.mit.edu/hyperbook/Patrikalakis-Maekawa-Cho/node18.html) を参照してください。

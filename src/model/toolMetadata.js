@@ -547,7 +547,7 @@ export const toolMetadata = Object.freeze({
   },
   "simplifySplineKnots": {
     "label": "始端側からノットを一括簡約",
-    "algorithm": "昇順の反復走査・逆Boehm削除・周期再構成・独立した全区間検証・残予算と三角不等式による累積偏差上限",
+    "algorithm": "昇順の反復走査・逆Boehm削除・周期再構成・残予算と三角不等式による累積偏差上限。NURBSはbranchIndexで対象の枝を指定可能",
     "source": "src/adapters/splineSimplification.js"
   },
   "reduceSplineToDegree": {
