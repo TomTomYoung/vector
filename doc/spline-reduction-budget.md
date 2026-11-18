@@ -55,3 +55,5 @@ $$
 各段階の次数上げ式・接続条件は [MIT Hyperbook](https://web.mit.edu/hyperbook/Patrikalakis-Maekawa-Cho/node13.html)、次数低減の係数最小二乗・Givens QRと関連論文の参照履歴は [標準方式](spline-degree-reduction.md)、[連続性保持方式](spline-continuity-reduction.md)、[適応分割方式](adaptive-degree-reduction.md)を参照してください。L2最適性や厳密偏差証明は主張しません。
 
 [数値・換装・保存テスト](../tests/splineReductionPlan.test.mjs)と[ブラウザー操作・Workerテスト](../tests/editor.html)を追加しました。検証結果は [HANDOFF](HANDOFF.md)に記録します。
+
+[PR #97](https://github.com/TomTomYoung/vector/pull/97) の `e0f4171` を [CI 44227044630](https://github.com/TomTomYoung/vector/actions/runs/44227044630) で検証し、Node 383件・実Chrome 285件が成功しました。
