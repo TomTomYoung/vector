@@ -31,7 +31,7 @@ function geometryPath(el) {
 
 // SVG geometry -> Canvas paint coverage. The mask is tiled at 1/4 CSS px, never a bounding-box hit test.
 // See doc/selection.md for precision, supported SVG features and the replaceable adapter contract.
-export function createSelectionGeometry({canvas,canSelect}) {
+export function createSelectionGeometry({canvas,canSelect}, rendered = null) {
   const surface=canvas.ownerDocument.createElement('canvas');surface.width=surface.height=tileSize;
   const ctx=surface.getContext('2d',{willReadFrequently:true});
   const pixel=selectionPixelSize;
@@ -42,6 +42,7 @@ export function createSelectionGeometry({canvas,canSelect}) {
       const s=getComputedStyle(n);if(s.display==='none'||Number(s.opacity)===0)return null;
     }
     const s=getComputedStyle(el);if(s.visibility!=='visible')return null;
+    if (rendered?.supports(el)) return rendered.describe(el);
     const fill=paint(s.fill,s.fillOpacity),stroke=paint(s.stroke,s.strokeOpacity)&&parseFloat(s.strokeWidth)>0;
     if(!fill&&!stroke)return null;
     const path=geometryPath(el),text=el.localName==='text';
@@ -67,7 +68,9 @@ export function createSelectionGeometry({canvas,canSelect}) {
     ctx.setLineDash(d.dash);ctx.lineDashOffset=d.offset;ctx.fillStyle=ctx.strokeStyle='#000';
   }
   function draw(d,tx,ty) {
-    ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,tileSize,tileSize);style(d);
+    ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,tileSize,tileSize);
+    if (d.drawTile) { d.drawTile(ctx, tx, ty, pixel); return; }
+    style(d);
     const m=d.matrix;ctx.setTransform(m.a/pixel,m.b/pixel,m.c/pixel,m.d/pixel,m.e/pixel-tx,m.f/pixel-ty);
     if(d.path) {
       if(d.fill)ctx.fill(d.path,d.rule);
@@ -93,26 +96,31 @@ export function createSelectionGeometry({canvas,canSelect}) {
     }
     return false;
   }
-  function exact(d,p) {
+  function exact(d,p,budget) {
+    if (d.drawTile) {
+      const x = Math.floor(p.x/pixel)*pixel, y = Math.floor(p.y/pixel)*pixel;
+      return scan(d, {x,y,width:pixel,height:pixel}, () => true, budget);
+    }
     if(!d.path)return false;
     ctx.setTransform(1,0,0,1,0,0);style(d);const local=transformed(p,d.inverse);
     return (d.fill&&ctx.isPointInPath(d.path,local.x,local.y,d.rule))||
       (d.stroke&&ctx.isPointInStroke(d.nonScaling?d.screenPath:d.path,d.nonScaling?p.x:local.x,d.nonScaling?p.y:local.y));
   }
-  return {
+  const adapter = {
     id:'canvas-coverage',algorithm:'Canvas Path2Dの塗り・線の被覆判定（0.25 CSS px）。なげなわは偶奇規則。',
     snapshot(elements) {
       // Selection dashes are decoration; restore original paint while reading computed styles.
       for(const [d,key] of cachedTiles)d.tiles.delete(key);cachedTiles.length=0;
       const selected=[...canvas.querySelectorAll('[data-vector-selected]')];selected.forEach(e=>e.removeAttribute('data-vector-selected'));
-      try{return elements.map(element=>({element,parts:[element,...element.querySelectorAll('path,line,rect,circle,ellipse,polygon,polyline,text')].filter((e,i,a)=>a.indexOf(e)===i).map(describe).filter(Boolean)}));}
+      try{return elements.map(element=>({element,parts:[element,...element.querySelectorAll('path,line,rect,circle,ellipse,polygon,polyline,text,image,use')].filter((e,i,a)=>a.indexOf(e)===i).map(describe).filter(Boolean)}));}
       finally{selected.forEach(e=>e.setAttribute('data-vector-selected',''));}
     },
     pick(items,p,radius) {
       // Reverse document order resolves direct hits and equal-distance ties to the frontmost object.
-      for(const item of [...items].reverse())if(item.parts.some(d=>exact(d,p)))return item.element;
+      const budget={count:0};
+      for(const item of [...items].reverse())if(item.parts.some(d=>exact(d,p,budget)))return item.element;
       if(radius===0)return null;
-      const box={x:p.x-radius,y:p.y-radius,width:2*radius,height:2*radius},budget={count:0};
+      const box={x:p.x-radius,y:p.y-radius,width:2*radius,height:2*radius};
       let best=null,distance=Infinity;
       for(const item of [...items].reverse()) {
         let nearest=Infinity;
@@ -164,4 +172,5 @@ export function createSelectionGeometry({canvas,canSelect}) {
       return found;
     },
   };
+  return adapter;
 }
