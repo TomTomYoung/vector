@@ -25,7 +25,7 @@ export async function testRenderedSelection({w, doc, canvas, fixture, selectionS
   await check('SVG and PNG image selection tests the transparent margin and opaque pixels with all four regions', async () => {
     for (const href of [svg, png]) {
       await setup(image(href));
-      assert(await drag([108,108],[132,132]) === 'art', 'contain visible pixels inside transparent margin');
+      assert(await drag([108,108],[132,132]) === 'art', 'contain visible pixels inside transparent margin: ' + tool.selectionMessage);
       assert(await drag([105,105],[119,119]) === '', 'contain rejects partial alpha coverage');
       tool.setSelectionOptions({match:'touch'});
       assert(await drag([101,101],[106,106]) === '', 'transparent only');
@@ -51,7 +51,7 @@ export async function testRenderedSelection({w, doc, canvas, fixture, selectionS
     const transform = canvas.style.transform;
     try {
       canvas.style.transform = 'scale(1.3)';
-      assert(await drag([88,108],[132,152]) === 'group', 'symbol instance scaled and rotated');
+      assert(await drag([88,108],[132,152]) === 'group', 'symbol instance scaled and rotated: ' + tool.selectionMessage);
       doc.querySelector('#ink').setAttribute('width', '4');
       assert(await drag([88,108],[132,121]) === 'group', 'referenced definition edit invalidates alpha');
       tool.setSelectionOptions({match:'touch'});
@@ -67,7 +67,7 @@ export async function testRenderedSelection({w, doc, canvas, fixture, selectionS
       await wait(() => !tool.isMarqueeSelecting);
     }
     await click(103,103,art);
-    assert(selectionIDs() === 'under', 'direct hit under transparent image');
+    assert(selectionIDs() === 'under', 'direct hit under transparent image: ' + tool.selectionMessage);
     await click(120,120,art);
     assert(selectionIDs() === 'art', 'opaque direct hit at radius zero');
     tool.deselectObject();

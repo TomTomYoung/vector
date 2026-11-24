@@ -24,7 +24,8 @@ function viewportOf(canvas) {
     }
     userToViewport = userToViewport.translate(dx, dy).scale(sx, sy).translate(-view.x, -view.y);
   }
-  const matrix = canvas.getScreenCTM().multiply(userToViewport.inverse());
+  const {a,b,c,d,e,f} = canvas.getScreenCTM();
+  const matrix = new DOMMatrix([a,b,c,d,e,f]).multiply(userToViewport.inverse());
   return {width, height, matrix};
 }
 
@@ -169,8 +170,10 @@ function describe(canvas, element) {
 
 export function createRenderedSelectionGeometry(options) {
   const gestures = new WeakMap();
-  let parts;
-  const geometry = createSelectionGeometry(options, {supports, describe(el) {
+  const geometry = createSelectionGeometry(options, {supports, describe(el, {signal} = {}) {
+    if (!signal) return describe(options.canvas, el);
+    if (!gestures.has(signal)) gestures.set(signal, new WeakMap());
+    const parts = gestures.get(signal);
     if (!parts.has(el)) parts.set(el, describe(options.canvas, el));
     return parts.get(el);
   }});
@@ -201,14 +204,8 @@ export function createRenderedSelectionGeometry(options) {
     id:'svg-rendered-coverage',
     algorithm:'Canvas Path2Dの被覆と、SVG image・use の描画アルファを0.25 CSS pxで判定。',
     requiresPaintHit:supports,
-    snapshot(elements, {signal} = {}) {
-      parts = (signal && gestures.get(signal)) || new WeakMap();
-      if (signal) gestures.set(signal, parts);
-      try { return geometry.snapshot(elements); }
-      finally { parts = null; }
-    },
     pick(items, point, radius, request = {}) {
-      const box = expandBounds({...point, width:0, height:0}, radius + selectionPixelSize);
+      const box = expandBounds({x:point.x, y:point.y, width:0, height:0}, radius + selectionPixelSize);
       return prepared(items, box, false, request, ready => geometry.pick(ready, point, radius));
     },
     query(items, region, match, request = {}) {

@@ -36,13 +36,13 @@ export function createSelectionGeometry({canvas,canSelect}, rendered = null) {
   const ctx=surface.getContext('2d',{willReadFrequently:true});
   const pixel=selectionPixelSize;
   const cachedTiles=[];
-  function describe(el) {
+  function describe(el, request) {
     if(!canSelect(el))return null;
     for(let n=el;n&&n!==canvas;n=n.parentElement) {
       const s=getComputedStyle(n);if(s.display==='none'||Number(s.opacity)===0)return null;
     }
     const s=getComputedStyle(el);if(s.visibility!=='visible')return null;
-    if (rendered?.supports(el)) return rendered.describe(el);
+    if (rendered?.supports(el)) return rendered.describe(el, request);
     const fill=paint(s.fill,s.fillOpacity),stroke=paint(s.stroke,s.strokeOpacity)&&parseFloat(s.strokeWidth)>0;
     if(!fill&&!stroke)return null;
     const path=geometryPath(el),text=el.localName==='text';
@@ -106,13 +106,13 @@ export function createSelectionGeometry({canvas,canSelect}, rendered = null) {
     return (d.fill&&ctx.isPointInPath(d.path,local.x,local.y,d.rule))||
       (d.stroke&&ctx.isPointInStroke(d.nonScaling?d.screenPath:d.path,d.nonScaling?p.x:local.x,d.nonScaling?p.y:local.y));
   }
-  const adapter = {
+  return {
     id:'canvas-coverage',algorithm:'Canvas Path2Dの塗り・線の被覆判定（0.25 CSS px）。なげなわは偶奇規則。',
-    snapshot(elements) {
+    snapshot(elements, request) {
       // Selection dashes are decoration; restore original paint while reading computed styles.
       for(const [d,key] of cachedTiles)d.tiles.delete(key);cachedTiles.length=0;
       const selected=[...canvas.querySelectorAll('[data-vector-selected]')];selected.forEach(e=>e.removeAttribute('data-vector-selected'));
-      try{return elements.map(element=>({element,parts:[element,...element.querySelectorAll('path,line,rect,circle,ellipse,polygon,polyline,text,image,use')].filter((e,i,a)=>a.indexOf(e)===i).map(describe).filter(Boolean)}));}
+      try{return elements.map(element=>({element,parts:[element,...element.querySelectorAll('path,line,rect,circle,ellipse,polygon,polyline,text,image,use')].filter((e,i,a)=>a.indexOf(e)===i).map(el=>describe(el, request)).filter(Boolean)}));}
       finally{selected.forEach(e=>e.setAttribute('data-vector-selected',''));}
     },
     pick(items,p,radius) {
@@ -172,5 +172,4 @@ export function createSelectionGeometry({canvas,canSelect}, rendered = null) {
       return found;
     },
   };
-  return adapter;
 }
