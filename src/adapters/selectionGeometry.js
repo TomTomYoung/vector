@@ -31,17 +31,18 @@ function geometryPath(el) {
 
 // SVG geometry -> Canvas paint coverage. The mask is tiled at 1/4 CSS px, never a bounding-box hit test.
 // See doc/selection.md for precision, supported SVG features and the replaceable adapter contract.
-export function createSelectionGeometry({canvas,canSelect}) {
+export function createSelectionGeometry({canvas,canSelect}, rendered = null) {
   const surface=canvas.ownerDocument.createElement('canvas');surface.width=surface.height=tileSize;
   const ctx=surface.getContext('2d',{willReadFrequently:true});
   const pixel=selectionPixelSize;
   const cachedTiles=[];
-  function describe(el) {
+  function describe(el, request) {
     if(!canSelect(el))return null;
     for(let n=el;n&&n!==canvas;n=n.parentElement) {
       const s=getComputedStyle(n);if(s.display==='none'||Number(s.opacity)===0)return null;
     }
     const s=getComputedStyle(el);if(s.visibility!=='visible')return null;
+    if (rendered?.supports(el)) return rendered.describe(el, request);
     const fill=paint(s.fill,s.fillOpacity),stroke=paint(s.stroke,s.strokeOpacity)&&parseFloat(s.strokeWidth)>0;
     if(!fill&&!stroke)return null;
     const path=geometryPath(el),text=el.localName==='text';
@@ -67,7 +68,9 @@ export function createSelectionGeometry({canvas,canSelect}) {
     ctx.setLineDash(d.dash);ctx.lineDashOffset=d.offset;ctx.fillStyle=ctx.strokeStyle='#000';
   }
   function draw(d,tx,ty) {
-    ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,tileSize,tileSize);style(d);
+    ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,tileSize,tileSize);
+    if (d.drawTile) { d.drawTile(ctx, tx, ty, pixel); return; }
+    style(d);
     const m=d.matrix;ctx.setTransform(m.a/pixel,m.b/pixel,m.c/pixel,m.d/pixel,m.e/pixel-tx,m.f/pixel-ty);
     if(d.path) {
       if(d.fill)ctx.fill(d.path,d.rule);
@@ -88,12 +91,35 @@ export function createSelectionGeometry({canvas,canSelect}) {
       budget.count+=(right-left)*(bottom-top);
       if(budget.count>maxPixels)throw Error('選択判定の処理量上限です。表示を縮小するか、選択範囲を狭めてください。');
       const key=tx+','+ty;let alpha=d.tiles.get(key);
-      if(!alpha){draw(d,tx,ty);const rgba=ctx.getImageData(0,0,tileSize,tileSize).data;alpha=new Uint8Array(tileSize*tileSize);for(let i=0;i<alpha.length;i++)alpha[i]=rgba[4*i+3];if(cachedTiles.length>=128){const [old,oldKey]=cachedTiles.shift();old.tiles.delete(oldKey);}d.tiles.set(key,alpha);cachedTiles.push([d,key]);}
+      if (!alpha) {
+        let rgba;
+        try {
+          draw(d,tx,ty);
+          rgba = ctx.getImageData(0,0,tileSize,tileSize).data;
+        } catch (error) {
+          // Reset the bitmap's origin-clean flag before another object uses this shared context.
+          surface.width = tileSize;
+          if (error.name === 'SecurityError') throw Error('SVGの画素を読み出せません。外部画像の参照元を確認してください。');
+          throw error;
+        }
+        alpha = new Uint8Array(tileSize*tileSize);
+        for (let i=0; i<alpha.length; i++) alpha[i] = rgba[4*i+3];
+        if (cachedTiles.length >= 128) {
+          const [old,oldKey] = cachedTiles.shift();
+          old.tiles.delete(oldKey);
+        }
+        d.tiles.set(key,alpha);
+        cachedTiles.push([d,key]);
+      }
       for(let y=top;y<bottom;y++)for(let x=left;x<right;x++)if(alpha[(y-ty)*tileSize+x-tx]&&test({x:(x+0.5)*pixel,y:(y+0.5)*pixel}))return true;
     }
     return false;
   }
-  function exact(d,p) {
+  function exact(d,p,budget) {
+    if (d.drawTile) {
+      const x = Math.floor(p.x/pixel)*pixel, y = Math.floor(p.y/pixel)*pixel;
+      return scan(d, {x,y,width:pixel,height:pixel}, () => true, budget);
+    }
     if(!d.path)return false;
     ctx.setTransform(1,0,0,1,0,0);style(d);const local=transformed(p,d.inverse);
     return (d.fill&&ctx.isPointInPath(d.path,local.x,local.y,d.rule))||
@@ -101,18 +127,19 @@ export function createSelectionGeometry({canvas,canSelect}) {
   }
   return {
     id:'canvas-coverage',algorithm:'Canvas Path2Dの塗り・線の被覆判定（0.25 CSS px）。なげなわは偶奇規則。',
-    snapshot(elements) {
+    snapshot(elements, request) {
       // Selection dashes are decoration; restore original paint while reading computed styles.
       for(const [d,key] of cachedTiles)d.tiles.delete(key);cachedTiles.length=0;
       const selected=[...canvas.querySelectorAll('[data-vector-selected]')];selected.forEach(e=>e.removeAttribute('data-vector-selected'));
-      try{return elements.map(element=>({element,parts:[element,...element.querySelectorAll('path,line,rect,circle,ellipse,polygon,polyline,text')].filter((e,i,a)=>a.indexOf(e)===i).map(describe).filter(Boolean)}));}
+      try{return elements.map(element=>({element,parts:[element,...element.querySelectorAll('path,line,rect,circle,ellipse,polygon,polyline,text,image,use')].filter((e,i,a)=>a.indexOf(e)===i).map(el=>describe(el, request)).filter(Boolean)}));}
       finally{selected.forEach(e=>e.setAttribute('data-vector-selected',''));}
     },
     pick(items,p,radius) {
       // Reverse document order resolves direct hits and equal-distance ties to the frontmost object.
-      for(const item of [...items].reverse())if(item.parts.some(d=>exact(d,p)))return item.element;
+      const budget={count:0};
+      for(const item of [...items].reverse())if(item.parts.some(d=>exact(d,p,budget)))return item.element;
       if(radius===0)return null;
-      const box={x:p.x-radius,y:p.y-radius,width:2*radius,height:2*radius},budget={count:0};
+      const box={x:p.x-radius,y:p.y-radius,width:2*radius,height:2*radius};
       let best=null,distance=Infinity;
       for(const item of [...items].reverse()) {
         let nearest=Infinity;

@@ -3900,6 +3900,9 @@ await check('Selection respects locked descendants, cancels on viewport changes 
   w.selectTool.deselectObject();selectionMouse('mousedown',20,20);const original=canvas.style.transform;canvas.style.transform='scale(1.2)';
   try {selectionMouse('mousemove',50,50);assert(!w.selectTool.isMarqueeSelecting&&!canvas.querySelector('.marquee-selection'),'zoom cancels stale coverage');}finally{canvas.style.transform=original;}
 });
+const {testRenderedSelection} = await import('./renderedSelection.mjs');
+await testRenderedSelection({w, doc, canvas, fixture, selectionSetup, selectionMouse, selectionDrag,
+  selectionIDs, check, assert, key, tick, activate});
 function shiftedReductionInput(name='bSplineCurve',values=[.5],weight=2,knots=[0,1,3,4,6,8],original){
   const base=original??{degree:3,periodic:true,points:periodicRemovalPoints,periodicKnots:knots,...(name==='nurbsCurve'?{weights:[1,weight,1,1,1]}:{})};
   let input=w.toolManager.host.execute('elevateSplineDegree',base,{implementation:'continuity'});assert(input,'raised seed');

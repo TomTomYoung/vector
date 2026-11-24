@@ -23,7 +23,7 @@ class SelectTool extends BaseTool {
     this.marqueeRect = null;
     this.selectionPreferences = window.VectorUtils.createSelectionPreferences(toolManager.selectionPreferenceOptions);
     this.selectionOptions = this.selectionPreferences.value;
-    this.selectionGeometry = (toolManager.selectionGeometryFactory ?? window.VectorUtils.createSelectionGeometry)({canvas,canSelect:el=>this.canSelect(el)});
+    this.selectionGeometry = (toolManager.selectionGeometryFactory ?? window.VectorUtils.createRenderedSelectionGeometry)({canvas,canSelect:el=>this.canSelect(el)});
     this.selectionMessage = '';
     this.selectionCandidatesPreview = [];
   }
@@ -323,6 +323,7 @@ class SelectTool extends BaseTool {
 
   // マウスダウン時の処理
   handleMouseDown(event) {
+    this.cancelMarqueeSelection();
     super.handleMouseDown(event);
     // まずすべてリセット
     this.isDragging = false;
@@ -422,22 +423,61 @@ class SelectTool extends BaseTool {
       return;
     }
 
-    // Native event hits keep their priority. Radius picking runs only on empty space.
-    let target = event.target !== this.canvas && this.canSelect(event.target) ? this.selectionTarget(event.target) : null;
-    try {
-      if (!target) target = this.selectionGeometry.pick(this.selectionGeometry.snapshot(this.getSelectionCandidates(false)), {x:event.clientX,y:event.clientY},this.selectionOptions.radius);
-    } catch(error) {this.reportSelection(error.message);return;}
-    if (target) {
-      if (isMultiSelect || !window.selectedObjects.includes(target)) this.selectObject(target,isMultiSelect);
-      if (!window.selectedObjects.includes(target)) return;
-      this.isDragging = true;
-      if (window.selectedObjects.length > 1) this.multiInitialMatrices = window.selectedObjects.map(obj=>obj.getCTM()||new DOMMatrix());
-      else this.initialMatrix = this.selectedObject.getCTM()||new DOMMatrix();
-      this.startPoint = {...this.currentPoint};
-      this.captureMoveMatrices();
-    } else {
-      this.startMarqueeSelection({x:event.clientX,y:event.clientY},isMultiSelect);
+    const point = {x:event.clientX, y:event.clientY};
+    const native = event.target !== this.canvas && this.canSelect(event.target);
+    if (native && !this.selectionGeometry.requiresPaintHit?.(event.target)) {
+      this.beginObjectDrag(this.selectionTarget(event.target), isMultiSelect, this.currentPoint);
+      return;
     }
+
+    const controller = new AbortController();
+    try {
+      const items = this.selectionGeometry.snapshot(this.getSelectionCandidates(false), {signal:controller.signal});
+      const target = this.selectionGeometry.pick(items, point, this.selectionOptions.radius, {signal:controller.signal});
+      if (target?.then) {
+        const down = {...this.currentPoint};
+        this.startMarqueeSelection(point, isMultiSelect, controller);
+        this.awaitingPick = true;
+        target.then(hit => this.finishPendingPick(controller, hit, down))
+          .catch(error => this.selectionFailed(controller, error));
+      } else if (target) {
+        this.beginObjectDrag(target, isMultiSelect, this.currentPoint);
+      } else {
+        this.startMarqueeSelection(point, isMultiSelect, controller);
+      }
+    } catch (error) {
+      this.cancelMarqueeSelection();
+      controller.abort();
+      this.reportSelection(error.message);
+    }
+  }
+
+  beginObjectDrag(target, additive, down) {
+    if (additive || !window.selectedObjects.includes(target)) this.selectObject(target, additive);
+    if (!window.selectedObjects.includes(target)) return;
+    this.isDragging = true;
+    if (window.selectedObjects.length > 1) this.multiInitialMatrices = window.selectedObjects.map(obj=>obj.getCTM()||new DOMMatrix());
+    else this.initialMatrix = this.selectedObject.getCTM() || new DOMMatrix();
+    this.startPoint = {...down};
+    this.captureMoveMatrices();
+  }
+
+  finishPendingPick(controller, target, down) {
+    if (!this.gestureCurrent(controller)) return;
+    this.awaitingPick = false;
+    if (!target) {
+      if (this.marqueeRegion) this.queryMarqueeSelection();
+      return;
+    }
+    const {marqueeEnd:end, marqueeStart:start, marqueeAdditive:additive, marqueeReleased:released} = this;
+    this.cancelMarqueeSelection();
+    if (!this.canSelect(target)) return;
+    this.beginObjectDrag(target, additive, down);
+    if (this.isDragging && (end.x !== start.x || end.y !== start.y)) {
+      this.currentPoint = this.getSVGPoint({clientX:end.x, clientY:end.y});
+      this.moveObject();
+    }
+    if (released) this.handleMouseUp();
   }
 
   handleMouseMove(event) {
@@ -448,6 +488,7 @@ class SelectTool extends BaseTool {
     this.currentPoint = this.getSVGPoint(event);
 
     if (this.isMarqueeSelecting) {
+      if (this.marqueeReleased) return;
       this.updateMarqueeSelection({x:event.clientX,y:event.clientY});
       return;
     }
@@ -468,8 +509,10 @@ class SelectTool extends BaseTool {
 
   handleMouseUp(event) {
     if (this.isMarqueeSelecting) {
-      this.updateMarqueeSelection({x:event.clientX,y:event.clientY});
-      this.finalizeMarqueeSelection();
+      if (!this.marqueeReleased) {
+        this.marqueeReleased = true;
+        this.updateMarqueeSelection({x:event.clientX,y:event.clientY});
+      }
       return;
     }
 
@@ -759,6 +802,13 @@ class SelectTool extends BaseTool {
   }
 
   cancelMarqueeSelection() {
+    this.gestureObserver?.disconnect();
+    this.gestureObserver = null;
+    this.gestureController?.abort();
+    this.gestureController = null;
+    this.awaitingPick = false;
+    this.marqueeReleased = false;
+    this.marqueeRegion = null;
     this.isMarqueeSelecting=false;
     this.marqueeRect?.remove();this.marqueeRect=null;this.marqueeStart=null;this.marqueeItems=null;
     this.clearSelectionPreview();
@@ -777,10 +827,36 @@ class SelectTool extends BaseTool {
     return new DOMMatrix([m.a,m.b,m.c,m.d,m.e,m.f]);
   }
 
-  startMarqueeSelection(point,additive=false) {
-    this.cancelMarqueeSelection();this.selectionMessage='';
-    try {this.marqueeItems=this.selectionGeometry.snapshot(this.getSelectionCandidates());}
-    catch(error){this.reportSelection(error.message);return;}
+  selectionFailed(controller, error) {
+    if (this.gestureController !== controller) return;
+    this.cancelMarqueeSelection();
+    this.reportSelection(error.message);
+  }
+
+  artworkChanged(records) {
+    return records.some(record => {
+      const el = record.target.nodeType === Node.ELEMENT_NODE ? record.target : record.target.parentElement;
+      if (el?.closest(DrawingDocument.helpers)) return false;
+      if (record.type === 'attributes') return !['data-vector-selection-candidate','data-vector-selected'].includes(record.attributeName);
+      if (record.type !== 'childList') return true;
+      return [...record.addedNodes, ...record.removedNodes].some(node => !node.matches?.(DrawingDocument.helpers));
+    });
+  }
+
+  gestureCurrent(controller) {
+    if (controller !== this.gestureController) return false;
+    if (this.selectionViewportMatrix().toString() !== this.marqueeViewport ||
+        this.artworkChanged(this.gestureObserver?.takeRecords() ?? [])) {
+      this.selectionFailed(controller, Error('図形または表示位置・倍率が変わったため選択を取り消しました。'));
+      return false;
+    }
+    return true;
+  }
+
+  startMarqueeSelection(point, additive=false, controller=new AbortController()) {
+    this.gestureController = controller;
+    this.selectionMessage = '';
+    this.marqueeItems = this.selectionGeometry.snapshot(this.getSelectionCandidates(), {signal:controller.signal});
     this.isMarqueeSelecting=true;this.marqueeStart={...point};this.marqueeEnd={...point};
     this.marqueePoints=[{...point}];this.marqueeAdditive=additive;
     this.marqueeViewport=this.selectionViewportMatrix().toString();
@@ -788,17 +864,21 @@ class SelectTool extends BaseTool {
     this.marqueeRect.setAttribute('fill-rule','evenodd');this.marqueeRect.setAttribute('vector-effect','non-scaling-stroke');
     this.canvas.append(this.marqueeRect);
     this.marqueeListeners={
-      mousemove:event=>{if(!this.canvas.contains(event.target))this.updateMarqueeSelection({x:event.clientX,y:event.clientY});},
+      mousemove:event=>{if(!this.marqueeReleased&&!this.canvas.contains(event.target))this.updateMarqueeSelection({x:event.clientX,y:event.clientY});},
       mouseup:event=>{if(this.isMarqueeSelecting)this.handleMouseUp(event);},
       blur:()=>this.cancelMarqueeSelection(),
       pointercancel:()=>this.cancelMarqueeSelection(),
     };
     for(const [name,listener] of Object.entries(this.marqueeListeners))window.addEventListener(name,listener);
+    this.gestureObserver = new MutationObserver(records => {
+      if (this.artworkChanged(records)) this.selectionFailed(controller, Error('図形が変わったため選択を取り消しました。'));
+    });
+    this.gestureObserver.observe(this.canvas, {subtree:true, childList:true, attributes:true, characterData:true});
   }
 
   updateMarqueeSelection(point) {
     if(!this.isMarqueeSelecting)return;
-    if(this.selectionViewportMatrix().toString()!==this.marqueeViewport){this.cancelMarqueeSelection();this.reportSelection('表示位置・倍率が変わったため範囲選択を取り消しました。');return;}
+    if (!this.gestureCurrent(this.gestureController)) return;
     this.marqueeEnd={...point};
     const last=this.marqueePoints.at(-1);
     if(Math.hypot(point.x-last.x,point.y-last.y)>=1)this.marqueePoints.push({...point});
@@ -815,12 +895,31 @@ class SelectTool extends BaseTool {
     this.marqueeRect.setAttribute('d',path);
     this.marqueeRect.style.fill=shape==='line'?'none':'';
     this.marqueeRect.setAttribute('transform',this.selectionViewportMatrix().inverse().toString());
+    if (!this.awaitingPick) this.queryMarqueeSelection();
+  }
+
+  queryMarqueeSelection() {
+    const region = this.marqueeRegion, controller = this.gestureController;
+    const current = () => this.marqueeRegion === region && this.gestureCurrent(controller);
+    const preview = candidates => {
+      if (!current()) return;
+      this.clearSelectionPreview();
+      this.selectionCandidatesPreview = candidates.filter(el => el.isConnected && this.canSelect(el));
+      this.selectionCandidatesPreview.forEach(el => el.setAttribute('data-vector-selection-candidate',''));
+      if (this.marqueeReleased) this.finalizeMarqueeSelection();
+      else this.reportSelection(`${this.selectionCandidatesPreview.length}個の候補${this.marqueeAdditive?'（選択を反転）':''}`);
+    };
     try {
-      const candidates=this.selectionGeometry.query(this.marqueeItems.filter(item=>item.element.isConnected&&this.canSelect(item.element)),region,this.selectionOptions.match);
-      this.clearSelectionPreview();this.selectionCandidatesPreview=candidates;
-      candidates.forEach(el=>el.setAttribute('data-vector-selection-candidate',''));
-      this.reportSelection(`${candidates.length}個の候補${this.marqueeAdditive?'（選択を反転）':''}`);
-    } catch(error) {this.cancelMarqueeSelection();this.reportSelection(error.message);}
+      const items = this.marqueeItems.filter(item => item.element.isConnected && this.canSelect(item.element));
+      const hits = this.selectionGeometry.query(items, region, this.selectionOptions.match, {signal:controller.signal, current});
+      if (hits?.then) {
+        this.clearSelectionPreview();
+        this.reportSelection('SVGの描画を読み込み中です。');
+        hits.then(preview).catch(error => { if (current()) this.selectionFailed(controller, error); });
+      } else preview(hits);
+    } catch (error) {
+      this.selectionFailed(controller, error);
+    }
   }
 
   finalizeMarqueeSelection() {

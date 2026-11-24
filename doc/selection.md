@@ -12,9 +12,9 @@ Esc、フォーカス喪失、ポインター取消、ツール切替、表示�
 
 ## 計算と描画の実装
 
-GUIの判定は [selectionGeometry.js](../src/adapters/selectionGeometry.js) の `createSelectionGeometry`、範囲生成・距離・偶奇判定は [selectionRegion.js](../src/model/selectionRegion.js)、イベント処理と補助SVGは [SelectTool.js](../src/tools/SelectTool.js) です。
+GUIの標準判定は [renderedSelectionGeometry.js](../src/adapters/renderedSelectionGeometry.js) の `createRenderedSelectionGeometry`、共通のタイル走査と通常図形の判定は [selectionGeometry.js](../src/adapters/selectionGeometry.js)、範囲生成・距離・偶奇判定は [selectionRegion.js](../src/model/selectionRegion.js)、イベント処理と補助SVGは [SelectTool.js](../src/tools/SelectTool.js) です。
 
-クリックはブラウザーがヒットした図形を優先します。空白では各図形のPath2Dに対する直接の塗り・ストローク判定を先に行い、直接ヒットがなければ半径内の描画領域までの距離を比較します。距離差が格子の対角長（約0.35px）以内なら同順位として前面の図形を優先します。ロック／非表示レイヤー、非表示・不透明度0の要素、定義・補助要素は候補から除外します。点群・三角形分割等は既存の編集単位であるグループを選びます。通常のグループは従来どおり範囲選択では全体、直接クリックでは子要素を対象とします。
+通常図形のクリックはブラウザーがヒットした図形を優先します。image・use が手前にある場合は、透明部分の背後も含めて描画順に直接ヒットを調べます。空白では各図形のPath2Dに対する直接の塗り・ストローク判定を先に行い、直接ヒットがなければ半径内の描画領域までの距離を比較します。距離差が格子の対角長（約0.35px）以内なら同順位として前面の図形を優先します。ロック／非表示レイヤー、非表示・不透明度0の要素、定義・補助要素は候補から除外します。点群・三角形分割等は既存の編集単位であるグループを選びます。通常のグループは従来どおり範囲選択では全体、直接クリックでは子要素を対象とします。
 
 計算用のCanvas 2DへSVGの線・塗りを写し、1/4 CSS pxの格子で被覆を比較します。境界箱は処理範囲の絞り込みに用い、最終判定は描画領域で行います。線幅、線端、結合、破線、fill-rule、複数サブパス、円弧・ベジェ、親を含むアフィン変換、図面のviewBoxとズームを反映します。通常の文字は文字位置・回転とフォントをCanvasへ写します。通常線のnon-scaling-strokeにも対応します。選択用の点線装飾を一時的に外して元の線の設定を読み、判定後に装飾を戻します。
 
@@ -22,7 +22,19 @@ GUIの判定は [selectionGeometry.js](../src/adapters/selectionGeometry.js) の
 
 これは厳密な曲線交差の解法ではなく、有限解像度の被覆判定です。境界付近には概ね0.5 CSS px以内の差があり、アンチエイリアスや極端に細い線の結果はブラウザーに依存します。クリック半径0のPath2D直接判定には、この格子への丸めを使いません。
 
-インポートSVGの `image` / `use`、clipPath / mask / filter / marker、透明グラデーション・パターンの内部の透明部分、textPath・複雑な組版・文字のnon-scaling-strokeはこの被覆変換の完全再現対象外です。image / useは直接クリックできますが、範囲・近傍の対象には含めません。クリップ等がある通常図形は効果適用前の基本形状で判定します。これらをブラウザーの最終描画と一致させるには、非同期SVGラスタライズ、外部リソースの読込・CORS・フォント待機・無効化管理を含む別アダプターが必要です。現行の同期ポインター処理との統合課題として残します。
+### SVG画像・参照図形
+
+標準方式では `image` と同じ図面内の `use href="#id"`（旧 `xlink:href` を含む）を個別に描画します。透明な余白だけを横切る直線はヒットしません。完全包含では不透明または半透明の画素すべてが範囲に入れば、画像枠がはみ出しても選べます。クリック半径も同じアルファ被覆から画面上の距離を測ります。グループの範囲選択は、通常図形と画像の被覆を合わせて判定します。
+
+元のSVGビューポートとviewBox、対象の祖先、参照先図形・symbolを持つ透明なSVGを組み立て、ブラウザーでデコードします。画像の縦横比・余白、入れ子の変換、useの位置・サイズはSVG描画器が解決します。ビューポート座標から画面座標への行列で共通のタイルに描画し、8ビットのアルファが1以上の画素を対象とします。線端や結合などがuseの境界箱を超え得る場合は、図面のビューポートまで走査領域を広げます。点・領域の境界は他の範囲判定と同じ有限解像度です。背後の別オブジェクトも個別の選択候補になります。
+
+外部画像は図面内の要素のbaseURIでURLを解決し、ブラウザーのCORS規則に従って取得します。取得した画像をデコードしてから単独SVGに埋め込みます。ローカルファイルを開いた場合の相対URLの基準はエディター文書です。デコード失敗、HTTPエラー、画素の読出し失敗ではプロパティに理由を表示し、その操作の選択を部分確定しません。同じ範囲で新しい操作を始めると再取得します。
+
+デコード・タイルの再利用単位は1回のポインター操作です。移動中は最新の領域だけを反映し、ボタンを離した後も最終位置での判定完了を待ちます。Esc、フォーカス喪失、ポインター取消、ツール変更、新しい操作は待機中の取得を取り消します。SVGの要素・参照先の属性、子要素や文字列が変わった場合も監視して取り消します。表示の行列を確定直前に照合します。ロード済み画素は次の操作に持ち越しません。
+
+### 特殊効果へ広げる条件
+
+通常図形のclipPath・mask・filter・markerは引き続き基本形状で判定します。画像・useで図面内の定義が一緒に描かれる場合もありますが、特殊効果全般の対応は未検証です。対象を広げるには、参照先の依存関係（クリップ内のuse、mask内の外部画像など）、座標系（objectBoundingBox／userSpaceOnUse）、フィルター出力・マーカー・祖先クリップを含む描画限界を扱う必要があります。グループ効果では編集単位全体を一緒に描画し、透明穴・ぼかしの外縁・親クリップを実表示と照合します。別SVGファイルのuse、文書外のCSS、アニメーション、Webフォントの読込・変更、背景依存の合成も追加検証の対象です。
 
 1回の判定で走査する上限は16,777,216画素、なげなわの入力点は8,192点です。超過時には結果を部分確定せず取り消し、プロパティに理由を表示します。範囲を狭める／図面表示を縮小すると負荷を減らせます。
 
@@ -30,7 +42,7 @@ GUIの判定は [selectionGeometry.js](../src/adapters/selectionGeometry.js) の
 
 [selectionPreferences.js](../src/adapters/selectionPreferences.js) が半径・形状・判定条件を操作設定として保存します。SVGの図形属性、作図の方式設定、文書プリセット、Undoとは独立しています。保存先は `vector:selection:v1:` とアプリのパスです。読込失敗では初期値で起動し、保存失敗では現在の画面の設定を維持して理由を表示します。
 
-埋込時は `vectorEditorOptions.selectionPreferences` で `enabled`・`key`・`storage` を指定できます。`false`で無効です。明示しない場合、既存の `preferences:false` も保存無効として扱います。`selectionGeometry` にファクトリーを渡すことで判定を換装できます。ファクトリーには `{canvas, canSelect}` を渡し、返すオブジェクトは `id`・`algorithm`・`snapshot(elements)`・`pick(items,screenPoint,radius)`・`query(items,region,match)` を実装します。snapshotの各項目は `element` を持ち、pickは要素またはnull、queryは要素の配列を返します。候補を変更せず、処理不能時は例外を返してください。プロパティには換装後の `algorithm` を表示します。
+埋込時は `vectorEditorOptions.selectionPreferences` で `enabled`・`key`・`storage` を指定できます。`false`で無効です。明示しない場合、既存の `preferences:false` も保存無効として扱います。`selectionGeometry` にファクトリーを渡すことで判定を換装できます。ファクトリーには `{canvas, canSelect}` を渡し、返すオブジェクトは `id`・`algorithm`・`snapshot(elements)`・`pick(items,screenPoint,radius)`・`query(items,region,match)` を実装します。snapshotの各項目は `element` を持ち、pickは要素またはnull、queryは要素の配列を返します。標準方式のpick・queryは画像の読込時にPromiseを返します。追加の最終引数でAbortSignal（signal）を受け取り、queryでは現在の領域かを返すcurrentも利用できます。同期実装も利用できます。ネイティブの直接ヒットを画素で再検査する対象は任意の `requiresPaintHit(element)` で指定できます。従来方式は `selectionGeometry: createSelectionGeometry` で指定できます。処理不能時は例外またはPromiseの拒否で通知します。プロパティには換装後の `algorithm` を表示します。
 
 独立した計算モデル `select` の旧 `bounds/candidates` APIは互換性のため境界箱の完全包含を維持します。GUIの精密なヒット処理は上記アダプターが担当します。計算機能数122・GUIツール数31は変わりません。
 
@@ -38,6 +50,8 @@ GUIの判定は [selectionGeometry.js](../src/adapters/selectionGeometry.js) の
 
 この実装のために確認した一次資料です。以下の規格/APIとUIの先例を参照しました。特定の論文のコードを移植したものではありません。
 
+- 画像の配置とpreserveAspectRatioは SVG 2 の [Embedded Content](https://svgwg.org/svg2-draft/embedded.html#ImageElement) を参照しました。
+- symbolのビューポート、参照図形とインスタンスの関係は SVG 2 の [The use element](https://svgwg.org/svg2-draft/struct.html#UseElement) を参照しました。
 - [WHATWG HTML — Canvas](https://html.spec.whatwg.org/multipage/canvas.html): Path2D、fillの偶奇規則、線のストローク、isPointInPath / isPointInStroke、getImageData。被覆描画・直接判定のAPI契約として参照しています。
 - [W3C SVG 2 — Basic Data Types and Interfaces](https://www.w3.org/TR/SVG2/types.html#InterfaceSVGGeometryElement): 図形のローカル座標、塗り・線のヒット領域、線端・結合・破線の意味を確認しました。DOM行列で画面座標と図形座標を接続します。
 - [Autodesk — Have You Tried: Window, Fence, Lasso, and More](https://help.autodesk.com/cloudhelp/2026/ENU/AutoCAD-LT-DidYouKnow/files/GUID-D0D5C0C3-F092-448A-8E81-D38F27094639.htm): 包含／交差、フェンス、なげなわという操作の先例です。AutoCADの内部判定アルゴリズムを実装・移植したという意味ではありません。
@@ -47,3 +61,5 @@ GUIの判定は [selectionGeometry.js](../src/adapters/selectionGeometry.js) の
 `tests/selection.test.mjs` で範囲・距離・偶奇規則・保存復元・不正値・保存失敗を検査します。`tests/editor.html` では4形状、実際のPath2D描画、拡大時の半径、優先順位、ロック・非表示、線幅、破線、塗りの穴、曲線、プレビュー、保存除外、取消、複数選択、画面外の終了、新規エディタへの設定復元を操作して検査します。
 
 [PR #94](https://github.com/TomTomYoung/vector/pull/94) の実装コミット `894f880` に対する [CI 44120490546](https://github.com/TomTomYoung/vector/actions/runs/44120490546) で、Node 356件・実Chrome 270件が全て成功しました。新規分はNode 6件・ブラウザー13件です。最初の検証で数値欄の確定イベント、近傍同距離の扱い、SVGMatrixの文字列化に依存した枠表示・倍率変更検知を確認・修正し、枠の画面行列そのものを回帰検査へ追加しています。ローカルChromiumはソケット制約で起動できないため、ブラウザーの成功記録はGitHub Actionsの実Chromeです。
+
+画像・useの回帰検査は [renderedSelection.mjs](../tests/renderedSelection.mjs) です。実エディターで透明／有色画素、4形状、変換されたsymbol、参照変更、外部画像の失敗・再試行、非同期確定・取消を操作します。

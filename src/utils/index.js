@@ -20,6 +20,7 @@
  */
 
 import {createSelectionGeometry} from '../adapters/selectionGeometry.js';
+import {createRenderedSelectionGeometry} from '../adapters/renderedSelectionGeometry.js';
 import {createSelectionPreferences} from '../adapters/selectionPreferences.js';
 import {makeSelectionRegion} from '../model/selectionRegion.js';
 import {createEditorHost} from "../adapters/editorHost.js";
@@ -62,6 +63,7 @@ import { TransformLayer, TransformManager } from './transformManager.js';
 // グローバルオブジェクトとして公開
 window.VectorUtils = {
   createSelectionGeometry,
+  createRenderedSelectionGeometry,
   createSelectionPreferences,
   makeSelectionRegion,
   createEditorHost,
