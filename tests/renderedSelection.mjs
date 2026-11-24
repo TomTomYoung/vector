@@ -58,6 +58,24 @@ export async function testRenderedSelection({w, doc, canvas, fixture, selectionS
       assert(await drag([100,140],[120,150]) === '', 'old pixels removed');
     } finally { canvas.style.transform = transform; }
   });
+  await check('Image viewport letterboxing, fully transparent groups and use stroke outside the geometry bbox', async () => {
+    const clear = doc.createElement('canvas').toDataURL();
+    await setup('<g id="empty">' + image(clear) + '</g>');
+    assert(await drag([80,80],[150,150]) === '', 'fully transparent group has no paint to contain');
+    await setup('<g id="moved" transform="translate(40 20) scale(2 1)">' +
+      '<image x="40" y="70" width="80" height="40" href="' + svg + '"/></g>');
+    canvas.setAttribute('viewBox','20 30 320 240');
+    canvas.setAttribute('preserveAspectRatio','xMaxYMin meet');
+    // Square content meets an 80x40 viewport with a 20-unit margin on each side.
+    assert(await drag([177,97],[223,123]) === 'moved', 'contain transformed ink');
+    tool.setSelectionOptions({match:'touch'});
+    assert(await drag([125,98],[149,120]) === '', 'letterbox is transparent');
+    await setup('<defs><path id="wire" d="M 100 100 h 40" fill="none" stroke="black" stroke-width="12" stroke-linecap="round"/></defs>' +
+      '<use xmlns:xlink="http://www.w3.org/1999/xlink" id="instance" xlink:href="#wire" x="40"/>', {match:'touch'});
+    assert(await drag([129,97],[137,103]) === 'instance', 'xlink use paints beyond a zero-height bbox');
+    tool.setSelectionOptions({match:'contain'});
+    assert(await drag([130,97],[183,103]) === '', 'stroke extends outside containment');
+  });
   await check('Transparent native image target passes clicks through and proximity measures client pixels', async () => {
     await setup('<rect id="under" x="100" y="100" width="6" height="6"/>' + image(png));
     const art = doc.querySelector('#art');
@@ -75,6 +93,16 @@ export async function testRenderedSelection({w, doc, canvas, fixture, selectionS
     const engine = tool.selectionGeometry, items = engine.snapshot([art]);
     assert(await engine.pick(items, {x:p.x, y:p.y-3}, 5) === art, 'near painted edge');
     assert(await engine.pick(items, {x:p.x, y:p.y-7}, 5) === null, 'outside radius');
+  });
+  await check('An SVG loaded through a blob URL retains its transparent margin and separate placements', async () => {
+    const url = w.URL.createObjectURL(new w.Blob([decodeURIComponent(svg.split(',')[1])], {type:'image/svg+xml'}));
+    try {
+      await setup(image(url) + '<use id="copy" href="#art" x="80"/>');
+      assert(await drag([188,108],[212,132]) === 'copy', 'external image drawn in its use instance');
+      assert(await drag([108,108],[132,132]) === 'art', 'original selected independently');
+      tool.setSelectionOptions({match:'touch'});
+      assert(await drag([181,101],[186,106]) === '', 'external transparent pixels');
+    } finally { w.URL.revokeObjectURL(url); }
   });
   await check('Broken external image cancels atomically, then changing href retries without stale alpha', async () => {
     await setup('<rect id="keep" x="20" y="20" width="10" height="10"/>' + image('missing-rendered-selection.png'));
@@ -114,6 +142,26 @@ export async function testRenderedSelection({w, doc, canvas, fixture, selectionS
         if (end !== 'tool') assert(selectionIDs() === 'keep', 'previous or newer selection preserved: '+end);
       } finally {w.fetch = fetch; canvas.style.transform = transform;}
     }
+  });
+  await check('A use reference edited during its image fetch cannot commit the old instance', async () => {
+    await setup('<defs><image id="source" x="100" y="100" width="40" height="40" href="pending-source.png"/></defs>' +
+      '<use id="instance" href="#source"/>');
+    const fetch = w.fetch;
+    let resume;
+    w.fetch = (url, options) => String(url).endsWith('pending-source.png')
+      ? new Promise(resolve => { resume = async () => resolve(await fetch.call(w,png)); })
+      : fetch.call(w,url,options);
+    try {
+      selectionDrag([80,80],[150,150]);
+      await wait(() => !!resume);
+      const source = doc.querySelector('#source');
+      source.setAttribute('href',png);
+      source.setAttribute('x','230');
+      await resume();
+      await wait(() => !tool.isMarqueeSelecting);
+      assert(!selectionIDs(), 'changed definition cancels pending release');
+      assert(await drag([225,95],[275,145]) === 'instance', 'new reference pixels are selectable');
+    } finally { w.fetch = fetch; }
   });
   await check('Reading an external image once per gesture uses the mouseup region even if previews complete late', async () => {
     await setup(image('deferred-rendered-selection.png'), {match:'touch'});

@@ -91,7 +91,26 @@ export function createSelectionGeometry({canvas,canSelect}, rendered = null) {
       budget.count+=(right-left)*(bottom-top);
       if(budget.count>maxPixels)throw Error('選択判定の処理量上限です。表示を縮小するか、選択範囲を狭めてください。');
       const key=tx+','+ty;let alpha=d.tiles.get(key);
-      if(!alpha){draw(d,tx,ty);const rgba=ctx.getImageData(0,0,tileSize,tileSize).data;alpha=new Uint8Array(tileSize*tileSize);for(let i=0;i<alpha.length;i++)alpha[i]=rgba[4*i+3];if(cachedTiles.length>=128){const [old,oldKey]=cachedTiles.shift();old.tiles.delete(oldKey);}d.tiles.set(key,alpha);cachedTiles.push([d,key]);}
+      if (!alpha) {
+        let rgba;
+        try {
+          draw(d,tx,ty);
+          rgba = ctx.getImageData(0,0,tileSize,tileSize).data;
+        } catch (error) {
+          // Reset the bitmap's origin-clean flag before another object uses this shared context.
+          surface.width = tileSize;
+          if (error.name === 'SecurityError') throw Error('SVGの画素を読み出せません。外部画像の参照元を確認してください。');
+          throw error;
+        }
+        alpha = new Uint8Array(tileSize*tileSize);
+        for (let i=0; i<alpha.length; i++) alpha[i] = rgba[4*i+3];
+        if (cachedTiles.length >= 128) {
+          const [old,oldKey] = cachedTiles.shift();
+          old.tiles.delete(oldKey);
+        }
+        d.tiles.set(key,alpha);
+        cachedTiles.push([d,key]);
+      }
       for(let y=top;y<bottom;y++)for(let x=left;x<right;x++)if(alpha[(y-ty)*tileSize+x-tx]&&test({x:(x+0.5)*pixel,y:(y+0.5)*pixel}))return true;
     }
     return false;

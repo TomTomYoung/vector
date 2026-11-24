@@ -42,7 +42,7 @@ GUIの標準判定は [renderedSelectionGeometry.js](../src/adapters/renderedSel
 
 [selectionPreferences.js](../src/adapters/selectionPreferences.js) が半径・形状・判定条件を操作設定として保存します。SVGの図形属性、作図の方式設定、文書プリセット、Undoとは独立しています。保存先は `vector:selection:v1:` とアプリのパスです。読込失敗では初期値で起動し、保存失敗では現在の画面の設定を維持して理由を表示します。
 
-埋込時は `vectorEditorOptions.selectionPreferences` で `enabled`・`key`・`storage` を指定できます。`false`で無効です。明示しない場合、既存の `preferences:false` も保存無効として扱います。`selectionGeometry` にファクトリーを渡すことで判定を換装できます。ファクトリーには `{canvas, canSelect}` を渡し、返すオブジェクトは `id`・`algorithm`・`snapshot(elements)`・`pick(items,screenPoint,radius)`・`query(items,region,match)` を実装します。snapshotの各項目は `element` を持ち、pickは要素またはnull、queryは要素の配列を返します。標準方式のpick・queryは画像の読込時にPromiseを返します。追加の最終引数でAbortSignal（signal）を受け取り、queryでは現在の領域かを返すcurrentも利用できます。同期実装も利用できます。従来方式は `selectionGeometry: createSelectionGeometry` で指定できます。処理不能時は例外またはPromiseの拒否で通知します。プロパティには換装後の `algorithm` を表示します。
+埋込時は `vectorEditorOptions.selectionPreferences` で `enabled`・`key`・`storage` を指定できます。`false`で無効です。明示しない場合、既存の `preferences:false` も保存無効として扱います。`selectionGeometry` にファクトリーを渡すことで判定を換装できます。ファクトリーには `{canvas, canSelect}` を渡し、返すオブジェクトは `id`・`algorithm`・`snapshot(elements)`・`pick(items,screenPoint,radius)`・`query(items,region,match)` を実装します。snapshotの各項目は `element` を持ち、pickは要素またはnull、queryは要素の配列を返します。標準方式のpick・queryは画像の読込時にPromiseを返します。追加の最終引数でAbortSignal（signal）を受け取り、queryでは現在の領域かを返すcurrentも利用できます。同期実装も利用できます。ネイティブの直接ヒットを画素で再検査する対象は任意の `requiresPaintHit(element)` で指定できます。従来方式は `selectionGeometry: createSelectionGeometry` で指定できます。処理不能時は例外またはPromiseの拒否で通知します。プロパティには換装後の `algorithm` を表示します。
 
 独立した計算モデル `select` の旧 `bounds/candidates` APIは互換性のため境界箱の完全包含を維持します。GUIの精密なヒット処理は上記アダプターが担当します。計算機能数122・GUIツール数31は変わりません。
 

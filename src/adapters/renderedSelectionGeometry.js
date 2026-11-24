@@ -99,14 +99,13 @@ async function isolatedImage(canvas, element, viewport, signal) {
     branch = group;
   }
   root.append(branch);
-  // Keep paint servers and clipping resources available without painting artwork siblings.
-  for (const resource of canvas.querySelectorAll('defs > :not(style)')) {
-    if (!resource.matches('g,symbol,image,use,path,rect,line,circle,ellipse,text,polygon,polyline')) {
-      defs.append(resource.cloneNode(true));
-    }
-  }
   for (const target of references) {
     if (!root.querySelector('#' + CSS.escape(target.id))) defs.append(copyNode(target, true));
+  }
+  // Paint servers can be outside the instance subtree. Copy definitions without painting siblings.
+  const resources = 'linearGradient[id],radialGradient[id],clipPath[id],mask[id],filter[id],pattern[id],marker[id]';
+  for (const resource of canvas.querySelectorAll(resources)) {
+    if (!root.querySelector('#' + CSS.escape(resource.id))) defs.append(resource.cloneNode(true));
   }
   for (const [source, copy] of images) await embedImage(source, copy, signal);
   signal?.throwIfAborted();
